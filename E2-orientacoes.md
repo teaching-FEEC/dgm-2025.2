@@ -25,3 +25,4 @@ In order to standardize the project repositories for this course, it is suggeste
 Note that not all directories or files will be necessary for all projects. Focus on following the standard for the directories that are needed. Do not create directories that will not be used.  
 
 Your repository must contain the README.md file, a Markdown documentation file, which should include the project description according to the guidelines provided above.  
+
