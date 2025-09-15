@@ -62,22 +62,22 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 ## Cronograma
 
-## Gantt – Análise de Sinais de Áudio com Modelos de Mundo (8 semanas)
+Legenda: ▓ = duração da tarefa, ⭐ = entrega
 
-Legenda: ▓ = duração da tarefa
+| Fase de Trabalho       | Atividades Principais                           | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|------------------------|-------------------------------------------------|---|---|---|---|---|---|---|---|---|----|----|
+| Preparação & Setup     | Setup do ambiente + revisão código              | ▓ |   |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ▓ |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ▓ | ▓ |   |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Encoder + RSSM (ajuste usando DreamerV2)    |   |   | ▓ | ▓ |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Integração do Decoder / avaliação básica        |   |   |   |   | ▓ |   |   |   |   |    |    |
+| **Entrega Parcial**    | Status do projeto                               |   |   |   |   |   | ⭐ |   |   |   |    |    |
+| Treinamento            | Execução com DreamerV2 + ajustes leves      |   |   |   |   |   |   | ▓ | ▓ |   |    |    |
+| Avaliação & Ajustes    | Análise de métricas e resultados                |   |   |   |   |   |   |   | ▓ | ▓ |    |    |
+| Documentação           | Relatório + notebooks + apresentação            |   |   |   |   |   |   |   |   | ▓ | ▓  |    |
+| **Entrega Final**      | Refinamento, validação final e entrega          |   |   |   |   |   |   |   |   |   |    | ⭐  |
 
-| Fase de Trabalho       | Atividades Principais                           | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|------------------------|-------------------------------------------------|---|---|---|---|---|---|---|---|
-| Preparação & Setup     | Setup do ambiente + revisão código              | ▓ |   |   |   |   |   |   |   |
-| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ▓ |   |   |   |   |   |   |
-| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ▓ | ▓ |   |   |   |   |   |
-| Modelo de Mundo        | Encoder + RSSM (paralelizado)                   |   |   | ▓ | ▓ |   |   |   |   |
-| Modelo de Mundo        | Decoder simplificado (contrastive)              |   |   |   |   | ▓ |   |   |   |
-| Treinamento            | Loss contrastiva + treino inicial               |   |   |   |   | ▓ | ▓ |   |   |
-| Treinamento            | Validação preliminar                            |   |   |   |   |   | ▓ |   |   |
-| Avaliação & Ajustes    | Hiperparâmetros + métricas                      |   |   |   |   |   |   | ▓ |   |
-| Documentação           | Relatório + notebooks + apresentação            |   |   |   |   |   |   | ▓ | ▓ |
-| Avaliação Final        | Refinamento, validação final e entrega          |   |   |   |   |   |   |   | ▓ |
+
 
 
 ## Tecnologias e bibliotecas utilizadas
