@@ -10,14 +10,14 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 |Name  | RA | Specialization|
 |--|--|--|
 | Kristhian Aguilar  | 298976  | Computer Engineering|
-| Name2  | 123456  | Electrical Engineering|
+| Ana Clara Caznok Silveira  | 231745  | Computer Engineering|
 | Name3  | 123456  | XXX|
 
 ## Project Summary Description
-> Description of the project theme, including generating context and motivation.  
-> Description of the main goal of the project.  
-> Clarify what the output of the generative model will be.  
->   
+> Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. hanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral medical datasets are scarce, which often leads classification models to overfit or perform poorly.
+
+> Therefore, the main goal of this project is to construct a generative ai model that learns the distribution of real hyperspectral images and through them is able to create a  synthetic HyperTumor dataset. 
+> Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma. 
 > Include in this section a link to the presentation video of the project proposal (maximum 5 minutes).
 
 ## Proposed Methodology
