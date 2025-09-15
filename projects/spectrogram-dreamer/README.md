@@ -60,6 +60,26 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 - O aprendizado será totalmente self-supervised, focado em aprender a dinâmica do mundo de áudio.
 
+## Cronograma
+
+## Gantt – Análise de Sinais de Áudio com Modelos de Mundo (8 semanas)
+
+Legenda: ▓ = duração da tarefa
+
+| Fase de Trabalho       | Atividades Principais                           | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|------------------------|-------------------------------------------------|---|---|---|---|---|---|---|---|
+| Preparação & Setup     | Setup do ambiente + revisão código              | ▓ |   |   |   |   |   |   |   |
+| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ▓ |   |   |   |   |   |   |
+| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ▓ | ▓ |   |   |   |   |   |
+| Modelo de Mundo        | Encoder + RSSM (paralelizado)                   |   |   | ▓ | ▓ |   |   |   |   |
+| Modelo de Mundo        | Decoder simplificado (contrastive)              |   |   |   |   | ▓ |   |   |   |
+| Treinamento            | Loss contrastiva + treino inicial               |   |   |   |   | ▓ | ▓ |   |   |
+| Treinamento            | Validação preliminar                            |   |   |   |   |   | ▓ |   |   |
+| Avaliação & Ajustes    | Hiperparâmetros + métricas                      |   |   |   |   |   |   | ▓ |   |
+| Documentação           | Relatório + notebooks + apresentação            |   |   |   |   |   |   | ▓ | ▓ |
+| Avaliação Final        | Refinamento, validação final e entrega          |   |   |   |   |   |   |   | ▓ |
+
+
 ## Tecnologias e bibliotecas utilizadas
 **Linguagem**: Python
 
