@@ -1,0 +1,8 @@
+torch
+torchvision
+pandas
+scipy
+scikit-image
+scikit-learn
+matplotlib
+hatch
