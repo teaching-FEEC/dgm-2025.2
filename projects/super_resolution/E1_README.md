@@ -2,7 +2,7 @@
 
 
 # Image Super-Resolution with Generative Models  
-# Super-Resolução de Imagens com Modelos Generativos  
+## Super-Resolução de Imagens com Modelos Generativos  
 
 ## Presentation  
 
