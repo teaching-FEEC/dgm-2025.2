@@ -1,8 +1,8 @@
 
 
 
-# Super-Resolução de Imagens com Modelos Generativos  
 # Image Super-Resolution with Generative Models  
+# Super-Resolução de Imagens com Modelos Generativos  
 
 ## Presentation  
 
