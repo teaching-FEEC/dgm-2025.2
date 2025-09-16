@@ -66,7 +66,7 @@ We would like for the generated images to be: clear, realistic and useful.
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
 
 ## Schedule
-> Proposed schedule. Try to estimate how many weeks will be spent on each stage of the project.  
+![Project Schedule](images/schedule.png){ width=400px }
 
 ## Bibliographic References
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: 10.1109/JSTARS.2025.3538759.
