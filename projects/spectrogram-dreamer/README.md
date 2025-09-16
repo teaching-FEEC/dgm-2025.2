@@ -90,3 +90,8 @@ Legenda: ▓ = duração da tarefa, ⭐ = entrega
 **Manipulação de Dados**: NumPy, Pandas
 
 **Visualização**: Matplotlib, TensorBoard
+
+## Links para a Apresentação
+
+- Vídeo: drive.google.com/file/d/1IFhNwxeS_8Gce3WTqXLOq8UJDLKJB7QQ/view?usp=sharing
+- Apresentação: www.canva.com/design/DAGzF_vtvEE/6c1_5Sw-mUuLSqV6HMjP9Q/edit?utm_content=DAGzF_vtvEE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
