@@ -8,7 +8,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 |Name  | RA | Specialization|
 |--|--|--|
-| Kristhian Aguilar  | 298976  | Computer Engineering|
+| Kristhian André Oliveira Aguilar  | 298976  | Computer Engineering|
 | Ana Clara Caznok Silveira  | 231745  | Computer Engineering|
 | Aline Yoshida Machado | 265732 | Biomedical Physics|
 
