@@ -31,11 +31,14 @@ Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma.
 > * Expected results.  
 > * Proposal for evaluating the synthesis results.
 # Generative Models
-- The input of the discriminator are HSI images with spacial and spectral information. Initially the spectral bands are reduced using PCA preserving the top 3 components that retain most spectral energy while keeping spatial information
-- The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers
-- The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch
 
-![AC-GAN Architecture Diagram](images/AC-GAN.png)
+## 3D-GAN
+- The input of the discriminator are HSI images with spacial and spectral information. Initially the spectral bands are reduced using PCA preserving the top 3 components that retain most spectral energy while keeping spatial information  
+- The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers  
+- The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch  
+
+![3d-GAN Architecture Diagram](images/3D-GAN.png){ width=400px }
+
 
 
 ### Evaluating synthesis results
