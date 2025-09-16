@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from scipy.io import loadmat
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "hsi"
+DATA_DIR = Path(__file__).parent.parent.parent.parent / "data" / "hsi"
 DF_PATH = DATA_DIR / "hsi.csv"
 
 labels_map = {
