@@ -5,6 +5,7 @@
 
 |Nome  | RA | Especialização|
 |--|--|--|
+
 | Davi Pincinato  | 157810  | Eng. Computação |
 | Henrique Parede de Souza  | 260497  | Eng. Computação|
 | Isadora Minuzzi Vieira  | 290184  | Eng. Biomédica|
@@ -95,3 +96,28 @@ Legenda: ▓ = duração da tarefa, ⭐ = entrega
 
 - Link para o [vídeo da apresentação](https://drive.google.com/file/d/1IFhNwxeS_8Gce3WTqXLOq8UJDLKJB7QQ/view?usp=sharing)
 - Link para os [slides da apresentação](https://www.canva.com/design/DAGzF_vtvEE/6c1_5Sw-mUuLSqV6HMjP9Q/edit?utm_content=DAGzF_vtvEE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
+
+## Referências:
+HA, David; SCHMIDHUBER, Jürgen. World Models. arXiv:1803.10122, 2018.
+https://arxiv.org/abs/1803.10122
+
+HAFNER, Danijar et al. DreamerV2: Mastering Atari with Discrete World Models. arXiv:2010.02193, 2020.
+https://arxiv.org/abs/2010.02193
+
+HAFNER, Danijar et al. Learning Latent Dynamics for Planning from Pixels (PlaNet). ICML, 2019.
+https://arxiv.org/abs/1811.04551
+
+OORD, Aaron van den et al. Neural Discrete Representation Learning (VQ-VAE). NeurIPS, 2017.
+https://arxiv.org/abs/1711.00937
+
+PRABHU, Kundan Kumar et al. Autoregressive Spectrogram Inpainting with Time–Frequency Transformers. arXiv preprint, 2021.
+https://arxiv.org/abs/2104.03976
+
+WANG, Yuxuan et al. Tacotron: Towards End-to-End Speech Synthesis. Interspeech, 2017.
+https://arxiv.org/abs/1703.10135
+
+PANAYOTOV, Vassil et al. LibriSpeech: An ASR Corpus. ICASSP, 2015.
+https://www.openslr.org/12
+
+Mozilla. Common Voice Dataset.
+https://commonvoice.mozilla.org
