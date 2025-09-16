@@ -71,7 +71,8 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 
 - It is used a WGAN training pipeline
 
-![SHS Architecture Diagram](images/schedule.png)
+![SHS Architecture Diagram](images/SHS-GAN.png)
+
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
 - A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
