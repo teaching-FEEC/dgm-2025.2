@@ -2,14 +2,14 @@
 
 
 # Image Super-Resolution with Generative Models  
-## Super-Resolução de Imagens com Modelos Generativos  
+  
 
 ## Presentation  
 
 This project originated in the context of the graduate course *IA376N - Generative AI: from models to multimodal applications*, offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).  
 
 ### Deliverables
-The presentation for the E1 delivery can be found here [Super presentation of Super Resolution](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
+The presentation for the E1 delivery can be found here [Presentation Image Super-Resolution with Generative Models](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
 
 |Name  | RA | Specialization|
 |--|--|--|
