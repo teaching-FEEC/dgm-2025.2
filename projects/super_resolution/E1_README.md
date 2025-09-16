@@ -20,6 +20,7 @@ The presentation for the E1 delivery can be found here [Presentation Image Super
 ## Project Summary Description  
 
 The project addresses the problem of **image super-resolution**, a fundamental task in computer vision that aims to reconstruct high-quality images from their low-resolution counterparts. This problem has strong practical relevance in areas such as:
+- **Low-budget devices**: Get one poor picture and enhance it
 - **Medical Imaging**: Enhancing diagnostic image quality
 - **Satellite Analysis**: Improving remote sensing data
 - **Image Restoration**: Recovering historical or degraded photographs
