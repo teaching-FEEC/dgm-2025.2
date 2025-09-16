@@ -30,6 +30,19 @@ Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma.
 > * Tools to be used (based on the group’s current vision of the project).  
 > * Expected results.  
 > * Proposal for evaluating the synthesis results.
+### Tools to be used
+The project will be developed using Python, with the following libraries:
+- TensorFlow/Keras or PyTorch for building and training the generative models.
+- NumPy, Pandas and matplotlib for data exploration, manipulation and analysis.
+- Scikit-learn for implementing classic machine learning algorithms and evaluation metrics.
+- OpenCV and PIL for image processing tasks.
+- Jupyter Notebooks for experimentation.
+- [pytorch-lightning-template](https://github.com/DavidZhang73/pytorch-lightning-template/tree/main) to structure the code in a modular and organized way. This template includes:
+  - `wandb` for experiment tracking and visualization.
+  - `hydra` for configuration management.
+  - `pytorch-lightning` for simplifying the training loop and model management.
+  - `torchmetrics` for easy access to common metrics.
+
 ### Generative Models
 
 #### 3D-GAN
@@ -39,7 +52,12 @@ Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma.
 
 ![3d-GAN Architecture Diagram](images/3D-GAN.png){ width=400px }
 
-
+#### Autoencoder
+- The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
+- A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
+- VAEs are especially adept at modeling complex, high-dimensional data and continuous latent spaces, making them extremely useful for tasks like generating diverse sets of similar images.
+- Palsson et al. [2] used a VAE paired with a GAN framework to generate high-resolution synthetic hyperspectral images.
+- Liu et al. [3] proposed a model inspired autoencoder (MIAE) to fuse low-resolution HSI with high-resolution RGB images to generate high-resolution HSI.
 
 ### Evaluating synthesis results
 We would like for the generated images to be: clear, realistic and useful. 
@@ -51,4 +69,6 @@ We would like for the generated images to be: clear, realistic and useful.
 > Proposed schedule. Try to estimate how many weeks will be spent on each stage of the project.  
 
 ## Bibliographic References
-> Point out in this section the bibliographic references adopted in the project.
+1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: 10.1109/JSTARS.2025.3538759.
+2. Palsson, Burkni, Magnus O. Ulfarsson, and Johannes R. Sveinsson. 2023. "Synthesis of Synthetic Hyperspectral Images with Controllable Spectral Variability Using a Generative Adversarial Network" Remote Sensing 15, no. 16: 3919. https://doi.org/10.3390/rs15163919
+3. Liu, J., Wu, Z., Xiao, L., & Wu, X. J. (2022). Model Inspired Autoencoder for Unsupervised Hyperspectral Image Super-Resolution. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-12. https://doi.org/10.1109/tgrs.2022.3143156
