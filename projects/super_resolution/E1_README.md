@@ -71,10 +71,10 @@ For this first stage, the proposed methodology is as follows:
   - Google Colab or local GPU cluster for computational resources.  
 
 ### **Expected Results**:  
-    - **Quantitative Improvements**: Significant gains over bicubic interpolation baselines
-    - **Visual Quality**: Perceptually convincing high-resolution reconstructions
-    - **Detail Preservation**: Enhanced texture and fine-structure recovery
-    - **Computational Efficiency**: Balanced trade-off between quality and inference speed
+  - **Quantitative Improvements**: Significant gains over bicubic interpolation baselines
+  - **Visual Quality**: Perceptually convincing high-resolution reconstructions
+  - **Detail Preservation**: Enhanced texture and fine-structure recovery
+  - **Computational Efficiency**: Balanced trade-off between quality and inference speed
 
 ### **Evaluation**:  
   #### Quantitative Metrics
