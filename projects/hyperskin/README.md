@@ -61,9 +61,9 @@ The project will be developed using Python, with the following libraries:
 
 ### Evaluating synthesis results
 We would like for the generated images to be: clear, realistic and useful. 
-- Image Clarity/Quality : Variance, Spatial and Spectral Entropy, PSNR and SSIM
-- Image realism : (FID) Frechet Inception Distance adapted for HSI embeddings, Spectral Angle Mapper for average melanoma spectral signature 
-- Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves
+- Image Clarity/Quality : Variance, Spatial and Spectral Entropy, SNR
+- Image realism : Spectral Angle Mapper for average melanoma spectral signature , SSIM with real images
+- Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
 
 ## Schedule
 > Proposed schedule. Try to estimate how many weeks will be spent on each stage of the project.  
