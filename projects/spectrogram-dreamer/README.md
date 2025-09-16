@@ -5,7 +5,6 @@
 
 |Nome  | RA | Especialização|
 |--|--|--|
-
 | Davi Pincinato  | 157810  | Eng. Computação |
 | Henrique Parede de Souza  | 260497  | Eng. Computação|
 | Isadora Minuzzi Vieira  | 290184  | Eng. Biomédica|
