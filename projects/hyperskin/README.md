@@ -50,7 +50,7 @@ The project will be developed using Python, with the following libraries:
 - The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers  
 - The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch  
 
-![3d-GAN Architecture Diagram](images/3D-GAN.png){ width=400px }
+![3d-GAN Architecture Diagram](images/3D-GAN.png)
 
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
@@ -66,7 +66,7 @@ We would like for the generated images to be: clear, realistic and useful.
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
 
 ## Schedule
-![Project Schedule](images/schedule.png){ width=400px }
+![Project Schedule](images/schedule.png)
 
 ## Bibliographic References
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: 10.1109/JSTARS.2025.3538759.
