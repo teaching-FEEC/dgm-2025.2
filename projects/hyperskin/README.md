@@ -57,7 +57,21 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 1. Uses Adaptive DropBlock (AdapDrop) as regularization to avoid overfitting and improve diversity
 2. discriminator D has one output that returns either a specific class c or the fake label
 
-![3d-GAN Architecture Diagram](images/AD-GAN.png)
+![AD-GAN Architecture Diagram](images/AD-GAN.png)
+
+#### SHS GAN
+
+- The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
+
+- the RGB image is used as input to the Generator so that the synthetic HS cube preserves the spatial details and textures of the input image and also keeps the color properties coherent with what appears in the RGB.
+
+- The Critic is trained to evaluate whether the generated HS cubes are realistic. It does so by analyzing spatial patterns and also the smoothness and shape of spectral curves, which are emphasized by looking at the data in both the image and Fourier-transformed spectral domains.
+
+- In addition, the synthetic HS cube can be converted back into RGB using a deterministic transformation. This reconstructed RGB image is compared to the original input RGB, and differences are penalized during training. This step enforces consistency between the generated HS cube and the original RGB image.
+
+- It is used a WGAN training pipeline
+
+![SHS Architecture Diagram](images/schedule.png)
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
 - A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
