@@ -5,10 +5,11 @@
 
 |Nome  | RA | Especialização|
 |--|--|--|
-| Davi Pincinato  | 157810  |Eng. Computação|
+
+| Davi Pincinato  | 157810  | Eng. Computação |
 | Henrique Parede de Souza  | 260497  | Eng. Computação|
 | Isadora Minuzzi Vieira  | 290184  | Eng. Biomédica|
-| Raphael Carvalho da Silva e Silva  | 205125  | |
+| Raphael Carvalho da Silva e Silva  | 205125  | Eng. Computação |
 
 
 
@@ -60,6 +61,26 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 - O aprendizado será totalmente self-supervised, focado em aprender a dinâmica do mundo de áudio.
 
+## Cronograma
+
+Legenda: ▓ = duração da tarefa, ⭐ = entrega
+
+| Fase de Trabalho       | Atividades Principais                           | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|------------------------|-------------------------------------------------|---|---|---|---|---|---|---|---|---|----|----|
+| Preparação & Setup     | Setup do ambiente + revisão código              | ▓ |   |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ▓ |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ▓ | ▓ |   |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Encoder + RSSM (ajuste usando DreamerV2)    |   |   | ▓ | ▓ |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Integração do Decoder / avaliação básica        |   |   |   |   | ▓ |   |   |   |   |    |    |
+| **Entrega Parcial**    | Status do projeto                               |   |   |   |   |   | ⭐ |   |   |   |    |    |
+| Treinamento            | Execução com DreamerV2 + ajustes leves      |   |   |   |   |   |   | ▓ | ▓ |   |    |    |
+| Avaliação & Ajustes    | Análise de métricas e resultados                |   |   |   |   |   |   |   | ▓ | ▓ |    |    |
+| Documentação           | Relatório + notebooks + apresentação            |   |   |   |   |   |   |   |   | ▓ | ▓  |    |
+| **Entrega Final**      | Refinamento, validação final e entrega          |   |   |   |   |   |   |   |   |   |    | ⭐  |
+
+
+
+
 ## Tecnologias e bibliotecas utilizadas
 **Linguagem**: Python
 
@@ -71,7 +92,12 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 **Visualização**: Matplotlib, TensorBoard
 
-#### 4. Referências:
+## Links para a Apresentação
+
+- Link para o [vídeo da apresentação](https://drive.google.com/file/d/1IFhNwxeS_8Gce3WTqXLOq8UJDLKJB7QQ/view?usp=sharing)
+- Link para os [slides da apresentação](https://www.canva.com/design/DAGzF_vtvEE/6c1_5Sw-mUuLSqV6HMjP9Q/edit?utm_content=DAGzF_vtvEE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
+
+## Referências:
 HA, David; SCHMIDHUBER, Jürgen. World Models. arXiv:1803.10122, 2018.
 https://arxiv.org/abs/1803.10122
 
