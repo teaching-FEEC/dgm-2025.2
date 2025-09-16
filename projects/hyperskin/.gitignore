@@ -4,3 +4,6 @@ data/*
 *.pyc
 *.png
 *.npy
+
+
+!images/*.png

@@ -57,7 +57,7 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 1. Uses Adaptive DropBlock (AdapDrop) as regularization to avoid overfitting and improve diversity
 2. discriminator D has one output that returns either a specific class c or the fake label
 
-![3d-GAN Architecture Diagram](images/AD-GAN.png){ width=400px }
+![3d-GAN Architecture Diagram](images/AD-GAN.png)
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
 - A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
