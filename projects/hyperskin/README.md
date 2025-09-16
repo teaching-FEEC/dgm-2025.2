@@ -1,5 +1,5 @@
-# `<Project Title in Portuguese>`
-# `<Project Title in English>`
+# `Synthesis of Hyperspectral Skin Lesion Images for Data Augmentation using Generative Models`
+# `Síntese de um Dataset Hiperespectral de Lesões de Pele utilizando IA Generativa `
 
 ## Presentation
 
