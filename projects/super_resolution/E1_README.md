@@ -39,7 +39,7 @@ As inspiration, this project will draw on the methodology and architecture propo
 
 For this first stage, the proposed methodology is as follows:  
 
-- **Datasets**:
+### **Datasets**:
 
 | Dataset | Type | Description | Usage |
 |---------|------|-------------|-------|
@@ -50,46 +50,37 @@ For this first stage, the proposed methodology is as follows:
   - The project intends to use standard super-resolution datasets such as **DIV2K**, **Flickr2K**, and possibly **Set5/Set14** for evaluation.  
   - These datasets were chosen because they are widely adopted benchmarks in super-resolution tasks, providing a reliable basis for comparison with the literature.  
 
-- **Generative Modeling Approaches**:
-    #### Primary Approach: Invertible Neural Networks
-    - **InvSR Architecture**: Exploring invertible transformations for bidirectional mapping
-    - **Coupling Layers**: Implementing affine coupling for information preservation
-    - **Multi-scale Processing**: Handling different resolution scales efficiently
+### **Generative Modeling Approaches**:
+  #### Primary Approach: Invertible Neural Networks
+  - **InvSR Architecture**: Exploring invertible transformations for bidirectional mapping
+  - **Coupling Layers**: Implementing affine coupling for information preservation
+  - **Multi-scale Processing**: Handling different resolution scales efficiently
 
-    #### Alternative Approaches
-    - **GAN-based Models**: ESRGAN for enhanced perceptual quality
-    - **Diffusion Models**: Iterative refinement for high-quality generation
-    - **Hybrid Architectures**: Combining multiple generative paradigms
+  #### Alternative Approaches
+  - **GAN-based Models**: ESRGAN for enhanced perceptual quality
+  - **Diffusion Models**: Iterative refinement for high-quality generation
+  - **Hybrid Architectures**: Combining multiple generative paradigms
 
   - Exploration of **invertible neural networks** as proposed in *InvSR*.  
   - Consideration of **GAN-based models** (e.g., ESRGAN) for perceptual quality improvement.  
   - Study of diffusion-based approaches for possible integration or comparison.  
 
-- **Reference Articles**:  
-- **Bjorn, M., et al.** - *"A Lightweight Image Super-Resolution Transformer Trained on Low-Resolution Images Only"* ([arXiv 2025](https://arxiv.org/))
-- **Miao, Y., et al.** - *"A general survey on medical image super-resolution via deep learning"* ([ScienceDirect 2025](https://www.sciencedirect.com/))
-- **Chen, Z., et al.** - *"NTIRE2025 Challenge on Image Super-Resolution (×4): Methods and Results"* ([arXiv 2025](https://arxiv.org/))
-- **Wang, W., et al.** - *"A lightweight large receptive field network LrfSR for image super resolution"* ([Nature 2025](https://www.nature.com/))
-- **Guo, Z., et al.** - *"Invertible Image Rescaling"* ([NeurIPS 2022](https://proceedings.neurips.cc/))
-- **Wang, X., et al.** - *"ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks"* ([ECCV 2018](https://arxiv.org/))
-- **Saharia, C., et al.** - *"Image Super-Resolution via Iterative Refinement"* ([IEEE TPAMI 2022](https://ieeexplore.ieee.org/))
-
-- **Tools**:  
+### **Tools**:  
   - **PyTorch** for model development and training.  
   - **Weights & Biases** or TensorBoard for experiment tracking.  
   - Google Colab or local GPU cluster for computational resources.  
 
-- **Expected Results**:  
+### **Expected Results**:  
     - **Quantitative Improvements**: Significant gains over bicubic interpolation baselines
     - **Visual Quality**: Perceptually convincing high-resolution reconstructions
     - **Detail Preservation**: Enhanced texture and fine-structure recovery
     - **Computational Efficiency**: Balanced trade-off between quality and inference speed
 
-- **Evaluation**:  
-    #### Quantitative Metrics
-    - **📐 PSNR** (Peak Signal-to-Noise Ratio): Pixel-level reconstruction accuracy
-    - **🔍 SSIM** (Structural Similarity Index): Structural information preservation
-    - **👁️ LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
+### **Evaluation**:  
+  #### Quantitative Metrics
+  - **📐 PSNR** (Peak Signal-to-Noise Ratio): Pixel-level reconstruction accuracy
+  - **🔍 SSIM** (Structural Similarity Index): Structural information preservation
+  - **👁️ LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
 
     #### Qualitative Assessment
     - **Visual Inspection**: Side-by-side comparison with ground truth
@@ -109,9 +100,10 @@ For this first stage, the proposed methodology is as follows:
 | 10   | Report writing and final presentation preparation. |  
 
 ## Bibliographic References  
-
-- Guo, Z., et al. *Invertible Image Rescaling.* NeurIPS, 2022.  
-- Wang, X., et al. *ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks.* ECCV Workshops, 2018.  
-- Saharia, C., et al. *Image Super-Resolution via Iterative Refinement.* IEEE TPAMI, 2022.  
-- Ledig, C., et al. *Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network (SRGAN).* CVPR, 2017.  
-
+- **Bjorn, M., et al.** - *"A Lightweight Image Super-Resolution Transformer Trained on Low-Resolution Images Only"* ([arXiv 2025](https://arxiv.org/))
+- **Miao, Y., et al.** - *"A general survey on medical image super-resolution via deep learning"* ([ScienceDirect 2025](https://www.sciencedirect.com/))
+- **Chen, Z., et al.** - *"NTIRE2025 Challenge on Image Super-Resolution (×4): Methods and Results"* ([arXiv 2025](https://arxiv.org/))
+- **Wang, W., et al.** - *"A lightweight large receptive field network LrfSR for image super resolution"* ([Nature 2025](https://www.nature.com/))
+- **Guo, Z., et al.** - *"Invertible Image Rescaling"* ([NeurIPS 2022](https://proceedings.neurips.cc/))
+- **Wang, X., et al.** - *"ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks"* ([ECCV 2018](https://arxiv.org/))
+- **Saharia, C., et al.** - *"Image Super-Resolution via Iterative Refinement"* ([IEEE TPAMI 2022](https://ieeexplore.ieee.org/))
