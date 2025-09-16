@@ -82,10 +82,10 @@ For this first stage, the proposed methodology is as follows:
   - **🔍 SSIM** (Structural Similarity Index): Structural information preservation
   - **👁️ LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
 
-    #### Qualitative Assessment
-    - **Visual Inspection**: Side-by-side comparison with ground truth
-    - **User Studies**: Perceptual quality evaluation
-    - **Ablation Studies**: Component-wise contribution analysis
+  #### Qualitative Assessment
+  - **Visual Inspection**: Side-by-side comparison with ground truth
+  - **User Studies**: Perceptual quality evaluation
+  - **Ablation Studies**: Component-wise contribution analysis
 
 ## Schedule  
 
