@@ -10,7 +10,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 > |--|--|--|
 > | Tim Missal  | 298836  | Computer Science |
 > | Lucas Vinícius Domingues  | 291414  | Computer Science|
-> | Natália da Silva Guimarães  | 298997 | XXX|
+> | Natália da Silva Guimarães  | 298997 | Engineering |
 
 ## Project Summary Description
 
