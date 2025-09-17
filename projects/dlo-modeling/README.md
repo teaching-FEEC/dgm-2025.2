@@ -1,4 +1,4 @@
-# `<Project Title in Portuguese>`
+# `<Modelagem da Manipulação de Objetos Lineares Deformáveis>`
 # `<Modeling the Manipulation of Deformable Linear Objects>`
 
 ## Presentation
