@@ -1,0 +1,9 @@
+data/*
+
+!data/add_hsi_dataset_here.txt
+*.pyc
+*.png
+*.npy
+
+
+!images/*.png
