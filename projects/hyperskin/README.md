@@ -10,7 +10,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 |--|--|--|
 | Kristhian André Oliveira Aguilar  | 298976  | Computer Engineering|
 | Ana Clara Caznok Silveira  | 231745  | Computer Engineering|
-| Aline Yoshida Machado | 265732 | Biomedical Physics|
+| Aline Yoshida Machado | 265732 | Physics Engineering|
 
 ## Project Summary Description
 Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. Thanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral tumor datasets are scarce, which often leads classification models to overfit or perform poorly in subsampled classes.
@@ -45,21 +45,21 @@ The project will be developed using Python, with the following libraries:
 
 ### Generative Models
 
-#### 3D-GAN
+#### 3D-GAN []
 - The input of the discriminator are HSI images with spacial and spectral information. Initially the spectral bands are reduced using PCA preserving the top 3 components that retain most spectral energy while keeping spatial information  
 - The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers  
 - The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch  
 
 ![3d-GAN Architecture Diagram](images/3D-GAN.png)
 
-#### AD-GAN
+#### AD-GAN []
 This GAN is similar to 3D-GAN's structure, however there are two modifications:
 1. Uses Adaptive DropBlock (AdapDrop) as regularization to avoid overfitting and improve diversity
 2. discriminator D has one output that returns either a specific class c or the fake label
 
 ![AD-GAN Architecture Diagram](images/AD-GAN.png)
 
-#### SHS GAN
+#### SHS GAN []
 
 - The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
 
@@ -72,6 +72,22 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 - It is used a WGAN training pipeline
 
 ![SHS Architecture Diagram](images/SHS-GAN.png)
+
+
+#### DiffusionAAE []
+- Learn a compact latent space for hyperspectral patches with an Adversarial Autoencoder
+- Learn a class-conditional diffusion process in that latent space so it can generate realistic hyperspectral samples and improve classification robustness with high-quality augmentations.
+- The inputs of the models are HSI cubes and class labels
+
+![DifusionAAE Architecture Diagram](images/DiffusionAAE.png)
+
+### HUD Model
+- Uses a Unmixing Autoencoder (UAE) to project hyperspectral images into a low-dimensional abundance space.
+- Latent code has physical meaning (endmember abundances)
+- A U-Net diffusion model operates in the abundance space instead of raw spectral space. Learns to denoise Gaussian noise into valid abundance maps and ensures generated HSIs are both diverse and physically consistent.
+
+![Unmixed Guided Diffusion Model Architecture Diagram](images/UnmixedGuidedDiffusionModel.png)
+
 
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
