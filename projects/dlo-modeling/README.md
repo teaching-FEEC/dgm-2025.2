@@ -9,9 +9,9 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 > Include name, RA, and specialization focus of each group member. Groups must have at most three members.
 > |Name  | RA | Specialization|
 > |--|--|--|
-> | Name1  | 123456  | Computer Engineering|
-> | Name2  | 123456  | Electrical Engineering|
-> | Name3  | 123456  | XXX|
+> | Tim Elias Missal  | 298836  | XXX |
+> | Lucas Vinícius Domingues  | 291414  | Computer Science|
+> | Natália da Silva Guimarães  | 298997 | XXX|
 
 ## Project Summary Description
 
@@ -36,8 +36,13 @@ The goal of that model is to be able to quantify whether or not executing action
 ## Proposed Methodology
 
 1. Generate own Dataset of (s_t, a_t, s_t+1) using MuJoCo by performing random actions on a piece of rope. This gives us the freedom to generate more / different data as needed.
-2. Train Model using Dataset (Transformer? Diffusion?)
-3. Evaluate using dice coefficient (overlap between predicted next state and real next state)
+2. Train Model using Dataset
+    - For this, the preferred approach is to build a World Model that can correctly capture the dynamics of the DLO. Word models learn to predict the future behavior of phenomena conditioned on actions and based on latent representations of past episodes, making them great candidates for the creation of generalizable models.
+    - For this task, different architechures can be tested, such as Transformers, VAEs, or even whole frameworks like Dreamer (link)
+
+4. Evaluate the model. Some candidate metrrics can be:
+    - Average Displacement Error (ADE): Given predicted centerline s_t and ground-truth s, where each is a sequence of L ordered 3D points, calculate average euclidean distance over the L points. (overlap between predicted next state and real next state)
+    - Dice Coefficient: Measures the similarity between two sets or spatial data
 
 
 > For the first submission, the proposed methodology must clarify:  
