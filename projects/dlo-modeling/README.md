@@ -51,3 +51,7 @@ Total: 10 Weeks
 [1] D. Ha and J. Schmidhuber, “World Models,” *CoRR*, vol. abs/1803.10122, 2018. [Online]. Available: https://arxiv.org/abs/1803.10122  
 
 [2] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control: Learning Behaviors by Latent Imagination,” in *Proc. ICLR 2020*, 2020. [Online]. Available: https://arxiv.org/abs/1912.01603
+
+## Presentation Link
+
+https://docs.google.com/presentation/d/1fw3_m6minAr5l9Ks6CPWKIoQIB-UsBzjtunPPyIErtY/edit?usp=sharing
