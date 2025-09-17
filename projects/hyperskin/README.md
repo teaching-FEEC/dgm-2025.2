@@ -104,6 +104,25 @@ We would like for the generated images to be: clear, realistic and useful.
 
 ## Schedule
 ![Project Schedule](images/schedule.png)
+## Expected Results
+Working with HSI is inherently challenging due to the high dimensionality of the data. Each sample contains both spatial information and spectral information. Designing a generative model that captures both faithfully is a difficult task. In addition, the computational cost of training such models grows rapidly with input size and number of spectral bands. This is particularly critical in our context, where GPU resources may be limited.
+
+
+Another consideration is dataset size. Our dataset contains 348 hyperspectral skin images (272 × 512 × 16) divided into three classes. Compared to the benchmark HSI datasets used in generative AI research, which have thousands of labeled pixels or hundreds of spectral bands and our dataset is smaller in both sample count and spectral dimension. This difference might lead to lower metric scores than those reported in  studies.
+
+Regarding the models to be tested:
+
+- GANs:
+We expect GANs to generate visually plausible HSI skin patches, but with the known risks of training instabilities and mode collapse. 
+
+- VAEs:
+VAEs will likely train in a more stable way and provide a well-structured latent space. However, they are prone to producing over-smoothed samples, lacking fine-grained spatial detail or realistic spectral variability. This makes them useful as a baseline model, but we do not expect VAEs to outperform GANs or diffusion models in terms of sample realism.
+
+- Diffusion models:
+Diffusion models are expected to produce the most realistic and diverse samples, preserving both spatial and spectral structures of hyperspectral skin images. However, diffusion models come with the highest computational cost and slowest sampling speed. In our setting, these constraints might limit the maximum patch size or the the necessity to encode the data before adding noise.
+
+Despite these limitations, if the generated synthetic data reaches a reasonable quality level, it can still provide significant value. The main benefit would be data augmentation.
+
 
 ## Bibliographic References
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: https://doi.org/10.1109/JSTARS.2025.3538759.
