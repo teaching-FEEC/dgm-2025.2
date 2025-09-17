@@ -45,21 +45,21 @@ The project will be developed using Python, with the following libraries:
 
 ### Generative Models
 
-#### 3D-GAN []
+#### 3D-GAN [4]
 - The input of the discriminator are HSI images with spacial and spectral information. Initially the spectral bands are reduced using PCA preserving the top 3 components that retain most spectral energy while keeping spatial information  
 - The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers  
 - The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch  
 
 ![3d-GAN Architecture Diagram](images/3D-GAN.png)
 
-#### AD-GAN []
+#### AD-GAN [5]
 This GAN is similar to 3D-GAN's structure, however there are two modifications:
 1. Uses Adaptive DropBlock (AdapDrop) as regularization to avoid overfitting and improve diversity
 2. discriminator D has one output that returns either a specific class c or the fake label
 
 ![AD-GAN Architecture Diagram](images/AD-GAN.png)
 
-#### SHS GAN []
+#### SHS GAN [6]
 
 - The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
 
@@ -74,7 +74,7 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 ![SHS Architecture Diagram](images/SHS-GAN.png)
 
 
-#### DiffusionAAE []
+#### DiffusionAAE [7]
 - Learn a compact latent space for hyperspectral patches with an Adversarial Autoencoder
 - Learn a class-conditional diffusion process in that latent space so it can generate realistic hyperspectral samples and improve classification robustness with high-quality augmentations.
 - The inputs of the models are HSI cubes and class labels
@@ -109,3 +109,11 @@ We would like for the generated images to be: clear, realistic and useful.
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: https://doi.org/10.1109/JSTARS.2025.3538759.
 2. Palsson, Burkni, Magnus O. Ulfarsson, and Johannes R. Sveinsson. 2023. "Synthesis of Synthetic Hyperspectral Images with Controllable Spectral Variability Using a Generative Adversarial Network" Remote Sensing 15, no. 16: 3919. https://doi.org/10.3390/rs15163919
 3. Liu, J., Wu, Z., Xiao, L., & Wu, X. J. (2022). Model Inspired Autoencoder for Unsupervised Hyperspectral Image Super-Resolution. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-12. https://doi.org/10.1109/tgrs.2022.3143156
+
+4. L. Zhu, Y. Chen, P. Ghamisi and J. A. Benediktsson, "Generative Adversarial Networks for Hyperspectral Image Classification," in IEEE Transactions on Geoscience and Remote Sensing, vol. 56, no. 9, pp. 5046-5063, Sept. 2018, doi: 10.1109/TGRS.2018.2805286.
+
+5. J. Wang, F. Gao, J. Dong and Q. Du, "Adaptive DropBlock-Enhanced Generative Adversarial Networks for Hyperspectral Image Classification," in IEEE Transactions on Geoscience and Remote Sensing, vol. 59, no. 6, pp. 5040-5053, June 2021, doi: 10.1109/TGRS.2020.3015843.
+
+6. J. Hauser, G. Shtendel, A. Zeligman, A. Averbuch and M. Nathan, "SHS-GAN: Synthetic Enhancement of a Natural Hyperspectral Database," in IEEE Transactions on Computational Imaging, vol. 7, pp. 505-517, 2021, doi: 10.1109/TCI.2021.3079818.
+
+7. Cao, Z., Li, J., & Xu, X. (2025). DiffusionAAE: Enhancing hyperspectral image classification with conditional diffusion model and Adversarial Autoencoder. Ecological Informatics, 87, 103118. https://doi.org/10.1016/j.ecoinf.2025.103118
