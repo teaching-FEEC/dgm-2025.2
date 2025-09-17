@@ -20,7 +20,8 @@ Therefore, the main goal of this project is to construct a generative ai model t
 Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma. 
 
 ### Presentation
-> Include in this section a link to the presentation video of the project proposal (maximum 5 minutes).
+#### Slides
+https://docs.google.com/presentation/d/1lx3-yT1-Smwg8uxjNo1hsLG3ESJFPZldXnlBdIy1wgo/edit?usp=sharing
 
 ## Proposed Methodology
 > For the first submission, the proposed methodology must clarify:  
