@@ -17,7 +17,10 @@ trainer:
     class_path: WandbLogger
     init_args:
       save_dir: logs
-      project: hsi_dermoscopy
+      # TODO: Adicionar Ana e Aline no projeto Wandb
+      # entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, classifier, resnet18]
       log_model: false
 
   # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
