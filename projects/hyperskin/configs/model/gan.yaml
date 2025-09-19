@@ -1,0 +1,28 @@
+model:
+  class_path: modules.GANModule
+trainer:
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-g_loss={g_loss:.4f}
+        monitor: g_loss
+        verbose: true
+        save_last: true
+        save_top_k: 2
+        mode: min
+        auto_insert_metric_name: false
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: EarlyStopping
+      init_args:
+        monitor: g_loss
+        min_delta: 0.01
+        patience: 5
+        verbose: true
+        mode: min
+        strict: true
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: epoch

@@ -1,0 +1,51 @@
+model:
+  class_path: modules.HSIClassifierModule
+  init_args:
+    model_name: resnet18
+    num_classes: 2
+    pretrained: True
+    features_only: False
+    in_chans: 16
+    scriptable: True
+
+trainer:
+  log_every_n_steps: 10
+  max_epochs: 100
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      project: hsi_dermoscopy
+      log_model: false
+
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-val_acc={val/acc:.4f}
+        monitor: val/acc
+        verbose: true
+        save_last: true
+        mode: max
+        auto_insert_metric_name: false
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val/acc
+        min_delta: 0.01
+        patience: 10
+        verbose: true
+        mode: max
+        strict: true
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+
+# https://pytorch.org/docs/stable/optim.html
+optimizer:
+  class_path: AdamW
+  init_args:
+    lr: 0.000001
+# https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+lr_scheduler:

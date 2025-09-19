@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug  Training (Fit)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "fit",
+        "-c",
+        "configs/data/mnist.yaml",
+        "-c",
+        "configs/model/gan.yaml",
+        // "--trainer.logger.name",
+        // "exp1"
+      ],
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0"  // run normally (no remote wait)
+      }
+    },
+    {
+      "name": "Debug Fast Training (Fit)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "fit",
+        "-c",
+        "configs/data/mnist.yaml",
+        "-c",
+        "configs/model/simplenet.yaml",
+        "--trainer.fast_dev_run",
+        "true"
+      ],
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0"  // run normally (no remote wait)
+      }
+    },
+    {
+      "name": "Attach to Debugpy (Remote/Cluster/Container)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${workspaceFolder}"
+        }
+      ]
+    }
+  ]
+}
