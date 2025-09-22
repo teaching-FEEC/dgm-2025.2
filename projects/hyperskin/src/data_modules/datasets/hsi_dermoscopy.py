@@ -1,5 +1,7 @@
 from enum import IntEnum, auto
 from typing import Optional
+
+import numpy as np
 import albumentations as A
 import pandas as pd
 from torch.utils.data import Dataset
@@ -44,15 +46,19 @@ class HSIDermoscopyDataset(Dataset):
         self.labels_map = labels_map
 
         self.dir_path = Path(self.data_dir)
-        self.df_path = self.dir_path / "metadata.csv"
+        self.labels_df_path = self.dir_path / "metadata.csv"
         if not Path(self.data_dir).exists():
-            self.df = pd.read_csv(self.df_path)
+            self.labels_df = pd.read_csv(self.labels_df_path)
         else:
-            self.df = self.create_df()
-            self.df.to_csv(self.df_path, index=False)
+            self.labels_df = self.create_df()
+            self.labels_df.to_csv(self.labels_df_path, index=False)
 
+        self.setup_labels_df()
+
+    def setup_labels_df(self):
         if self.task == HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS:
-            self.df['label'] = self.df['label'].apply(lambda x: 'melanoma' if x == 'melanoma' else 'others')
+            self.labels_df['label'] = self.labels_df['label'].apply(
+                lambda x: 'melanoma' if x == 'melanoma' else 'others')
             self.labels_map = {"melanoma": 0, "others": 1}
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_VS_OTHERS:
             def map_labels(x):
@@ -62,16 +68,22 @@ class HSIDermoscopyDataset(Dataset):
                     return 'dysplastic_nevi'
                 else:
                     return 'others'
-            self.df['label'] = self.df['label'].apply(map_labels)
+            self.labels_df['label'] = self.labels_df['label'].apply(map_labels)
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1, "others": 2}
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI:
-            self.df = self.df[self.df['label'].isin(['melanoma', 'dysplastic_nevi'])]
+            self.labels_df = self.labels_df[self.labels_df['label'].isin(
+                ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1}
         else:
             raise ValueError(f"Unsupported task: {self.task}")
+
     @property
     def num_classes(self):
         return len(labels_map)
+
+    @property
+    def label_df_indices(self) -> np.ndarray:
+        return self.labels_df.index.to_numpy()
 
     def create_df(self):
         dysplastic_nevi_path = self.dir_path / "DNCube"
@@ -96,9 +108,9 @@ class HSIDermoscopyDataset(Dataset):
 
     def __getitem__(self, index):
 
-        label = self.labels_map[self.df.iloc[index]['label']]
+        label = self.labels_map[self.labels_df.iloc[index]['label']]
 
-        image = loadmat(self.df.iloc[index]['file_path']).popitem()[-1]
+        image = loadmat(self.labels_df.iloc[index]['file_path']).popitem()[-1]
         image = image.astype('float32')
 
         if self.transform is not None:
@@ -110,7 +122,7 @@ class HSIDermoscopyDataset(Dataset):
         return image, label
 
     def __len__(self):
-        return len(self.df)
+        return len(self.labels_df)
 
 
 if __name__ == "__main__":

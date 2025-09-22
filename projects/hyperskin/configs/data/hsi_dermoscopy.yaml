@@ -3,8 +3,70 @@ data:
   init_args:
     task: CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI
     train_val_test_split: [0.7, 0.15, 0.15]
-    input_shape: [16, 224, 224]
+    image_size: 224
     batch_size: 8
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy
+    
+    transforms:
+      train:
+      - class_path: HorizontalFlip
+        init_args:
+          p: 0.5
+      - class_path: VerticalFlip
+        init_args:
+          p: 0.5
+      - class_path: RandomRotate90
+        init_args:
+          p: 0.5
+      - class_path: ShiftScaleRotate
+        init_args:
+          shift_limit: 0.1
+          scale_limit: 0.1
+          rotate_limit: 15
+          p: 0.5
+      - class_path: Normalize
+        init_args:
+          mean: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+          std:  [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      val:
+      - class_path: Normalize
+        init_args:
+          mean: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+          std:  [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      test:
+      - class_path: Normalize
+        init_args:
+          mean: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+          std:  [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}

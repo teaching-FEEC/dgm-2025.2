@@ -13,4 +13,4 @@ if __name__ == "__main__":
         print("Waiting for debugger attach")
         debugpy.wait_for_client()
 
-    cli = CustomLightningCLI()
+    cli = CustomLightningCLI(parser_kwargs={"parser_mode": "omegaconf"})

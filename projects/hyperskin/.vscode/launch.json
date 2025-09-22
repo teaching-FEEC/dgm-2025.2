@@ -9,9 +9,9 @@
       "args": [
         "fit",
         "-c",
-        "configs/data/mnist.yaml",
+        "configs/data/hsi_dermoscopy.yaml",
         "-c",
-        "configs/model/gan.yaml",
+        "configs/model/hsi_classifier.yaml",
         // "--trainer.logger.name",
         // "exp1"
       ],
@@ -28,9 +28,9 @@
       "args": [
         "fit",
         "-c",
-        "configs/data/mnist.yaml",
+        "configs/data/hsi_dermoscopy.yaml",
         "-c",
-        "configs/model/simplenet.yaml",
+        "configs/model/hsi_classifier.yaml",
         "--trainer.fast_dev_run",
         "true"
       ],

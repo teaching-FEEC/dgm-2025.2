@@ -32,3 +32,5 @@ debugpy
 # --------- data --------- #
 albumentationsx
 timm
+scikit-learn
+omegaconf
