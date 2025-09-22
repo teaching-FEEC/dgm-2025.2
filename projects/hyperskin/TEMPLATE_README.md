@@ -149,6 +149,9 @@ pip install -r requirements.txt
 
 ```bash
 python src/main.py fit -c configs/data/mnist.yaml -c configs/model/simplenet.yaml --trainer.logger.name exp1
+
+// or
+python src/main.py fit -c configs/data/hsi_dermoscopy.yaml -c configs/model/hsi_classifier.yaml
 ```
 
 **Validate**
