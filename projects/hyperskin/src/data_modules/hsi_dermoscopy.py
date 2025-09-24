@@ -11,6 +11,8 @@ import albumentations as A
 from sklearn.model_selection import train_test_split
 
 from src.data_modules.datasets.hsi_dermoscopy import HSIDermoscopyDataset, HSIDermoscopyTask
+import gdown
+import zipfile
 
 class HSIDermoscopyDataModule(pl.LightningDataModule):
 
@@ -65,12 +67,16 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         return transforms_list
 
     def prepare_data(self):
-        if not os.listdir(self.hparams.data_dir):
-            url = 'https://drive.google.com/drive/folders/13ZXXxtUMjEzLAjoAqC19IJEc5RgpFf2f'
-            raise RuntimeError(
-                f"Data directory {self.hparams.data_dir} is empty. "
-                f"Please download the dataset from {url} and place it there."
-            )
+        if not os.path.exists(self.hparams.data_dir) or not os.listdir(self.hparams.data_dir):
+            if not os.path.exists('hsi_dermoscopy.zip'):
+                print(f"Downloading HSI Dermoscopy dataset to {self.hparams.data_dir}...")
+                gdown.download(id='1fGZUprKfdXwnSpdk4BHwYFzQWgXCkH7e', quiet=False)
+
+            os.makedirs(os.path.dirname(self.hparams.data_dir), exist_ok=True)
+
+            with zipfile.ZipFile('hsi_dermoscopy.zip', 'r') as zip_ref:
+                zip_ref.extractall(os.path.dirname(self.hparams.data_dir))
+                os.remove('hsi_dermoscopy.zip')
 
         self.setup_splits()
 

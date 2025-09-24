@@ -90,6 +90,9 @@ class HSIDermoscopyDataset(Dataset):
         melanoma_path = self.dir_path / "MMCube"
         other_lesions_path = self.dir_path / "OtherCube"
 
+        if not dysplastic_nevi_path.exists() or not melanoma_path.exists() or not other_lesions_path.exists():
+            raise FileNotFoundError(f"One or more data directories do not exist in {self.data_dir}")
+
         data = []
 
         for lesion_type, path in [("dysplastic_nevi", dysplastic_nevi_path),

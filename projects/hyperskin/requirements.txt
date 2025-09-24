@@ -34,3 +34,4 @@ albumentationsx
 timm
 scikit-learn
 omegaconf
+gdown
