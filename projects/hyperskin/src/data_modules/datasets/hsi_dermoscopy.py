@@ -85,6 +85,11 @@ class HSIDermoscopyDataset(Dataset):
     def label_df_indices(self) -> np.ndarray:
         return self.labels_df.index.to_numpy()
 
+    @property
+    def labels(self) -> np.ndarray:
+        """Return integer labels for each sample, as a NumPy array."""
+        return self.labels_df["label"].map(self.labels_map).to_numpy()
+
     def create_df(self):
         dysplastic_nevi_path = self.dir_path / "DNCube"
         melanoma_path = self.dir_path / "MMCube"
