@@ -1,6 +1,17 @@
 model:
   class_path: modules.GANModule
 trainer:
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, classifier, resnet18]
+      log_model: false
+      
   # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
   callbacks:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint

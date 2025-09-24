@@ -40,6 +40,7 @@ trainer:
     class_path: WandbLogger
     init_args:
       save_dir: logs
+      entity: k298976-unicamp
       project: hypersynth
       log_model: false
   log_every_n_steps: 50
