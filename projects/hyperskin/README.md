@@ -23,6 +23,10 @@ Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma.
 #### Slides
 https://docs.google.com/presentation/d/1lx3-yT1-Smwg8uxjNo1hsLG3ESJFPZldXnlBdIy1wgo/edit?usp=sharing
 
+### Dataset
+- Github link: https://github.com/heugyy/HSIDermoscopy
+- Dataset download link: https://drive.google.com/drive/folders/13ZXXxtUMjEzLAjoAqC19IJEc5RgpFf2f?usp=sharing
+
 ## Proposed Methodology
 > For the first submission, the proposed methodology must clarify:  
 > * Which dataset(s) the project intends to use, justifying the choice(s).
