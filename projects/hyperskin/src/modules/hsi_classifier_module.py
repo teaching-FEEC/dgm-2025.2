@@ -1,6 +1,7 @@
 # Adapted from: https://github.com/ashleve/lightning-hydra-template/blob/main/src/models/mnist_module.py
 from pathlib import Path
 from typing import Any
+import numpy as np
 
 import pytorch_lightning as pl
 import torch
@@ -97,8 +98,23 @@ class HSIClassifierModule(pl.LightningModule):
 
             # If using wandb, upload the split files
             if isinstance(logger, WandbLogger):
+                run = logger.experiment  # wandb.Run object
+                # ---- build new run name dynamically from hyperparameters ----
+                model_name = getattr(self.hparams, "model_name", "baseline")
+                class_nb = getattr(self.hparams, "num_classes")
+                preT = getattr(self.hparams, "pretrained")
+                new_nm = f"class-{model_name}_{self.class_task}-{class_nb}_pT-{preT}"
+                run.name = new_nm
+
+                # (optional) update notes/tags dynamically
+                run.notes = "Auto-named by on_train_start"
+                existing = set(run.tags or [])
+                run.tags = list(existing.union({"auto"}))
+
+                # ---- upload split files ----
+                run.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
                 # Use glob to save all .txt files in the directory
-                logger.experiment.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
+                #logger.experiment.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
 
     def model_step(self, batch: Any):
         x, y = batch
