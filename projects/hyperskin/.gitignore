@@ -6,6 +6,7 @@ logs/*
 !logs/.gitkeep
 data/*
 !data/.gitkeep
+*.mat
 
 ### VisualStudioCode template
 .vscode/*

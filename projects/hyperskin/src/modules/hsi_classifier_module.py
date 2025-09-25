@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 import torch
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
+from torchmetrics.classification import F1Score, Precision, Recall
 
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.models import TIMMModel
@@ -19,13 +20,21 @@ class HSIClassifierModule(pl.LightningModule):
         pretrained: bool,
         features_only: bool,
         in_chans: int,
-        scriptable: bool,
+        scriptable: bool
     ):
         super().__init__()
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters()
+
+        if self.hparams.num_classes ==2:
+            self.class_task = 'binary'
+        elif self.hparams.num_classes >2:
+            self.class_task = 'multiclass'
+        else:
+            print('We should have 2 or more classes')
+            return AssertionError()
 
         self.net = TIMMModel(model_name=self.hparams.model_name,
                              num_classes=self.hparams.num_classes,
@@ -38,10 +47,24 @@ class HSIClassifierModule(pl.LightningModule):
         self.criterion = torch.nn.CrossEntropyLoss()
 
         # metric objects for calculating and averaging accuracy across batches
-        metric = Accuracy(task="multiclass", num_classes=self.hparams.num_classes)
-        self.train_acc = metric.clone()
-        self.val_acc = metric.clone()
-        self.test_acc = metric.clone()
+
+        metric_acc = Accuracy(task=self.class_task, num_classes=self.hparams.num_classes)
+        self.train_acc = metric_acc.clone()
+        self.val_acc = metric_acc.clone()
+        self.test_acc = metric_acc.clone()
+
+        f1_metric = F1Score(task=self.class_task, num_classes=self.hparams.num_classes)
+        self.train_f1 = f1_metric.clone()
+        self.val_f1   = f1_metric.clone()
+        self.test_f1  = f1_metric.clone()
+
+        prec_metric = Precision(task=self.class_task, num_classes=self.hparams.num_classes)
+        self.val_prec   = prec_metric.clone()
+        self.test_prec  = prec_metric.clone()
+
+        rec_metric = Recall(task=self.class_task, num_classes=self.hparams.num_classes)
+        self.val_rec   = rec_metric.clone()
+        self.test_rec  = rec_metric.clone()
 
         # for averaging loss across batches
         loss_metric = MeanMetric()
@@ -90,8 +113,10 @@ class HSIClassifierModule(pl.LightningModule):
         # update and log metrics
         self.train_loss(loss)
         self.train_acc(preds, targets)
+        self.train_f1 (preds, targets)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True)
         self.log("train/acc", self.train_acc, on_step=False, on_epoch=True)
+        self.log("train/f1", self.train_f1, on_step=False, on_epoch=True)
 
         # we can return here dict with any tensors
         # and then read it in some callback or in `training_epoch_end()` below
@@ -116,8 +141,15 @@ class HSIClassifierModule(pl.LightningModule):
         # update and log metrics
         self.val_loss(loss)
         self.val_acc(preds, targets)
+        self.val_f1(preds,targets)
+        self.val_prec(preds,targets)
+        self.val_rec(preds,targets)
+
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True)
         self.log("val/acc", self.val_acc, on_step=False, on_epoch=True)
+        self.log("val/f1", self.val_f1, on_step=False, on_epoch=True)
+        self.log("val/prec", self.val_prec, on_step=False, on_epoch=True)
+        self.log("val/rec", self.val_rec, on_step=False, on_epoch=True)
 
         return {"loss": loss, "preds": preds, "targets": targets}
 
@@ -134,8 +166,15 @@ class HSIClassifierModule(pl.LightningModule):
         # update and log metrics
         self.test_loss(loss)
         self.test_acc(preds, targets)
+        self.test_f1(preds,targets)
+        self.test_prec(preds,targets)
+        self.test_rec(preds,targets)
+
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True)
         self.log("test/acc", self.test_acc, on_step=False, on_epoch=True)
+        self.log("test/f1", self.test_f1, on_step=False, on_epoch=True)
+        self.log("test/prec", self.test_prec, on_step=False, on_epoch=True)
+        self.log("test/rec", self.test_rec, on_step=False, on_epoch=True)
 
         return {"loss": loss, "preds": preds, "targets": targets}
 

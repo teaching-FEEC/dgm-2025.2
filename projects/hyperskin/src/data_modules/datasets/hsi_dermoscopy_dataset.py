@@ -72,7 +72,7 @@ class HSIDermoscopyDataset(Dataset):
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1, "others": 2}
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI:
             self.labels_df = self.labels_df[self.labels_df['label'].isin(
-                ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)
+                ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)   #importa apenas dados com labels melanoma ou dysplastic_nevi
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1}
         else:
             raise ValueError(f"Unsupported task: {self.task}")

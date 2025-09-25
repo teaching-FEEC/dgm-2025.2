@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from sklearn.model_selection import train_test_split
 
-from src.data_modules.datasets.hsi_dermoscopy import HSIDermoscopyDataset, HSIDermoscopyTask
+from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
 import gdown
 import zipfile
 
