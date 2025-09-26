@@ -1,1 +1,53 @@
-lll
+<mujoco>
+
+<!-- Texture Assets -->
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+        <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+                    markrgb="0.8 0.8 0.8" width="300" height="300"/>
+        <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+    </asset>
+
+<!-- Options and Extensions -->
+    <extension>
+        <plugin plugin="mujoco.elasticity.cable"/>
+    </extension>
+
+    <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
+    <option gravity="0 0 -9.81" timestep="0.02" viscosity="0.25"
+            integrator="implicitfast" iterations="50" tolerance="1e-10"/>
+
+    <size njmax="20000" nconmax="4000" nuserdata="0" nkey="0" />
+
+
+
+<!-- World -->
+    <worldbody>
+        <light pos="1 -1 1.5" dir="-1 1 -1" diffuse="0.5 0.5 0.5" directional="true"/>
+        <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+
+<!-- Rope -->
+        <body name="rope" pos="0.1 0 1">
+            <composite prefix="actuated" type="cable" curve="cos(s) sin(s) s" count="200 1 1"
+                        size="0.25 .1 2" offset="0.25 0 .05" initial="none">
+                <plugin plugin="mujoco.elasticity.cable">
+                        <!--Units are in Pa (SI)-->
+                    <config key="twist" value="1e-10"/>
+                    <config key="bend"  value="1e-10"/>
+                    <config key="vmax"  value="1"/>
+                </plugin>
+
+                <joint kind="main" damping="0.15" armature="0.01"/>
+
+
+                <geom type="capsule" size=".005" rgba=".8 .2 .1 1"/>
+
+            </composite>
+            
+            <freejoint/>
+
+        </body>
+</mujoco>
