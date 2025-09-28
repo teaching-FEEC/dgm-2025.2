@@ -26,11 +26,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         data_dir: str = "data/hsi_dermoscopy",
         image_size: int = 224,
         transforms: Optional[dict] = None,
+        allowed_labels: Optional[list[int | str]] = None,
     ):
         super().__init__()
-
-        # this line allows to access init params with 'self.hparams' attribute
-        # also ensures init params will be stored in ckpt
         self.save_hyperparameters()
 
         if isinstance(task, str):
@@ -38,13 +36,15 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         self.transforms_train = None
         self.transforms_test = None
+        self.transforms_val = None
 
-        if "train" in transforms:
-            self.transforms_train = A.Compose(self.get_transforms(transforms, "train"))
-        if "val" in transforms:
-            self.transforms_val = A.Compose(self.get_transforms(transforms, "val"))
-        if "test" in transforms:
-            self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
+        if transforms is not None:
+            if "train" in transforms:
+                self.transforms_train = A.Compose(self.get_transforms(transforms, "train"))
+            if "val" in transforms:
+                self.transforms_val = A.Compose(self.get_transforms(transforms, "val"))
+            if "test" in transforms:
+                self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
 
         self.data_train: Dataset = None
         self.data_val: Dataset = None
@@ -80,6 +80,35 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         self.setup_splits()
 
+    # Add helper method to filter and remap labels
+    def _filter_and_remap_indices(self, dataset_indices, dataset_labels, allowed_labels):
+        if allowed_labels is not None:
+            # Normalize allowed_labels into integer form
+            if isinstance(allowed_labels[0], str):
+                # Map strings to dataset integers
+                string_to_int = {
+                    name: idx for name, idx in HSIDermoscopyDataset(
+                        task=self.hparams.task,
+                        data_dir=self.hparams.data_dir
+                    ).labels_map.items()
+                }
+                allowed_labels = [string_to_int[label] for label in allowed_labels]
+
+            mask = np.isin(dataset_labels, allowed_labels)
+            filtered_indices = dataset_indices[mask]
+            filtered_labels = dataset_labels[mask]
+
+            if len(filtered_indices) == 0:
+                raise ValueError(f"No samples found for allowed_labels={allowed_labels}")
+
+            # Remap labels to contiguous [0..N-1]
+            allowed_labels_sorted = sorted(allowed_labels)
+            remap_dict = {old: new for new, old in enumerate(allowed_labels_sorted)}
+
+            filtered_labels = np.array([remap_dict[label] for label in filtered_labels])
+            return filtered_indices, filtered_labels
+        return dataset_indices, dataset_labels
+
     def setup_splits(self):
         seed = 42
         full_dataset = HSIDermoscopyDataset(
@@ -88,6 +117,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         indices = np.arange(len(full_dataset))
         labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
+
+        # Apply filtering
+        indices, labels = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
 
         # Integer-based splits
         if all(isinstance(x, int) for x in self.hparams.train_val_test_split):
@@ -196,6 +228,23 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.data_test,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+
+    def all_dataloader(self):
+        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
+
+        # use _filter_and_remap_indices to filter the full dataset
+        indices = np.arange(len(full_dataset))
+        labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
+        indices, _ = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
+        filtered_dataset = torch.utils.data.Subset(full_dataset, indices)
+
+        return DataLoader(
+            filtered_dataset,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
