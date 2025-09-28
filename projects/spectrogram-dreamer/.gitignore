@@ -1,3 +1,8 @@
 data/
+img/
+out/
 .env/
+.venv/
 env/
+venv/
+__pycache__/
