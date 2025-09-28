@@ -119,7 +119,22 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
 
         # Apply filtering
+        # First filter by allowed labels
         indices, labels = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
+
+        # Remove labels that have less than 3 samples since they can't be stratified
+        unique_labels, label_counts = np.unique(labels, return_counts=True)
+        valid_labels = unique_labels[label_counts >= 3]
+
+        if len(valid_labels) < len(unique_labels):
+            mask = np.isin(labels, valid_labels)
+            indices = indices[mask]
+            labels = labels[mask]
+
+            # Remap labels to be contiguous again
+            label_map = {old: new for new, old in enumerate(sorted(valid_labels))}
+            labels = np.array([label_map[l] for l in labels])
+            print(f"Warning: Filtered out labels with less than 3 samples. Remaining labels: {valid_labels.tolist()}")
 
         # Integer-based splits
         if all(isinstance(x, int) for x in self.hparams.train_val_test_split):

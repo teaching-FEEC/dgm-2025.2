@@ -1,0 +1,45 @@
+data:
+  class_path: data_modules.HSIDermoscopyDataModule
+  init_args:
+    task: SEGMENTATION
+    train_val_test_split: [0.7, 0.15, 0.15]
+    image_size: 224
+    batch_size: 8
+    num_workers: 8
+    pin_memory: True
+    data_dir: data/hsi_dermoscopy
+    
+    transforms:
+      train:
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      val:
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      test:
+      - class_path: PadIfNeeded
+        init_args:
+          min_height: ${data.init_args.image_size}
+          min_width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}

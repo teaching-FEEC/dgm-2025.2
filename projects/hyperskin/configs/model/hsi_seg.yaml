@@ -1,0 +1,47 @@
+# configs/experiment/segmentation.yaml
+model:
+  class_path: modules.HSISegmentationModule
+  init_args:
+    arch_name: unet
+    encoder_name: resnet18
+    num_classes: 7
+    in_chans: 16
+    pretrained: true
+    lr: 0.0001
+    loss_name: ce+dice
+
+trainer:
+  log_every_n_steps: 10
+  max_epochs: 100
+
+  logger:
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, segmentation, unet, resnet18]
+      log_model: false
+
+  callbacks:
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-val_iou={val/iou:.4f}
+        monitor: val/iou
+        verbose: true
+        save_last: true
+        mode: max
+        auto_insert_metric_name: false
+
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val/iou
+        min_delta: 0.01
+        patience: 15
+        verbose: true
+        mode: max
+        strict: true
+
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: step

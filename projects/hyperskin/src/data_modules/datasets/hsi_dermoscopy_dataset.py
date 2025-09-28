@@ -80,6 +80,11 @@ class HSIDermoscopyDataset(Dataset):
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_ALL_CLASSES:
             pass
         elif self.task == HSIDermoscopyTask.SEGMENTATION:
+            # get rows where mask is nan
+            nan_mask_rows = self.labels_df[self.labels_df['mask'].isna()]
+            if not nan_mask_rows.empty:
+                print(f"Warning: {len(nan_mask_rows)} samples do not have masks and will be ignored for segmentation task.")
+            self.labels_df = self.labels_df.dropna(subset=['mask']).reset_index(drop=True)
             pass
         else:
             raise ValueError(f"Unsupported task: {self.task}")
@@ -112,7 +117,9 @@ class HSIDermoscopyDataset(Dataset):
                                   ("melanoma", melanoma_path)]:
             for file in path.glob("*.mat"):
                 # mask path is the same as file path but in masks directory and with .png extension
-                mask_path = str(file).replace("Cube", "masks").replace(".mat", ".png")
+                mask_path = str(file).replace("images", "masks").replace(".mat", ".png")
+                if not Path(mask_path).exists():
+                    mask_path = None
                 data.append({"file_path": str(file), "label": lesion_type, "mask": mask_path})
 
         for file in other_lesions_path.glob("*.mat"):
@@ -120,7 +127,9 @@ class HSIDermoscopyDataset(Dataset):
             for short_label, full_label in others_labels_map.items():
                 if short_label in filename:
                     # mask path is the same as file path but in masks directory and with .png extension
-                    mask_path = str(file).replace("OtherCube", "masks").replace(".mat", ".png")
+                    mask_path = str(file).replace("images", "masks").replace(".mat", ".png")
+                    if not Path(mask_path).exists():
+                        mask_path = None
                     data.append({"file_path": str(file), "label": full_label, "mask": mask_path})
                     break
 
@@ -133,17 +142,22 @@ class HSIDermoscopyDataset(Dataset):
         image = loadmat(self.labels_df.iloc[index]['file_path']).popitem()[-1]
         image = image.astype('float32')
 
-        if self.transform is not None:
-            augmented = self.transform(image=image)
-            image = augmented['image']
 
         if self.task == HSIDermoscopyTask.SEGMENTATION:
             mask_path = self.labels_df.iloc[index]['mask']
             mask = Image.open(mask_path).convert("L")
             mask = np.array(mask, dtype=np.uint8)
-            mask = torch.tensor(mask, dtype=torch.long)
+            if self.transform is not None:
+                augmented = self.transform(image=image, mask=mask)
+                image = augmented['image']
+                mask = augmented['mask']
+            # mask is already a tensor, just convert to long
+            mask = torch.as_tensor(mask, dtype=torch.long)
             return image, mask
         else:
+            if self.transform is not None:
+                augmented = self.transform(image=image)
+                image = augmented['image']
             label = torch.tensor(label, dtype=torch.long)
             return image, label
 
