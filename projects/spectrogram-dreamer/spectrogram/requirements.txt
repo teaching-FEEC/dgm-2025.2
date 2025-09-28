@@ -1,0 +1,6 @@
+torch
+torchaudio
+librosa==0.10.1
+matplotlib==3.8.4
+numpy==1.26.4
+soundfile==0.12.1
