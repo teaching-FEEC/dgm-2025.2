@@ -103,7 +103,8 @@ class HSIClassifierModule(pl.LightningModule):
                 model_name = getattr(self.hparams, "model_name", "baseline")
                 class_nb = getattr(self.hparams, "num_classes")
                 preT = getattr(self.hparams, "pretrained")
-                new_nm = f"class-{model_name}_{self.class_task}-{class_nb}_pT-{preT}"
+                ft = getattr(self.hparams, "features_only")
+                new_nm = f"class-{model_name}_{self.class_task}-{class_nb}_pT-{preT}"#_ft-{ft}"
                 run.name = new_nm
 
                 # (optional) update notes/tags dynamically
