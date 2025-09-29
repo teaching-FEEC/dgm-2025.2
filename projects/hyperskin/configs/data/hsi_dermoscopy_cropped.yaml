@@ -7,8 +7,8 @@ data:
     batch_size: 8
     num_workers: 8
     pin_memory: True
-    data_dir: data/hsi_dermoscopy
-    google_drive_id: 1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx
+    data_dir: data/hsi_dermoscopy_cropped
+    google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
     
     transforms:
       train:

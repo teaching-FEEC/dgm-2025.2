@@ -258,3 +258,9 @@ checkpoints/
 !images/*
 
 *.part
+*.png
+
+*.npy
+*.zip
+*.json
+export/

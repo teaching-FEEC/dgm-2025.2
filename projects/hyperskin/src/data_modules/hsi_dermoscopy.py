@@ -26,11 +26,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         data_dir: str = "data/hsi_dermoscopy",
         image_size: int = 224,
         transforms: Optional[dict] = None,
+        allowed_labels: Optional[list[int | str]] = None,
+        google_drive_id: Optional[str] = None,
     ):
         super().__init__()
-
-        # this line allows to access init params with 'self.hparams' attribute
-        # also ensures init params will be stored in ckpt
         self.save_hyperparameters()
 
         if isinstance(task, str):
@@ -38,13 +37,15 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         self.transforms_train = None
         self.transforms_test = None
+        self.transforms_val = None
 
-        if "train" in transforms:
-            self.transforms_train = A.Compose(self.get_transforms(transforms, "train"))
-        if "val" in transforms:
-            self.transforms_val = A.Compose(self.get_transforms(transforms, "val"))
-        if "test" in transforms:
-            self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
+        if transforms is not None:
+            if "train" in transforms:
+                self.transforms_train = A.Compose(self.get_transforms(transforms, "train"))
+            if "val" in transforms:
+                self.transforms_val = A.Compose(self.get_transforms(transforms, "val"))
+            if "test" in transforms:
+                self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
 
         self.data_train: Dataset = None
         self.data_val: Dataset = None
@@ -68,17 +69,57 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
     def prepare_data(self):
         if not os.path.exists(self.hparams.data_dir) or not os.listdir(self.hparams.data_dir):
-            if not os.path.exists('hsi_dermoscopy.zip'):
+            # check if a .zip file with the data_dir name exists in the parent directory
+            downloaded = False
+            filename = f"{Path(self.hparams.data_dir).name}.zip"
+            if not os.path.exists(filename):
                 print(f"Downloading HSI Dermoscopy dataset to {self.hparams.data_dir}...")
-                gdown.download(id='1fGZUprKfdXwnSpdk4BHwYFzQWgXCkH7e', quiet=False)
+
+                if self.hparams.google_drive_id is None or self.hparams.google_drive_id == "":
+                    raise ValueError("google_drive_id must be provided to download the dataset.")
+
+                filename = gdown.download(id=self.hparams.google_drive_id, quiet=False)
+                downloaded = True
+            else:
+                print(f"Found existing zip file {filename}, skipping download.")
 
             os.makedirs(os.path.dirname(self.hparams.data_dir), exist_ok=True)
 
-            with zipfile.ZipFile('hsi_dermoscopy.zip', 'r') as zip_ref:
-                zip_ref.extractall(os.path.dirname(self.hparams.data_dir))
-                os.remove('hsi_dermoscopy.zip')
+            with zipfile.ZipFile(filename, 'r') as zip_ref:
+                zip_ref.extractall(Path(self.hparams.data_dir).parent)
+                if downloaded:
+                    os.remove(filename)
 
         self.setup_splits()
+
+    # Add helper method to filter and remap labels
+    def _filter_and_remap_indices(self, dataset_indices, dataset_labels, allowed_labels):
+        if allowed_labels is not None:
+            # Normalize allowed_labels into integer form
+            if isinstance(allowed_labels[0], str):
+                # Map strings to dataset integers
+                string_to_int = {
+                    name: idx for name, idx in HSIDermoscopyDataset(
+                        task=self.hparams.task,
+                        data_dir=self.hparams.data_dir
+                    ).labels_map.items()
+                }
+                allowed_labels = [string_to_int[label] for label in allowed_labels]
+
+            mask = np.isin(dataset_labels, allowed_labels)
+            filtered_indices = dataset_indices[mask]
+            filtered_labels = dataset_labels[mask]
+
+            if len(filtered_indices) == 0:
+                raise ValueError(f"No samples found for allowed_labels={allowed_labels}")
+
+            # Remap labels to contiguous [0..N-1]
+            allowed_labels_sorted = sorted(allowed_labels)
+            remap_dict = {old: new for new, old in enumerate(allowed_labels_sorted)}
+
+            filtered_labels = np.array([remap_dict[label] for label in filtered_labels])
+            return filtered_indices, filtered_labels
+        return dataset_indices, dataset_labels
 
     def setup_splits(self):
         seed = 42
@@ -88,6 +129,24 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         indices = np.arange(len(full_dataset))
         labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
+
+        # Apply filtering
+        # First filter by allowed labels
+        indices, labels = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
+
+        # Remove labels that have less than 3 samples since they can't be stratified
+        unique_labels, label_counts = np.unique(labels, return_counts=True)
+        valid_labels = unique_labels[label_counts >= 3]
+
+        if len(valid_labels) < len(unique_labels):
+            mask = np.isin(labels, valid_labels)
+            indices = indices[mask]
+            labels = labels[mask]
+
+            # Remap labels to be contiguous again
+            label_map = {old: new for new, old in enumerate(sorted(valid_labels))}
+            labels = np.array([label_map[label] for label in labels])
+            print(f"Warning: Filtered out labels with less than 3 samples. Remaining labels: {valid_labels.tolist()}")
 
         # Integer-based splits
         if all(isinstance(x, int) for x in self.hparams.train_val_test_split):
@@ -196,6 +255,23 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.data_test,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+
+    def all_dataloader(self):
+        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
+
+        # use _filter_and_remap_indices to filter the full dataset
+        indices = np.arange(len(full_dataset))
+        labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
+        indices, _ = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
+        filtered_dataset = torch.utils.data.Subset(full_dataset, indices)
+
+        return DataLoader(
+            filtered_dataset,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
