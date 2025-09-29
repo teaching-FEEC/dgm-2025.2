@@ -173,30 +173,37 @@ class HSIDermoscopyDataset(Dataset):
         crop_with_mask: bool = False,
         bbox_scale: float = 1.0,
         flat_export: bool = False,
-        ) -> None:
+        images_only: bool = False,
+    ) -> None:
         """
         Export dataset samples (images & optionally masks).
 
         Modes:
         - "rgb": export as PNG images.
-            * bands=None: mean of all bands (grayscale RGB).
-            * bands=[i]: single band repeated across RGB.
-            * bands=[r,g,b]: use those bands as RGB.
         - "hyperspectral": export as .mat files.
-            * bands must be a non-empty list of valid indices.
-            * only selected bands will be exported.
 
         Args:
             output_dir (str): Root directory where files will be saved.
             mode (str): "rgb" or "hyperspectral".
-            bands (list[int], optional): Band indices to use. Defaults to None.
+            bands (list[int], optional): Band indices to use.
             crop_with_mask (bool): If True, cropped around mask, skip mask export.
             bbox_scale (float): Scaling factor for bounding box (if cropping).
-            flat_export (bool): If True, all files go into output_dir without
-                                subdirectories. Default False.
+            flat_export (bool): If True, export to flat directory structure.
+            images_only (bool): If True with flat_export, save only images directly
+                                in output_dir, no masks. Ignored if flat_export=False.
         """
         output_root = Path(output_dir)
         output_root.mkdir(parents=True, exist_ok=True)
+
+        # Prepare subdirs if flat export and not images_only
+        if flat_export and not images_only:
+            images_root = output_root / "images"
+            masks_root = output_root / "masks"
+            images_root.mkdir(exist_ok=True, parents=True)
+            masks_root.mkdir(exist_ok=True, parents=True)
+        else:
+            images_root = output_root
+            masks_root = None  # unused if flat_export=False or images_only=True
 
         path_mapping = {}
 
@@ -207,7 +214,7 @@ class HSIDermoscopyDataset(Dataset):
         ):
             cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
 
-            # --- Prepare export image ---
+            # --- Convert to export mode ---
             if mode == "rgb":
                 if bands is None:
                     band_data = np.mean(cube, axis=2, keepdims=True)
@@ -222,7 +229,6 @@ class HSIDermoscopyDataset(Dataset):
                         "In RGB mode, bands must be None, or a list of 1 or 3 indices."
                     )
 
-                # Normalize 0–255
                 rgb_min, rgb_max = rgb.min(), rgb.max()
                 if rgb_max > rgb_min:
                     export_img = (
@@ -232,15 +238,12 @@ class HSIDermoscopyDataset(Dataset):
                     export_img = np.zeros_like(rgb, dtype="uint8")
 
             elif mode == "hyperspectral":
-                if not bands or len(bands) == 0:
-                    export_img = cube
-                else:
-                    export_img = cube[:, :, bands]
+                export_img = cube if not bands else cube[:, :, bands]
             else:
                 raise ValueError(f"Unsupported mode: {mode}")
 
-            h, w = export_img.shape[:2]
             use_img = export_img
+            h, w = export_img.shape[:2]
 
             # --- Cropping if enabled ---
             if crop_with_mask:
@@ -252,14 +255,12 @@ class HSIDermoscopyDataset(Dataset):
                         y_min, y_max = ys.min(), ys.max()
                         x_min, x_max = xs.min(), xs.max()
 
-                        bbox_h = (y_max - y_min + 1)
-                        bbox_w = (x_max - x_min + 1)
+                        bbox_h = y_max - y_min + 1
+                        bbox_w = x_max - x_min + 1
                         cy = (y_min + y_max) / 2
                         cx = (x_min + x_max) / 2
 
-                        new_h = bbox_h * bbox_scale
-                        new_w = bbox_w * bbox_scale
-
+                        new_h, new_w = bbox_h * bbox_scale, bbox_w * bbox_scale
                         y_min = max(0, int(round(cy - new_h / 2)))
                         y_max = min(h - 1, int(round(cy + new_h / 2)))
                         x_min = max(0, int(round(cx - new_w / 2)))
@@ -271,18 +272,18 @@ class HSIDermoscopyDataset(Dataset):
                 else:
                     continue
 
-            # --- Define output path mirroring structure or flat ---
+            # --- Build image path ---
             orig_rel_path = Path(row["file_path"]).relative_to(self.dir_path)
             orig_no_ext = orig_rel_path.with_suffix("")
 
             if flat_export:
                 base_filename = f"{orig_no_ext.name}_{row['label']}"
-                out_img_path = output_root / (
-                    base_filename + (".png" if mode == "rgb" else ".mat")
+                out_img_path = (
+                    images_root / (base_filename + (".png" if mode == "rgb" else ".mat"))
                 )
             else:
                 out_img_path = (
-                    output_root
+                    images_root
                     / orig_no_ext.parent
                     / (orig_no_ext.name + (".png" if mode == "rgb" else ".mat"))
                 )
@@ -290,24 +291,26 @@ class HSIDermoscopyDataset(Dataset):
 
             # --- Save image ---
             if mode == "rgb":
-                img = Image.fromarray(use_img)
-                img.save(out_img_path)
-            elif mode == "hyperspectral":
+                Image.fromarray(use_img).save(out_img_path)
+            else:
                 from scipy.io import savemat
 
                 savemat(out_img_path, {"cube": use_img})
 
             path_mapping[str(out_img_path)] = str(orig_rel_path)
 
-            # --- Save mask if not cropping ---
-            if not crop_with_mask and row.get("mask", None):
+            # --- Save mask ---
+            if (
+                not crop_with_mask
+                and row.get("mask", None)
+                and not (flat_export and images_only)
+            ):
                 mask_path = Path(row["mask"])
                 if mask_path.exists():
                     mask_img = Image.open(mask_path)
                     if flat_export:
-                        mask_out_path = (
-                            output_root / (orig_no_ext.name + "_mask.png")
-                        )
+                        image_filename = out_img_path.stem
+                        mask_out_path = masks_root / (image_filename + "_mask.png")
                     else:
                         mask_rel = mask_path.relative_to(self.dir_path)
                         mask_out_path = output_root / mask_rel
@@ -325,7 +328,7 @@ class HSIDermoscopyDataset(Dataset):
 
         print(
             f"Exported {len(path_mapping)} files "
-            f"to {output_root} (flat={flat_export}, cropped={crop_with_mask})"
+            f"to {output_root} (flat={flat_export}, cropped={crop_with_mask}, images_only={images_only})"
         )
         print(f"Saved path mapping to {mapping_file}")
 
@@ -336,9 +339,10 @@ if __name__ == "__main__":
     )
 
     dataset.export_dataset(
-        output_dir="export/hsi_dermoscopy_cropped",
-        mode="hyperspectral",
-        crop_with_mask=True,
+        output_dir="export/hsi_dermoscopy_rgb",
+        mode="rgb",
+        crop_with_mask=False,
         bbox_scale=1.5,
-        flat_export=False
+        flat_export=True,
+        images_only=False,
     )

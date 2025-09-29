@@ -263,3 +263,4 @@ checkpoints/
 *.npy
 *.zip
 *.json
+export/
