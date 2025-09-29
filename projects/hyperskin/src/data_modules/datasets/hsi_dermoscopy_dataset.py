@@ -75,7 +75,7 @@ class HSIDermoscopyDataset(Dataset):
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1, "others": 2}
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI:
             self.labels_df = self.labels_df[self.labels_df['label'].isin(
-                ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)   #importa apenas dados com labels melanoma ou dysplastic_nevi
+                ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1}
         elif self.task == HSIDermoscopyTask.CLASSIFICATION_ALL_CLASSES:
             pass
@@ -83,7 +83,8 @@ class HSIDermoscopyDataset(Dataset):
             # get rows where mask is nan
             nan_mask_rows = self.labels_df[self.labels_df['mask'].isna()]
             if not nan_mask_rows.empty:
-                print(f"Warning: {len(nan_mask_rows)} samples do not have masks and will be ignored for segmentation task.")
+                print(f"Warning: {len(nan_mask_rows)} "
+                      "samples do not have masks and will be ignored for segmentation task.")
             self.labels_df = self.labels_df.dropna(subset=['mask']).reset_index(drop=True)
             pass
         else:
@@ -164,70 +165,169 @@ class HSIDermoscopyDataset(Dataset):
     def __len__(self):
         return len(self.labels_df)
 
-    def export_images(self, output_dir: str, bands: Optional[list[int]] = None) -> None:
+    def export_dataset(
+        self,
+        output_dir: str,
+        mode: str = "rgb",
+        bands: Optional[list[int]] = None,
+        crop_with_mask: bool = False,
+        bbox_scale: float = 1.0,
+        flat_export: bool = False,
+        ) -> None:
         """
-        Export all images in the dataset as PNGs.
-        If bands is None, uses mean of all bands for grayscale.
-        If bands has 1 value, repeats that band across RGB channels.
-        If bands has 3 values, uses them as RGB channels.
+        Export dataset samples (images & optionally masks).
+
+        Modes:
+        - "rgb": export as PNG images.
+            * bands=None: mean of all bands (grayscale RGB).
+            * bands=[i]: single band repeated across RGB.
+            * bands=[r,g,b]: use those bands as RGB.
+        - "hyperspectral": export as .mat files.
+            * bands must be a non-empty list of valid indices.
+            * only selected bands will be exported.
 
         Args:
-            output_dir (str): Directory where the PNGs will be saved.
+            output_dir (str): Root directory where files will be saved.
+            mode (str): "rgb" or "hyperspectral".
             bands (list[int], optional): Band indices to use. Defaults to None.
+            crop_with_mask (bool): If True, cropped around mask, skip mask export.
+            bbox_scale (float): Scaling factor for bounding box (if cropping).
+            flat_export (bool): If True, all files go into output_dir without
+                                subdirectories. Default False.
         """
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+        output_root = Path(output_dir)
+        output_root.mkdir(parents=True, exist_ok=True)
 
-        # Create mapping dictionary
         path_mapping = {}
 
-        for idx, row in tqdm(self.labels_df.iterrows(), total=len(self.labels_df), desc="Exporting images"):
+        for idx, row in tqdm(
+            self.labels_df.iterrows(),
+            total=len(self.labels_df),
+            desc=f"Exporting {mode}{' cropped' if crop_with_mask else ''}",
+        ):
             cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
 
-            if bands is None:
-                # Use mean of all bands
-                band_data = np.mean(cube, axis=2, keepdims=True)
-                rgb = np.repeat(band_data, 3, axis=2)
-            elif len(bands) == 1:
-                # Repeat single band across RGB channels
-                try:
+            # --- Prepare export image ---
+            if mode == "rgb":
+                if bands is None:
+                    band_data = np.mean(cube, axis=2, keepdims=True)
+                    rgb = np.repeat(band_data, 3, axis=2)
+                elif len(bands) == 1:
                     band_data = cube[:, :, bands[0:1]]
                     rgb = np.repeat(band_data, 3, axis=2)
-                except IndexError:
-                    raise ValueError(f"Band index {bands[0]} is out of range for cube {row['file_path']}")
-            elif len(bands) == 3:
-                # Use specified RGB bands
-                try:
+                elif len(bands) == 3:
                     rgb = cube[:, :, bands]
-                except IndexError:
-                    raise ValueError(f"Band indices {bands} are out of range for cube {row['file_path']}")
+                else:
+                    raise ValueError(
+                        "In RGB mode, bands must be None, or a list of 1 or 3 indices."
+                    )
+
+                # Normalize 0–255
+                rgb_min, rgb_max = rgb.min(), rgb.max()
+                if rgb_max > rgb_min:
+                    export_img = (
+                        (rgb - rgb_min) / (rgb_max - rgb_min) * 255
+                    ).astype("uint8")
+                else:
+                    export_img = np.zeros_like(rgb, dtype="uint8")
+
+            elif mode == "hyperspectral":
+                if not bands or len(bands) == 0:
+                    export_img = cube
+                else:
+                    export_img = cube[:, :, bands]
             else:
-                raise ValueError("bands must be None, or a list of 1 or 3 indices")
+                raise ValueError(f"Unsupported mode: {mode}")
 
-            # Normalize to 0–255
-            rgb_min, rgb_max = rgb.min(), rgb.max()
-            if rgb_max > rgb_min:
-                rgb_norm = ((rgb - rgb_min) / (rgb_max - rgb_min) * 255).astype("uint8")
+            h, w = export_img.shape[:2]
+            use_img = export_img
+
+            # --- Cropping if enabled ---
+            if crop_with_mask:
+                mask_path = row.get("mask", None)
+                if mask_path and Path(mask_path).exists():
+                    mask = np.array(Image.open(mask_path).convert("L"))
+                    ys, xs = np.where(mask > 0)
+                    if len(ys) > 0 and len(xs) > 0:
+                        y_min, y_max = ys.min(), ys.max()
+                        x_min, x_max = xs.min(), xs.max()
+
+                        bbox_h = (y_max - y_min + 1)
+                        bbox_w = (x_max - x_min + 1)
+                        cy = (y_min + y_max) / 2
+                        cx = (x_min + x_max) / 2
+
+                        new_h = bbox_h * bbox_scale
+                        new_w = bbox_w * bbox_scale
+
+                        y_min = max(0, int(round(cy - new_h / 2)))
+                        y_max = min(h - 1, int(round(cy + new_h / 2)))
+                        x_min = max(0, int(round(cx - new_w / 2)))
+                        x_max = min(w - 1, int(round(cx + new_w / 2)))
+
+                        use_img = export_img[y_min:y_max + 1, x_min:x_max + 1]
+                    else:
+                        continue
+                else:
+                    continue
+
+            # --- Define output path mirroring structure or flat ---
+            orig_rel_path = Path(row["file_path"]).relative_to(self.dir_path)
+            orig_no_ext = orig_rel_path.with_suffix("")
+
+            if flat_export:
+                base_filename = f"{orig_no_ext.name}_{row['label']}"
+                out_img_path = output_root / (
+                    base_filename + (".png" if mode == "rgb" else ".mat")
+                )
             else:
-                rgb_norm = np.zeros_like(rgb, dtype="uint8")
+                out_img_path = (
+                    output_root
+                    / orig_no_ext.parent
+                    / (orig_no_ext.name + (".png" if mode == "rgb" else ".mat"))
+                )
+                out_img_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Convert to PIL image and save
-            img = Image.fromarray(rgb_norm)
-            label = row["label"]
-            filename = f"{Path(row['file_path']).stem}_{label}.png"
-            img.save(output_path / filename)
+            # --- Save image ---
+            if mode == "rgb":
+                img = Image.fromarray(use_img)
+                img.save(out_img_path)
+            elif mode == "hyperspectral":
+                from scipy.io import savemat
 
-            # Store mapping
-            rel_path = Path(row["file_path"]).relative_to(self.dir_path)
-            path_mapping[str(output_path / filename)] = str(rel_path)
+                savemat(out_img_path, {"cube": use_img})
 
-        # Save mapping to file
-        mapping_file = output_path / "path_mapping.csv"
-        pd.DataFrame.from_dict(path_mapping, orient='index', columns=['original_path']).to_csv(mapping_file)
+            path_mapping[str(out_img_path)] = str(orig_rel_path)
 
-        print(f"Exported {len(self.labels_df)} images to {output_path}")
+            # --- Save mask if not cropping ---
+            if not crop_with_mask and row.get("mask", None):
+                mask_path = Path(row["mask"])
+                if mask_path.exists():
+                    mask_img = Image.open(mask_path)
+                    if flat_export:
+                        mask_out_path = (
+                            output_root / (orig_no_ext.name + "_mask.png")
+                        )
+                    else:
+                        mask_rel = mask_path.relative_to(self.dir_path)
+                        mask_out_path = output_root / mask_rel
+                        mask_out_path.parent.mkdir(parents=True, exist_ok=True)
+                    mask_img.save(mask_out_path)
+                    path_mapping[str(mask_out_path)] = str(
+                        mask_path.relative_to(self.dir_path)
+                    )
+
+        # --- Save mapping CSV ---
+        mapping_file = output_root / "path_mapping.csv"
+        pd.DataFrame.from_dict(
+            path_mapping, orient="index", columns=["original_path"]
+        ).to_csv(mapping_file)
+
+        print(
+            f"Exported {len(path_mapping)} files "
+            f"to {output_root} (flat={flat_export}, cropped={crop_with_mask})"
+        )
         print(f"Saved path mapping to {mapping_file}")
-
 
 if __name__ == "__main__":
     dataset = HSIDermoscopyDataset(
@@ -235,4 +335,10 @@ if __name__ == "__main__":
         data_dir="data/hsi_dermoscopy"
     )
 
-    dataset.export_images("exported_images_mean")
+    dataset.export_dataset(
+        output_dir="export/hsi_dermoscopy_cropped",
+        mode="hyperspectral",
+        crop_with_mask=True,
+        bbox_scale=1.5,
+        flat_export=False
+    )

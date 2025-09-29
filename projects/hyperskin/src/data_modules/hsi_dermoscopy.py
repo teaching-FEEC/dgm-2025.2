@@ -27,6 +27,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         image_size: int = 224,
         transforms: Optional[dict] = None,
         allowed_labels: Optional[list[int | str]] = None,
+        google_drive_id: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -68,15 +69,26 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
     def prepare_data(self):
         if not os.path.exists(self.hparams.data_dir) or not os.listdir(self.hparams.data_dir):
-            if not os.path.exists('hsi_dermoscopy.zip'):
+            # check if a .zip file with the data_dir name exists in the parent directory
+            downloaded = False
+            filename = f"{Path(self.hparams.data_dir).name}.zip"
+            if not os.path.exists(filename):
                 print(f"Downloading HSI Dermoscopy dataset to {self.hparams.data_dir}...")
-                gdown.download(id='1fGZUprKfdXwnSpdk4BHwYFzQWgXCkH7e', quiet=False)
+
+                if self.hparams.google_drive_id is None or self.hparams.google_drive_id == "":
+                    raise ValueError("google_drive_id must be provided to download the dataset.")
+
+                filename = gdown.download(id=self.hparams.google_drive_id, quiet=False)
+                downloaded = True
+            else:
+                print(f"Found existing zip file {filename}, skipping download.")
 
             os.makedirs(os.path.dirname(self.hparams.data_dir), exist_ok=True)
 
-            with zipfile.ZipFile('hsi_dermoscopy.zip', 'r') as zip_ref:
-                zip_ref.extractall(os.path.dirname(self.hparams.data_dir))
-                os.remove('hsi_dermoscopy.zip')
+            with zipfile.ZipFile(filename, 'r') as zip_ref:
+                zip_ref.extractall(Path(self.hparams.data_dir).parent)
+                if downloaded:
+                    os.remove(filename)
 
         self.setup_splits()
 
@@ -133,7 +145,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
             # Remap labels to be contiguous again
             label_map = {old: new for new, old in enumerate(sorted(valid_labels))}
-            labels = np.array([label_map[l] for l in labels])
+            labels = np.array([label_map[label] for label in labels])
             print(f"Warning: Filtered out labels with less than 3 samples. Remaining labels: {valid_labels.tolist()}")
 
         # Integer-based splits
