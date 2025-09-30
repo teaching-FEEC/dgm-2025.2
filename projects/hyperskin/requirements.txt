@@ -28,6 +28,7 @@ rich
 pyrootutils
 python-dotenv
 debugpy
+umap-learn
 
 # --------- data --------- #
 albumentationsx

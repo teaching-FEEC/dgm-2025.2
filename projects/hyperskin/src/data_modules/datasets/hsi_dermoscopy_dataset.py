@@ -154,7 +154,8 @@ class HSIDermoscopyDataset(Dataset):
                 mask = augmented['mask']
             # mask is already a tensor, just convert to long
             mask = torch.as_tensor(mask, dtype=torch.long)
-            return image, mask
+            label = torch.tensor(label, dtype=torch.long)
+            return image, mask, label
         else:
             if self.transform is not None:
                 augmented = self.transform(image=image)

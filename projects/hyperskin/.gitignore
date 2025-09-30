@@ -264,3 +264,4 @@ checkpoints/
 *.zip
 *.json
 export/
+wandb

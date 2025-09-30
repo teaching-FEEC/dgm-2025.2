@@ -70,7 +70,7 @@ class HSISegmentationModule(pl.LightningModule):
         return self.net(x)
 
     def _shared_step(self, batch: Any):
-        x, y = batch  # y shape: (B, H, W)
+        x, y, _ = batch  # y shape: (B, H, W)
         logits = self.forward(x)  # shape: (B, num_classes, H, W)
 
         if isinstance(self.criterion, tuple):  # ce+dice combo
