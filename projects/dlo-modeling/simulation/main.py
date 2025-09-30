@@ -1,79 +1,111 @@
+# run with mjpython to get viewer; if no viewer is needed, set USE_VIEWER to false
+import numpy as np
 import mujoco
 import mujoco.viewer
-import numpy as np
-import time
-import pyquaternion as pyq 
-import glfw
+import re
 
-def rotate_quaternion(quat, axis, angle):
-    """
-    Rotate a quaternion by an angle around an axis
-    """
-    angle_rad = np.deg2rad(angle)
-    axis = axis / np.linalg.norm(axis)
-    q = pyq.Quaternion(quat)
-    q = q * pyq.Quaternion(axis=axis, angle=angle_rad)
-    return q.elements
+XML_PATH = "rope_chain.xml"
+FORCE_MAG = 2.0
+FORCE_STEPS = 100
+NUM_TRANSITIONS = 500
+SETTLE_TIME = 5.0        # seconds to settle before collecting
+USE_VIEWER = True
 
-def key_callback(key):
-    if key == glfw.KEY_UP:  # Up arrow
-        d.mocap_pos[0, 2] += 0.01
-    elif key == 264:  # Down arrow
-        d.mocap_pos[0, 2] -= 0.01
-    elif key == 263:  # Left arrow
-        d.mocap_pos[0, 0] -= 0.01
-    elif key == 262:  # Right arrow
-        d.mocap_pos[0, 0] += 0.01
-    elif key == 320:  # Numpad 0
-        d.mocap_pos[0, 1] += 0.01
-    elif key == 330:  # Numpad .
-        d.mocap_pos[0, 1] -= 0.01
-    elif key == 260:  # Insert
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [1, 0, 0], 10)
-    elif key == 261:  # Home
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [1, 0, 0], -10)
-    elif key == 268:  # Home
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [0, 1, 0], 10)
-    elif key == 269:  # End
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [0, 1, 0], -10)
-    elif key == 266:  # Page Up
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [0, 0, 1], 10)
-    elif key == 267:  # Page Down
-        d.mocap_quat[0] = rotate_quaternion(d.mocap_quat[0], [0, 0, 1], -10)
-    else:
-        print(key)
+def get_link_ids(model, prefix="link_"):
+    ids, names = [], []
+    i = 0
+    while True:
+        name = f"{prefix}{i}"
+        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
+        if bid == -1: break
+        ids.append(bid); names.append(name); i += 1
+        if i > model.nbody: break
+    if ids:
+        return np.array(ids, dtype=int), names
 
-# Load model and create data
-#m = mujoco.MjModel.from_xml_path("./mujoco_menagerie/franka_emika_panda/panda.xml")
+    # Fallback scan
+    cand = []
+    for b in range(model.nbody):
+        nm = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b) or ""
+        m = re.match(rf"^{re.escape(prefix)}(\d+)$", nm)
+        if m:
+            cand.append((int(m.group(1)), b, nm))
+    if not cand:
+        raise RuntimeError("No link_* bodies found.")
+    cand.sort(key=lambda x: x[0])
+    ids = np.array([b for _, b, _ in cand], dtype=int)
+    names = [nm for _, _, nm in cand]
+    return ids, names
 
-m = mujoco.MjModel.from_xml_path("model.xml")
-d = mujoco.MjData(m)
+def sample_force(mag):
+    axis = np.zeros(3); axis[np.random.randint(0, 3)] = 1.0
+    if np.random.rand() < 0.5: axis = -axis
+    return mag * axis
 
+def main():
+    m = mujoco.MjModel.from_xml_path(XML_PATH)
+    d = mujoco.MjData(m)
+    link_ids, link_names = get_link_ids(m)
+    L = len(link_ids)
 
-print("Total bodies:", m.nbody)
+    samples = np.zeros((NUM_TRANSITIONS, L, 4), dtype=np.float32)
 
-    
-
-# Get the ID of the body we want to track
-body_id = m.body("link7").id
-
-# Do forward kinematics
-mujoco.mj_kinematics(m, d)
-
-cam_id = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_CAMERA, "wrist_cam")
-
-
-# Get the position of the body from the data
-body_pos = d.xpos[body_id]
-body_quat = d.xquat[body_id]
-print(body_pos, body_quat)
-
-
-with mujoco.viewer.launch_passive(m, d, key_callback=key_callback) as v:
-    stepcount = 0
-    #v.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
-    #v.cam.fixedcamid = cam_id    
-    while v.is_running():
+    def step():
         mujoco.mj_step(m, d)
-        v.sync()
-        stepcount += 1
+
+    # settle
+    settle_steps = int(SETTLE_TIME / m.opt.timestep)
+    if USE_VIEWER:
+        with mujoco.viewer.launch_passive(m, d) as viewer:
+            for _ in range(settle_steps):
+                step(); viewer.sync()
+
+            for i in range(NUM_TRANSITIONS):
+                # state before burst
+                print(i)
+                s = d.xpos[link_ids, :]           # (L,3)
+                samples[i, :, 0:3] = s
+                # choose action
+                li = np.random.randint(0, L)
+                a = sample_force(FORCE_MAG)
+                bid = link_ids[li]
+                samples[i, :, 3] = li             # broadcast link id
+
+                # apply force for FORCE_STEPS
+                for _ in range(FORCE_STEPS):
+                    d.xfrc_applied[bid, :3] = a
+                    step(); viewer.sync()
+                d.xfrc_applied[bid, :] = 0.0
+    else:
+        for _ in range(settle_steps):
+            step()
+        for i in range(NUM_TRANSITIONS):
+            print(i)
+            s = d.xpos[link_ids, :]
+            samples[i, :, 0:3] = s
+            li = np.random.randint(0, L)
+            a = sample_force(FORCE_MAG)
+            bid = link_ids[li]
+            samples[i, :, 3] = li
+            for _ in range(FORCE_STEPS):
+                d.xfrc_applied[bid, :3] = a
+                step()
+            d.xfrc_applied[bid, :] = 0.0
+
+    # save single matrix
+    np.savez_compressed(
+        "rope_minimal.npz",
+        samples=samples,             # (N, L, 4): xyz + acted_link_id
+        link_names=np.array(link_names, dtype=object),
+        meta=dict(
+            xml=XML_PATH,
+            timestep=m.opt.timestep,
+            force_mag=FORCE_MAG,
+            force_steps=FORCE_STEPS,
+            settle_time=SETTLE_TIME,
+        ),
+    )
+    print("Saved rope_minimal.npz with samples shape", samples.shape)
+
+if __name__ == "__main__":
+    main()
