@@ -1,7 +1,7 @@
 import os
 import warnings
 from typing import Any, Optional
-
+import secrets
 from lightning_fabric.utilities.cloud_io import get_filesystem
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.cli import (
@@ -21,9 +21,98 @@ torch.serialization.add_safe_globals([HSIDermoscopyTask])
 
 
 class WandbSaveConfigCallback(SaveConfigCallback):
+
+    def _build_run_name_and_tags(self) -> tuple[str, list[str]]:
+        """Constructs a run name and tags from config."""
+        run_name = ""
+        tags: list[str] = []
+
+        # Handle data-related tags
+        if hasattr(self.config.data, "init_args"):
+            data_args = self.config.data.init_args
+
+            # Task
+            if hasattr(data_args, "task"):
+                task = data_args.task.lower()
+                if "classification" in task:
+                    run_name += "cls_"
+                    tags.append("classification")
+                elif "segmentation" in task:
+                    run_name += "seg_"
+                    tags.append("segmentation")
+
+                if run_name:
+                    first_underscore_index = task.find("_")
+                    if first_underscore_index != -1:
+                        tags.append(task[first_underscore_index + 1 :])
+
+            # Transforms (Detect Augmentation)
+            if hasattr(data_args, "transforms") and hasattr(data_args.transforms, "train"):
+                transforms = data_args.transforms.train
+                not_augs = [
+                    "ToTensorV2",
+                    "Normalize",
+                    "PadIfNeeded",
+                    "CenterCrop",
+                    "Resize",
+                    "Equalize",
+                ]
+                has_augmentation = any(
+                    transform.get("class_path") not in not_augs for transform in transforms
+                )
+                if has_augmentation:
+                    run_name += "aug_"
+                    tags.append("augmented")
+
+        # Handle model-related tags
+        if hasattr(self.config.model, "init_args"):
+            model_args = self.config.model.init_args
+
+            if hasattr(model_args, "model_name"):
+                run_name += f"{model_args.model_name}_"
+                tags.append(model_args.model_name.lower())
+
+            if hasattr(model_args, "arch_name"):
+                run_name += f"{model_args.arch_name}_"
+                tags.append(model_args.arch_name.lower())
+
+            if hasattr(model_args, "encoder_name"):
+                run_name += f"{model_args.encoder_name}_"
+                tags.append(model_args.encoder_name.lower())
+
+            if hasattr(model_args, "pretrained"):
+                if model_args.pretrained:
+                    run_name += "pt_"
+                    tags.append("pretrained")
+                else:
+                    tags.append("not_pretrained")
+
+            if hasattr(model_args, "in_chans"):
+                in_chans = model_args.in_chans
+                img_type = "rgb" if in_chans == 3 else "hsi"
+                run_name += f"{img_type}{in_chans}_"
+                tags.extend([img_type, f"{in_chans}_channels"])
+
+        # Add unique ID suffix
+        run_name += f"{secrets.randbits(24)}"
+
+        return run_name, tags
+
     def setup(self, trainer: Trainer, pl_module: LightningModule, stage: str) -> None:
         if self.already_saved:
             return
+
+        run_name, tags = self._build_run_name_and_tags()
+
+        # apply the name and tags to all loggers
+        for _logger in trainer.loggers:
+            if isinstance(_logger, WandbLogger):
+                # only set the name if it hasn't been manually by the user
+                if hasattr(trainer.logger, "_name") and not trainer.logger._name:
+                    _logger.experiment.name = run_name
+                _logger.experiment.tags = tuple(
+                    set(_logger.experiment.tags).union(set(tags))
+                )
 
         log_dir = trainer.log_dir  # this broadcasts the directory
         if trainer.logger is not None and trainer.logger.name is not None and trainer.logger.version is not None:
@@ -70,7 +159,6 @@ class WandbSaveConfigCallback(SaveConfigCallback):
 
         # broadcast so that all ranks are in sync on future calls to .setup()
         self.already_saved = trainer.strategy.broadcast(self.already_saved)
-
 
 class CustomLightningCLI(LightningCLI):
     def __init__(

@@ -11,6 +11,9 @@ from torchmetrics.classification.accuracy import Accuracy
 from torchmetrics.classification import F1Score, Precision, Recall
 from torchmetrics import SpecificityAtSensitivity
 from torch.nn.functional import one_hot
+import tempfile
+
+import wandb
 
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.models import TIMMModel
@@ -103,35 +106,17 @@ class HSIClassifierModule(pl.LightningModule):
             logger = self.trainer.logger
             datamodule = self.trainer.datamodule
 
-            # Define local path for saving splits
-            split_dir = Path(logger.save_dir) / "data_splits"
-
-            # Save splits to local log directory
-            datamodule.save_splits_to_disk(split_dir)
-
             # If using wandb, upload the split files
             if isinstance(logger, WandbLogger):
-                run = logger.experiment  # wandb.Run object
-                # ---- build new run name dynamically from hyperparameters ----
-                model_name = getattr(self.hparams, "model_name", "baseline")
-                class_nb = getattr(self.hparams, "num_classes")
-                preT = getattr(self.hparams, "pretrained")
-                #print('HPARAMS')
-                #print(self.hparams)
-                #lr = getattr(self.hparams,"lr")
-                ft = getattr(self.hparams, "features_only")
-                new_nm = f"class-{model_name}_{self.class_task}-{class_nb}_pT-{preT}" #_lr-{lr}"#_ft-{ft}"
-                run.name = new_nm
+                split_dir = Path(logger.save_dir) / logger.name / logger.version / "splits"
 
-                # (optional) update notes/tags dynamically
-                run.notes = "Auto-named by on_train_start"
-                existing = set(run.tags or [])
-                run.tags = list(existing.union({"auto"}))
+                # Save splits to local log directory
+                datamodule.save_splits_to_disk(split_dir)
+                run = logger.experiment
 
-                # ---- upload split files ----
-                run.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
-                # Use glob to save all .txt files in the directory
-                #logger.experiment.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
+                # Upload the split files to wandb
+                run.save(str(split_dir / "*.txt"), base_path=str(split_dir.parent))
+
 
     def model_step(self, batch: Any):
         x, y = batch
