@@ -12,6 +12,7 @@ ipykernel
 pytorch-lightning
 jsonargparse[signatures]
 torchmetrics
+segmentation-models-pytorch
 
 # --------- loggers --------- #
 # tensorboard
