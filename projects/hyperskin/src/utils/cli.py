@@ -15,6 +15,10 @@ from pytorch_lightning.loggers import Logger, WandbLogger
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
+import torch
+from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyTask
+torch.serialization.add_safe_globals([HSIDermoscopyTask])
+
 
 class WandbSaveConfigCallback(SaveConfigCallback):
     def setup(self, trainer: Trainer, pl_module: LightningModule, stage: str) -> None:
@@ -80,6 +84,7 @@ class CustomLightningCLI(LightningCLI):
             for sub_command in ["fit", "validate", "test", "predict"]
         }
         new_parser_kwargs.update(parser_kwargs or {})
+
         super().__init__(save_config_callback=save_config_callback, parser_kwargs=new_parser_kwargs, **kwargs)
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:

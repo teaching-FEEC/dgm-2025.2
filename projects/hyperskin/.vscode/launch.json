@@ -41,6 +41,26 @@
         "DEBUG": "0"  // run normally (no remote wait)
       }
     },
+        {
+      "name": "Debug Fast Validation",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "validate",
+        "-c",
+        "logs/hypersynth/f3bkt9lp/config.yaml",
+        "--trainer.fast_dev_run",
+        "true",
+        "--ckpt_path",
+        "logs/hypersynth/f3bkt9lp/checkpoints/epoch=07-val_acc=0.2534.ckpt"
+      ],
+      "justMyCode": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0"  // run normally (no remote wait)
+      }
+    },
     {
       "name": "Attach to Debugpy (Remote/Cluster/Container)",
       "type": "debugpy",

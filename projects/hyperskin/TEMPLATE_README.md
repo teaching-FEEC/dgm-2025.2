@@ -160,19 +160,22 @@ python src/main.py fit -c configs/data/hsi_dermoscopy_seg.yaml -c configs/model/
 **Validate**
 
 ```bash
-python src/main.py validate -c configs/data/mnist.yaml -c configs/model/simplenet.yaml --trainer.logger.name exp1
+# Example
+python src/main.py validate -c logs/hypersynth/lk6elvbc/config.yaml --ckpt_path logs/hypersynth/lk6elvbc/checkpoints/epoch=00-val_acc=0.1450.ckpt
 ```
 
 **Test**
 
 ```bash
-python src/main.py test -c configs/data/mnist.yaml -c configs/model/simplenet.yaml --trainer.logger.name exp1
+# Example
+python src/main.py test -c logs/hypersynth/lk6elvbc/config.yaml --ckpt_path logs/hypersynth/lk6elvbc/checkpoints/epoch=00-val_acc=0.1450.ckpt
 ```
 
 **Inference**
 
 ```bash
-python src/main.py predict -c configs/data/mnist.yaml -c configs/model/simplenet.yaml --trainer.logger.name exp1
+# Example
+python src/main.py predict -c logs/hypersynth/lk6elvbc/config.yaml --ckpt_path logs/hypersynth/lk6elvbc/checkpoints/epoch=00-val_acc=0.1450.ckpt
 ```
 
 **Debug**

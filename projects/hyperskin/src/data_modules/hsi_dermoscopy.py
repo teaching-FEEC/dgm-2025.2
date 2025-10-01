@@ -218,11 +218,22 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         print(f"Saved data splits to {split_dir}")
 
     def setup(self, stage: str = None):
+        if self.train_indices is None or self.val_indices is None or self.test_indices is None:
+            split_dir = Path(self.hparams.data_dir).parent / "splits"
+            if (split_dir / "train.txt").exists() and (split_dir / "val.txt").exists() and \
+            (split_dir / "test.txt").exists():
+                self.train_indices = np.loadtxt(split_dir / "train.txt", dtype=int)
+                self.val_indices = np.loadtxt(split_dir / "val.txt", dtype=int)
+                self.test_indices = np.loadtxt(split_dir / "test.txt", dtype=int)
+            else:
+                # last resort, regenerate
+                self.setup_splits()
+
         # Create the full dataset
         full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
 
         # Use the indices from setup_splits to create the splits
-        if stage == 'fit' or stage is None and self.data_train is None and self.data_val is None:
+        if stage in ['fit', 'validate'] or stage is None and (self.data_train is None or self.data_val is None):
             full_dataset.transform = self.transforms_train
             self.data_train = torch.utils.data.Subset(full_dataset, self.train_indices)
 

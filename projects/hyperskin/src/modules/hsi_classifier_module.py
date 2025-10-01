@@ -1,4 +1,5 @@
 # Adapted from: https://github.com/ashleve/lightning-hydra-template/blob/main/src/models/mnist_module.py
+import inspect
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -8,6 +9,8 @@ import torch
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
 from torchmetrics.classification import F1Score, Precision, Recall
+from torchmetrics import SpecificityAtSensitivity
+from torch.nn.functional import one_hot
 
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.models import TIMMModel
@@ -21,7 +24,8 @@ class HSIClassifierModule(pl.LightningModule):
         pretrained: bool,
         features_only: bool,
         in_chans: int,
-        scriptable: bool
+        scriptable: bool,
+        min_sensitivity: float = 0.95,
     ):
         super().__init__()
 
@@ -75,6 +79,14 @@ class HSIClassifierModule(pl.LightningModule):
 
         # for tracking best so far validation accuracy
         self.val_acc_best = MaxMetric()
+        self.val_spec_at_sens_best = MaxMetric()
+
+        self.val_spec_at_sens = SpecificityAtSensitivity(min_sensitivity=self.hparams.min_sensitivity,
+                                                         task=self.class_task,
+                                                         num_classes=self.hparams.num_classes)
+        self.test_spec_at_sens = SpecificityAtSensitivity(min_sensitivity=self.hparams.min_sensitivity,
+                                                          task=self.class_task,
+                                                          num_classes=self.hparams.num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.net(x)
@@ -83,6 +95,7 @@ class HSIClassifierModule(pl.LightningModule):
         # by default lightning executes validation step sanity checks before training starts,
         # so we need to make sure val_acc_best doesn't store accuracy from these checks
         self.val_acc_best.reset()
+        self.val_spec_at_sens_best.reset()
 
         # Save data splits if the logger and datamodule are configured correctly
         if self.trainer.logger and hasattr(self.trainer.logger, 'save_dir') and \
@@ -125,10 +138,10 @@ class HSIClassifierModule(pl.LightningModule):
         logits = self.forward(x)
         loss = self.criterion(logits, y)
         preds = torch.argmax(logits, dim=1)
-        return loss, preds, y
+        return loss, preds, y, logits
 
     def training_step(self, batch: Any, batch_idx: int):
-        loss, preds, targets = self.model_step(batch)
+        loss, preds, targets, _ = self.model_step(batch)
 
         # update and log metrics
         self.train_loss(loss)
@@ -156,7 +169,7 @@ class HSIClassifierModule(pl.LightningModule):
         pass
 
     def validation_step(self, batch: Any, batch_idx: int):
-        loss, preds, targets = self.model_step(batch)
+        loss, preds, targets, logits = self.model_step(batch)
 
         # update and log metrics
         self.val_loss(loss)
@@ -164,12 +177,17 @@ class HSIClassifierModule(pl.LightningModule):
         self.val_f1(preds,targets)
         self.val_prec(preds,targets)
         self.val_rec(preds,targets)
+        self.val_spec_at_sens(logits, one_hot(targets, num_classes=self.hparams.num_classes))
 
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True)
         self.log("val/acc", self.val_acc, on_step=False, on_epoch=True)
         self.log("val/f1", self.val_f1, on_step=False, on_epoch=True)
         self.log("val/prec", self.val_prec, on_step=False, on_epoch=True)
         self.log("val/rec", self.val_rec, on_step=False, on_epoch=True)
+
+        specificity, threshold = self.val_spec_at_sens.compute()
+        self.log(f"val/spec@sens={self.hparams.min_sensitivity}", specificity, on_step=False, on_epoch=True)
+        self.log(f"val/spec@sens={self.hparams.min_sensitivity}_threshold", threshold, on_step=False, on_epoch=True)
 
         return {"loss": loss, "preds": preds, "targets": targets}
 
@@ -180,8 +198,12 @@ class HSIClassifierModule(pl.LightningModule):
         # otherwise metric would be reset by lightning after each epoch
         self.log("val/acc_best", self.val_acc_best.compute())
 
+        sens_at_spec, threshold = self.val_spec_at_sens.compute()
+        self.val_spec_at_sens_best(sens_at_spec)
+        self.log(f"val/spec@sens={self.hparams.min_sensitivity}_best", self.val_spec_at_sens_best.compute())
+
     def test_step(self, batch: Any, batch_idx: int):
-        loss, preds, targets = self.model_step(batch)
+        loss, preds, targets, logits = self.model_step(batch)
 
         # update and log metrics
         self.test_loss(loss)
@@ -189,12 +211,17 @@ class HSIClassifierModule(pl.LightningModule):
         self.test_f1(preds,targets)
         self.test_prec(preds,targets)
         self.test_rec(preds,targets)
+        self.test_spec_at_sens(logits, one_hot(targets, num_classes=self.hparams.num_classes))
 
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True)
         self.log("test/acc", self.test_acc, on_step=False, on_epoch=True)
         self.log("test/f1", self.test_f1, on_step=False, on_epoch=True)
         self.log("test/prec", self.test_prec, on_step=False, on_epoch=True)
         self.log("test/rec", self.test_rec, on_step=False, on_epoch=True)
+
+        specificity, threshold = self.test_spec_at_sens.compute()
+        self.log(f"test/spec@sens={self.hparams.min_sensitivity}", specificity, on_step=False, on_epoch=True)
+        self.log(f"test/spec@sens={self.hparams.min_sensitivity}_threshold", threshold, on_step=False, on_epoch=True)
 
         return {"loss": loss, "preds": preds, "targets": targets}
 

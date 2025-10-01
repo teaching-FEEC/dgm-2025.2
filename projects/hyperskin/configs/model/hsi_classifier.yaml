@@ -7,6 +7,7 @@ model:
     features_only: False
     in_chans: 16
     scriptable: True
+    min_sensitivity: 0.95
 
 trainer:
   log_every_n_steps: 10
@@ -19,16 +20,15 @@ trainer:
       save_dir: logs
       entity: k298976-unicamp
       project: hypersynth
-      tags: [hsi, classifier, resnet18]
       log_model: false
 
   # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
   callbacks:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
-    - class_path: ModelCheckpoint
+    - class_path: callbacks.FixedModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-val_acc={val/acc:.4f}
-        monitor: val/acc
+        filename: epoch={epoch:02d}-val_acc={val/spec@sens=${model.init_args.min_sensitivity}:.4f}
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
         verbose: true
         save_last: true
         mode: max
@@ -36,9 +36,9 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     - class_path: EarlyStopping
       init_args:
-        monitor: val/acc
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
         min_delta: 0.01
-        patience: 10
+        patience: 40
         verbose: true
         mode: max
         strict: true
