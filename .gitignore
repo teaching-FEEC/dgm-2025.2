@@ -1,1 +1,7 @@
 ./projects/super-video-decompression/src/__pycache__/*
+.venv
+*.mp4
+*.png
+*.webp
+*.pth
+*/tb_logger/**
