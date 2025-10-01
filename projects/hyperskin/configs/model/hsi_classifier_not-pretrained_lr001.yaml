@@ -2,7 +2,7 @@ model:
   class_path: modules.HSIClassifierModule
   init_args:
     model_name: resnet18
-    num_classes: 3
+    num_classes: 2
     pretrained: False
     features_only: False
     in_chans: 16
@@ -48,6 +48,6 @@ trainer:
 optimizer:
   class_path: AdamW
   init_args:
-    lr: 0.000001
+    lr: 0.001
 # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
 lr_scheduler:
