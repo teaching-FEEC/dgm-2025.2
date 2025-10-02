@@ -1,7 +1,7 @@
 # Adapted from: https://github.com/ashleve/lightning-hydra-template/blob/main/src/models/mnist_module.py
 import inspect
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 import numpy as np
 
 import pytorch_lightning as pl
@@ -28,6 +28,7 @@ class HSIClassifierModule(pl.LightningModule):
         features_only: bool,
         in_chans: int,
         scriptable: bool,
+        criterion: Optional[dict] = None,
         min_sensitivity: float = 0.95,
     ):
         super().__init__()
@@ -51,8 +52,19 @@ class HSIClassifierModule(pl.LightningModule):
                              in_chans=self.hparams.in_chans,
                              scriptable=self.hparams.scriptable)
 
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
+        if self.hparams.criterion is not None:
+            if "class_path" not in self.hparams.criterion:
+                raise ValueError("Criterion must have 'class_path' key")
+            if "init_args" not in self.hparams.criterion or self.hparams.criterion["init_args"] is None:
+                self.hparams.criterion["init_args"] = {}
+
+            try:
+                criterion_cls = eval(self.hparams.criterion['class_path'])
+            except AttributeError:
+                raise ValueError(f"Criterion {self.hparams.criterion['class_path']} not found in torch.nn")
+            self.criterion = criterion_cls(**self.hparams.criterion["init_args"])
+        else:
+            self.criterion = torch.nn.CrossEntropyLoss()
 
         # metric objects for calculating and averaging accuracy across batches
 

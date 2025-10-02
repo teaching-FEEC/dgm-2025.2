@@ -1,7 +1,7 @@
 model:
   class_path: modules.HSIClassifierModule
   init_args:
-    model_name: densenet201
+    model_name: regnetx_002
     num_classes: 2
     pretrained: False
     features_only: False
@@ -9,8 +9,13 @@ model:
     scriptable: True
     min_sensitivity: 0.95
 
+    # criterion:
+    #   class_path: torch.nn.CrossEntropyLoss
+    #   init_args: 
+    #     label_smoothing: 0.1
+
 trainer:
-  log_every_n_steps: 10
+  log_every_n_steps: 1
   max_epochs: 100
 
   logger:

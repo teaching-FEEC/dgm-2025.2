@@ -14,6 +14,8 @@ from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDatase
 import gdown
 import zipfile
 
+from src.samplers.balanced_batch_sampler import BalancedBatchSampler
+
 class HSIDermoscopyDataModule(pl.LightningDataModule):
 
     def __init__(
@@ -28,6 +30,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         transforms: Optional[dict] = None,
         allowed_labels: Optional[list[int | str]] = None,
         google_drive_id: Optional[str] = None,
+        balanced_sampling: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -246,14 +249,28 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             self.data_test = torch.utils.data.Subset(full_dataset, self.test_indices)
 
     def train_dataloader(self):
-        return DataLoader(
-            self.data_train,
-            batch_size=self.hparams.batch_size,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            shuffle=True,
-        )
-
+        if self.hparams.task in [
+            HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
+            HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
+        ] and self.hparams.balanced_sampling:
+            labels = np.array(
+                [self.data_train.dataset.labels[i] for i in self.data_train.indices]
+            )
+            sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
+            return DataLoader(
+                self.data_train,
+                batch_sampler=sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+            )
+        else:
+            return DataLoader(
+                self.data_train,
+                batch_size=self.hparams.batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                shuffle=True,
+            )
     def val_dataloader(self):
         return DataLoader(
             self.data_val,
