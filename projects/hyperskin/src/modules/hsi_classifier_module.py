@@ -11,13 +11,25 @@ from torchmetrics.classification.accuracy import Accuracy
 from torchmetrics.classification import F1Score, Precision, Recall
 from torchmetrics import SpecificityAtSensitivity
 from torch.nn.functional import one_hot
-import tempfile
-
-import wandb
+import importlib
 
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.models import TIMMModel
 from pytorch_lightning.loggers import WandbLogger
+
+def load_class(path: str):
+    """
+    Load a class dynamically given a dotted path like:
+      - "losses.FocalLoss"
+      - "src.losses.focal_loss.FocalLoss"
+
+    The path can reference either:
+    - a class re-exported in __init__.py
+    - or a class defined in a submodule
+    """
+    module_path, class_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
 
 class HSIClassifierModule(pl.LightningModule):
     def __init__(
@@ -59,9 +71,9 @@ class HSIClassifierModule(pl.LightningModule):
                 self.hparams.criterion["init_args"] = {}
 
             try:
-                criterion_cls = eval(self.hparams.criterion['class_path'])
+                criterion_cls = load_class(self.hparams.criterion["class_path"])
             except AttributeError:
-                raise ValueError(f"Criterion {self.hparams.criterion['class_path']} not found in torch.nn")
+                raise ValueError(f"Criterion {self.hparams.criterion['class_path']} not found ")
             self.criterion = criterion_cls(**self.hparams.criterion["init_args"])
         else:
             self.criterion = torch.nn.CrossEntropyLoss()

@@ -10,9 +10,10 @@ model:
     min_sensitivity: 0.95
 
     # criterion:
-    #   class_path: torch.nn.CrossEntropyLoss
+    #   class_path: losses.FocalLoss
     #   init_args: 
-    #     label_smoothing: 0.1
+    #     gamma: 2.0
+    #     alpha: 0.25
 
 trainer:
   log_every_n_steps: 1

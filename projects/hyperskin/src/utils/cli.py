@@ -2,6 +2,7 @@ import os
 import warnings
 from typing import Any, Optional
 import secrets
+from xml.parsers.expat import model
 from lightning_fabric.utilities.cloud_io import get_filesystem
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.cli import (
@@ -31,6 +32,14 @@ class WandbSaveConfigCallback(SaveConfigCallback):
         if hasattr(self.config.data, "init_args"):
             data_args = self.config.data.init_args
 
+            # Crop
+            if hasattr(data_args, "data_dir") and "crop" in data_args.data_dir.lower():
+                run_name += "crop_"
+                tags.append("cropped")
+
+            if hasattr(data_args, "balanced_sampling") and data_args.balanced_sampling:
+                tags.append("balanced_sampling")
+
             # Task
             if hasattr(data_args, "task"):
                 task = data_args.task.lower()
@@ -47,8 +56,8 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                         tags.append(task[first_underscore_index + 1 :])
 
             # Transforms (Detect Augmentation)
-            if hasattr(data_args, "transforms") and hasattr(data_args.transforms, "train"):
-                transforms = data_args.transforms.train
+            if hasattr(data_args, "transforms") and "train" in data_args.transforms:
+                transforms = data_args.transforms["train"]
                 not_augs = [
                     "ToTensorV2",
                     "Normalize",
@@ -93,6 +102,18 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 run_name += f"{img_type}{in_chans}_"
                 tags.extend([img_type, f"{in_chans}_channels"])
 
+            if hasattr(model_args, "criterion") and model_args.criterion is not None and \
+                "class_path" in model_args.criterion:
+                criterion = model_args.criterion["class_path"]
+                # split by . and take last part
+                criterion = "".join(["_" + c.lower() if c.isupper() else c for c in criterion])
+                criterion_name = criterion.split(".")
+                if len(criterion_name) > 0:
+                    criterion_name = criterion_name[-1].lstrip("_")
+                    # criterion_name is in CamelCase, convert to snake_case
+                    tags.append(criterion_name)
+                else:
+                    tags.append(criterion.lstrip("_"))
         # Add unique ID suffix
         run_name += f"{secrets.randbits(24)}"
 
@@ -147,11 +168,13 @@ class WandbSaveConfigCallback(SaveConfigCallback):
             for _logger in trainer.loggers:
                 if isinstance(_logger, Logger):
                     config = {}
-                    if "optimizer" in self.config and self.config["optimizer"] is not None and self.config["optimizer"] != {}:
+                    if "optimizer" in self.config and self.config["optimizer"] is not None \
+                        and self.config["optimizer"] != {}:
                         config["optimizer"] = {
                             k.replace("init_args.", ""): v for k, v in dict(self.config["optimizer"]).items()
                         }
-                    if "lr_scheduler" in self.config and self.config["lr_scheduler"] is not None and self.config["lr_scheduler"] != {}:
+                    if "lr_scheduler" in self.config and self.config["lr_scheduler"] is not None and \
+                        self.config["lr_scheduler"] != {}:
                         config["lr_scheduler"] = {
                             k.replace("init_args.", ""): v for k, v in dict(self.config["lr_scheduler"]).items()
                         }
