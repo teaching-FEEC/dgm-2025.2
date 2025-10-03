@@ -9,6 +9,26 @@ model:
     scriptable: True
     min_sensitivity: 0.95
     freeze_backbone: True
+    unfreeze_norm: True
+    # unfreeze_layers: 
+    #   - "features.denseblock4.denselayer25"
+    #   - "features.denseblock4.denselayer26"
+    #   - "features.denseblock4.denselayer27"
+    #   - "features.denseblock4.denselayer28"
+    #   - "features.denseblock4.denselayer29"
+    #   - "features.denseblock4.denselayer30"
+    #   - "features.denseblock4.denselayer31"
+    #   - "features.denseblock4.denselayer32"
+    #   - "features.norm5"
+    # custom_head:
+    #   - class_path: torch.nn.Dropout
+    #     init_args:
+    #       p: 0.3
+    #   - class_path: torch.nn.Linear
+    #     init_args:
+    #       in_features: 1920
+    #       out_features: 2
+    #       bias: True
 
     # criterion:
     #   class_path: losses.FocalLoss
