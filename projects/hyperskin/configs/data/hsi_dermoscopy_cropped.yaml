@@ -27,10 +27,6 @@ data:
           scale_limit: 0.1
           rotate_limit: 15
           p: 0.5
-      - class_path: Normalize
-        init_args:
-          mean: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-          std:  [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
       - class_path: PadIfNeeded
         init_args:
           min_height: ${data.init_args.image_size}
