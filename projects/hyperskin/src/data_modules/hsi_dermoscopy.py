@@ -232,21 +232,30 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 # last resort, regenerate
                 self.setup_splits()
 
-        # Create the full dataset
-        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
-
         # Use the indices from setup_splits to create the splits
         if stage in ['fit', 'validate'] or stage is None and (self.data_train is None or self.data_val is None):
-            full_dataset.transform = self.transforms_train
-            self.data_train = torch.utils.data.Subset(full_dataset, self.train_indices)
+            self.data_train = HSIDermoscopyDataset(
+                task=self.hparams.task,
+                data_dir=self.hparams.data_dir,
+                transform=self.transforms_train,
+            )
+            self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
 
-            full_dataset.transform = self.transforms_val
-            self.data_val = torch.utils.data.Subset(full_dataset, self.val_indices)
+            self.data_val = HSIDermoscopyDataset(
+                task=self.hparams.task,
+                data_dir=self.hparams.data_dir,
+                transform=self.transforms_val,
+            )
+            self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
         # Assign test dataset
         if stage == 'test' or stage is None and self.data_test is None:
-            full_dataset.transform = self.transforms_test
-            self.data_test = torch.utils.data.Subset(full_dataset, self.test_indices)
+            self.data_test = HSIDermoscopyDataset(
+                task=self.hparams.task,
+                data_dir=self.hparams.data_dir,
+                transform=self.transforms_test,
+            )
+            self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
     def train_dataloader(self):
         if self.hparams.task in [

@@ -11,44 +11,30 @@ data:
     google_drive_id: 1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx
     # data_dir: data/hsi_dermoscopy_cropped
     # google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
-    balanced_sampling: True
+    balanced_sampling: False
     
     transforms:
       train:
-      # - class_path: ShiftScaleRotate
-      #   init_args:
-      #     shift_limit: 0.1
-      #     scale_limit: 0
-      #     rotate_limit: 4
-      #     interpolation: 2
-      #     p: 0.5
-      # - class_path: RandomCropFromBorders
-      #   init_args:
-      #     crop_left: 0.2
-      #     crop_right: 0.2
-      #     crop_top: 0.2
-      #     crop_bottom: 0.2
-      #     p: 0.5
-      # - class_path: RGBShift
-      #   init_args:
-      #     r_shift_limit: 2
-      #     g_shift_limit: 2
-      #     b_shift_limit: 2
-      #     p: 0.5
-      # - class_path: RandomBrightnessContrast
-      #   init_args:
-      #     brightness_limit: 0.2
-      #     contrast_limit: 0.2
-      #     p: 0.5
-      # - class_path: GaussNoise
-      #   init_args:
-      #     p: 0.5
-      # - class_path: Defocus
-      #   init_args:
-      #     p: 0.5
-      # - class_path: HorizontalFlip
-      #   init_args:
-      #     p: 0.5
+      - class_path: ShiftScaleRotate
+        init_args:
+          shift_limit: 0.1
+          scale_limit: 0
+          rotate_limit: 4
+          interpolation: 2
+          p: 0.5
+      - class_path: RandomCropFromBorders
+        init_args:
+          crop_left: 0.2
+          crop_right: 0.2
+          crop_top: 0.2
+          crop_bottom: 0.2
+          p: 0.5
+      - class_path: HorizontalFlip
+        init_args:
+          p: 0.5
+      - class_path: VerticalFlip
+        init_args:
+          p: 0.5
       - class_path: PadIfNeeded
         init_args:
           min_height: ${data.init_args.image_size}
