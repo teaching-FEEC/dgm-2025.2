@@ -36,6 +36,7 @@ class HSIDermoscopyTask(IntEnum):
     CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_VS_OTHERS = auto()
     CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI = auto()
     SEGMENTATION = auto()
+    GENERATION = auto()
 
 
 class HSIDermoscopyDataset(Dataset):
@@ -77,7 +78,7 @@ class HSIDermoscopyDataset(Dataset):
             self.labels_df = self.labels_df[self.labels_df['label'].isin(
                 ['melanoma', 'dysplastic_nevi'])].reset_index(drop=True)
             self.labels_map = {"melanoma": 0, "dysplastic_nevi": 1}
-        elif self.task == HSIDermoscopyTask.CLASSIFICATION_ALL_CLASSES:
+        elif self.task == HSIDermoscopyTask.CLASSIFICATION_ALL_CLASSES or self.task == HSIDermoscopyTask.GENERATION:
             pass
         elif self.task == HSIDermoscopyTask.SEGMENTATION:
             # get rows where mask is nan

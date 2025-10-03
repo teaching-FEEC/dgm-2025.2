@@ -30,10 +30,12 @@
       "args": [
         "fit",
         "-c",
-        "configs/data/hsi_dermoscopy_aug.yaml",
+        // "configs/data/hsi_dermoscopy_aug.yaml",
+        "configs/data/hsi_dermoscopy_synth.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
-        "configs/model/hsi_classifier_regnet.yaml",
+        // "configs/model/hsi_classifier_regnet.yaml",
+        "configs/model/hsi_gan.yaml",
         "--trainer.fast_dev_run",
         "true"
       ],

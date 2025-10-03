@@ -1,59 +1,63 @@
-import math
+import torch
 import torch.nn as nn
 
 class Generator(nn.Module):
     """
-    >>> Generator(img_shape=(1, 8, 8))  # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
-    Generator(
-      (model): Sequential(...)
-    )
+    Automatically configured generator that upsamples until reaching
+    the desired output shape.
     """
 
-    def __init__(self, latent_dim: int = 100, img_shape: tuple = (1, 28, 28)):
+    def __init__(self, latent_dim: int, img_shape: tuple):
         super().__init__()
         self.img_shape = img_shape
+        self.latent_dim = latent_dim
+        num_channels, target_h, target_w = img_shape
 
-        def block(in_feat, out_feat, normalize=True):
-            layers = [nn.Linear(in_feat, out_feat)]
-            if normalize:
-                layers.append(nn.BatchNorm1d(out_feat, 0.8))
-            layers.append(nn.LeakyReLU(0.2, inplace=True))
-            return layers
+        # Start from 4x4 feature map
+        self.init_size = 4
+        self.proj_channels = 512
 
-        self.model = nn.Sequential(
-            *block(latent_dim, 128, normalize=False),
-            *block(128, 256),
-            *block(256, 512),
-            *block(512, 1024),
-            nn.Linear(1024, int(math.prod(img_shape))),
-            nn.Tanh(),
+        # Fully connected projection from latent vector → feature map
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, self.proj_channels * self.init_size * self.init_size),
+            nn.ReLU(True),
         )
+
+        channels = [512, 256, 128, 64]
+
+        layers = []
+        current_channels = self.proj_channels
+        current_size = self.init_size
+        i = 1
+
+        # Upsampling loop
+        while current_size < min(target_h, target_w):
+            out_channels = channels[min(i, len(channels) - 1)]
+            layers += [
+                nn.ConvTranspose2d(current_channels, out_channels, 4, 2, 1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(True),
+            ]
+            current_channels = out_channels
+            current_size *= 2
+            i += 1
+
+        # Final conv to match channels (e.g. 16 for HSI)
+        layers += [
+            nn.ConvTranspose2d(current_channels, num_channels, 3, 1, 1),
+            nn.Tanh()
+        ]
+
+        self.model = nn.Sequential(*layers)
 
     def forward(self, z):
-        img = self.model(z)
-        return img.view(img.size(0), *self.img_shape)
+        # Project and reshape latent vector
+        out = self.fc(z)
+        out = out.view(z.size(0), self.proj_channels, self.init_size, self.init_size)
+        img = self.model(out)
 
-
-class Discriminator(nn.Module):
-    """
-    >>> Discriminator(img_shape=(1, 28, 28))  # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
-    Discriminator(
-      (model): Sequential(...)
-    )
-    """
-
-    def __init__(self, img_shape: tuple = (1, 28, 28)):
-        super().__init__()
-
-        self.model = nn.Sequential(
-            nn.Linear(int(math.prod(img_shape)), 512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 1),
+        # Ensure exact resolution
+        img = torch.nn.functional.interpolate(
+            img, size=self.img_shape[1:], mode="bilinear", align_corners=False
         )
-
-    def forward(self, img):
-        img_flat = img.view(img.size(0), -1)
-        return self.model(img_flat)
-
+        return img

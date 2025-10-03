@@ -29,7 +29,7 @@ class GANModule(LightningModule):
 
     def __init__(
         self,
-        img_shape: tuple = (1, 28, 28),
+        img_shape: tuple,
         lr: float = 0.0002,
         b1: float = 0.5,
         b2: float = 0.999,
