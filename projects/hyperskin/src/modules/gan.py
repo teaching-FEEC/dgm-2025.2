@@ -6,6 +6,12 @@ from zmq import has
 from src.models.gan.discriminator import Discriminator
 from src.models.gan.generator import Generator
 import torch.nn.functional as F
+import torch
+from torchmetrics.image import StructuralSimilarityIndexMeasure
+from torchmetrics.image import PeakSignalNoiseRatio
+from torchmetrics.image import SpectralAngleMapper
+from torchmetrics import MaxMetric
+from metrics.synthesis_metrics import SynthMetrics, _NoOpMetric
 
 
 class GANModule(LightningModule):
@@ -28,6 +34,7 @@ class GANModule(LightningModule):
         b1: float = 0.5,
         b2: float = 0.999,
         latent_dim: int = 100,
+        metrics: list = ['ssim', 'psnr', 'sam']
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -40,7 +47,9 @@ class GANModule(LightningModule):
         self.validation_z = torch.randn(8, self.hparams.latent_dim)
 
         self.example_input_array = torch.zeros(2, self.hparams.latent_dim)
-
+        self.val_metrics = SynthMetrics(metrics=metrics, data_range=1.0)
+        self.val_best = {name: MaxMetric() for name in self.val_metrics._order}
+        
     def forward(self, z):
         return self.generator(z)
 
@@ -114,3 +123,30 @@ class GANModule(LightningModule):
         for logger in self.loggers:
             if hasattr(logger.experiment, "add_image"):
                 logger.experiment.add_image("generated_images", grid, self.current_epoch)
+
+    def validation_step(self, batch, batch_idx):
+            imgs, _ = batch
+            fake_imgs = self(torch.randn(imgs.shape[0], self.hparams.latent_dim, device=imgs.device))
+            results = self.val_metrics(fake_imgs, imgs)
+            for k, v in results.items():
+                self.log(f"val/{k}", v, on_step=False, on_epoch=True)
+
+    def on_validation_epoch_end(self):
+        """
+        End-of-epoch:
+          • compute epoch-aggregated metrics from SynthMetrics
+          • update 'best_*' MaxMetric trackers
+          • log current epoch values and best-so-far values
+          • reset SynthMetrics state for the next epoch
+        """
+        # 1) Compute current epoch metrics as a dict, e.g., {'ssim': t, 'psnr': t, 'sam': t}
+        epoch_vals = self.val_metrics.compute()
+
+        # 2) Log current (this-epoch) values and update best trackers
+        for name, value in epoch_vals.items():
+            # Log the epoch aggregate (e.g., mean across all batches)
+            self.log(f"val/{name}", value, on_step=False, on_epoch=True, prog_bar=True)
+
+            # Update best-so-far tracker and log its current best value
+            self.val_best[name](value)                                  # push this epoch value into MaxMetric
+            self.log(f"val/{name}_best", self.val_best[name].compute(), on_step=False, on_epoch=True)
