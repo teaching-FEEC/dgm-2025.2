@@ -102,6 +102,25 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 run_name += f"{img_type}{in_chans}_"
                 tags.extend([img_type, f"{in_chans}_channels"])
 
+            if hasattr(model_args, "freeze_backbone"):
+                if model_args.freeze_backbone:
+                    run_name += "fb_"
+                    tags.append("frozen_backbone")
+
+            # Optimizer
+        if hasattr(self.config, "optimizer") and self.config.optimizer is not None and \
+                "class_path" in self.config.optimizer:
+            optimizer = self.config.optimizer["class_path"]
+            # split by . and take last part
+            optimizer = "".join(["_" + c.lower() if c.isupper() else c for c in optimizer])
+            optimizer_name = optimizer.split(".")
+            if len(optimizer_name) > 0:
+                optimizer_name = optimizer_name[-1].lstrip("_")
+                # optimizer_name is in CamelCase, convert to snake_case
+                tags.append(optimizer_name)
+            else:
+                tags.append(optimizer.lstrip("_"))
+
             if hasattr(model_args, "criterion") and model_args.criterion is not None and \
                 "class_path" in model_args.criterion:
                 criterion = model_args.criterion["class_path"]

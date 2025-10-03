@@ -42,6 +42,7 @@ class HSIClassifierModule(pl.LightningModule):
         scriptable: bool,
         criterion: Optional[dict] = None,
         min_sensitivity: float = 0.95,
+        freeze_backbone: bool = False,
     ):
         super().__init__()
 
@@ -62,7 +63,8 @@ class HSIClassifierModule(pl.LightningModule):
                              pretrained=self.hparams.pretrained,
                              features_only=self.hparams.features_only,
                              in_chans=self.hparams.in_chans,
-                             scriptable=self.hparams.scriptable)
+                             scriptable=self.hparams.scriptable,
+                             freeze_backbone=self.hparams.freeze_backbone)
 
         if self.hparams.criterion is not None:
             if "class_path" not in self.hparams.criterion:

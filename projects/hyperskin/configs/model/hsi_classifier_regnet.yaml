@@ -3,11 +3,12 @@ model:
   init_args:
     model_name: densenet201
     num_classes: 2
-    pretrained: False
+    pretrained: True
     features_only: False
     in_chans: 16
     scriptable: True
     min_sensitivity: 0.95
+    freeze_backbone: True
 
     # criterion:
     #   class_path: losses.FocalLoss
@@ -57,6 +58,6 @@ trainer:
 optimizer:
   class_path: AdamW
   init_args:
-    lr: 0.00001
+    lr: 0.0001
 # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
 lr_scheduler:
