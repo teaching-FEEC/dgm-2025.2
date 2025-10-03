@@ -59,6 +59,10 @@ for fname in os.listdir(input_dir):
 
     spec = stft(waveform)
 
+    #normalização z-score
+    spec = torch.log1p(spec)
+    spec = (spec - spec.mean()) / (spec.std() + 1e-8)
+
     if args.log_mel:
         mel = torchaudio.transforms.MelScale(
             n_mels=80, sample_rate=sr, n_stft=spec.size(1)
