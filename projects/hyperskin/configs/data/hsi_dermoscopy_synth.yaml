@@ -16,13 +16,13 @@ data:
     
     transforms:
       train:
-      - class_path: LongestMaxSize
+      - class_path: SmallestMaxSize
         init_args:
           max_size: ${data.init_args.image_size}
-      - class_path: PadIfNeeded
+      - class_path: CenterCrop
         init_args:
-          min_height: ${data.init_args.image_size}
-          min_width: ${data.init_args.image_size}
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
       - class_path: Resize
         init_args:
           height: ${data.init_args.image_size}
@@ -30,13 +30,13 @@ data:
       - class_path: ToTensorV2
         init_args: {}
       val:
-      - class_path: LongestMaxSize
+      - class_path: SmallestMaxSize
         init_args:
           max_size: ${data.init_args.image_size}
-      - class_path: PadIfNeeded
+      - class_path: CenterCrop
         init_args:
-          min_height: ${data.init_args.image_size}
-          min_width: ${data.init_args.image_size}
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
       - class_path: Resize
         init_args:
           height: ${data.init_args.image_size}
@@ -44,13 +44,13 @@ data:
       - class_path: ToTensorV2
         init_args: {}
       test:
-      - class_path: LongestMaxSize
+      - class_path: SmallestMaxSize
         init_args:
           max_size: ${data.init_args.image_size}
-      - class_path: PadIfNeeded
+      - class_path: CenterCrop
         init_args:
-          min_height: ${data.init_args.image_size}
-          min_width: ${data.init_args.image_size}
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
       - class_path: Resize
         init_args:
           height: ${data.init_args.image_size}
