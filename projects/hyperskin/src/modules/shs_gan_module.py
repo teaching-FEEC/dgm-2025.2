@@ -9,6 +9,13 @@ from pytorch_lightning.loggers import WandbLogger
 from src.models.shs_gan.shs_discriminator import Critic3D
 from src.models.shs_gan.shs_generator import Generator
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
+
+
+from torchmetrics.image import StructuralSimilarityIndexMeasure
+from torchmetrics.image import PeakSignalNoiseRatio
+from torchmetrics.image import SpectralAngleMapper
+from torchmetrics import MaxMetric
+from src.metrics.synthesis_metrics import SynthMetrics, _NoOpMetric
 '''In WGAN-GP, the critic must satisfy the 1-Lipschitz constraint, 
 meaning its output cannot change faster than the input, which ensures the 
 Wasserstein distance is valid. Instead of clipping weights, WGAN-GP enforces 
@@ -32,7 +39,8 @@ class SHSGAN(pl.LightningModule):
                  lambda_gp=10.0,
                  n_critic=5,
                  num_log_samples=2,
-                 log_channels=(0, 1, 2)):
+                 log_channels=(0, 1, 2),
+                 metrics: list = ['ssim', 'psnr', 'sam']):
         """
         SHS-GAN LightningModule with WGAN-GP 
         """
@@ -66,6 +74,9 @@ class SHSGAN(pl.LightningModule):
 
         # track best generator loss
         self.val_g_loss_best = MinMetric()
+
+        self.val_metrics = SynthMetrics(metrics=metrics, data_range=1.0)
+        self.val_best = {name: MaxMetric() for name in self.val_metrics._order}
 
     def on_train_start(self):
         # This hook runs once at the beginning of training. 
@@ -178,12 +189,28 @@ class SHSGAN(pl.LightningModule):
         self.log("train/d_loss", self.train_d_loss, prog_bar=True, on_epoch=True)
         self.log("train/gp", self.train_gp, prog_bar=True, on_epoch=True)
 
+    # def validation_step(self, batch, batch_idx):
+    #     with torch.enable_grad():   
+    #         g_loss, d_loss, gp = self.gan_step(batch, stage="val")
+    #     self.log_dict({"val_g_loss": g_loss, "val_d_loss": d_loss, "val_gp": gp}, prog_bar=True)
+
     def validation_step(self, batch, batch_idx):
+        #GAN training metrics
         with torch.enable_grad():   
             g_loss, d_loss, gp = self.gan_step(batch, stage="val")
-        self.log_dict({"val_g_loss": g_loss, "val_d_loss": d_loss, "val_gp": gp}, prog_bar=True)
+        
+        # Image quality metrics
+        imgs, _ = batch
+        fake_imgs = self(torch.randn(imgs.shape[0], self.hparams.latent_dim, device=imgs.device))
+        results = self.val_metrics(fake_imgs, imgs)
+        
 
-
+        self.log_dict({
+            "val_g_loss": g_loss, 
+            "val_d_loss": d_loss, 
+            "val_gp": gp,
+            **{f"val/{k}": v for k, v in results.items()}
+        }, prog_bar=True)
     def on_validation_epoch_end(self):
         g_loss = self.val_g_loss.compute()
         self.val_g_loss_best.update(g_loss)
