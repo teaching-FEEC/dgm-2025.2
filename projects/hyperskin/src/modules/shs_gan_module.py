@@ -40,7 +40,8 @@ class SHSGAN(pl.LightningModule):
                  n_critic=5,
                  num_log_samples=2,
                  log_channels=(0, 1, 2),
-                 metrics: list = ['ssim', 'psnr', 'sam']):
+                 metrics: list = ['ssim', 'psnr', 'sam'],
+                 ):
         """
         SHS-GAN LightningModule with WGAN-GP 
         """
@@ -77,6 +78,9 @@ class SHSGAN(pl.LightningModule):
 
         self.val_metrics = SynthMetrics(metrics=metrics, data_range=1.0)
         self.val_best = {name: MaxMetric() for name in self.val_metrics._order}
+
+    def forward(self, z):
+        return self.generator(z)
 
     def on_train_start(self):
         # This hook runs once at the beginning of training. 
@@ -200,10 +204,14 @@ class SHSGAN(pl.LightningModule):
             g_loss, d_loss, gp = self.gan_step(batch, stage="val")
         
         # Image quality metrics
+        # imgs, _ = batch
+        # fake_imgs = self(torch.randn(imgs.shape[0], self.hparams.latent_dim, device=imgs.device))
+        # results = self.val_metrics(fake_imgs, imgs)
         imgs, _ = batch
-        fake_imgs = self(torch.randn(imgs.shape[0], self.hparams.latent_dim, device=imgs.device))
+        B, _, H, W = imgs.shape
+        fake_imgs = self.generator(torch.randn(B, self.hparams.in_channels, H, W, device=imgs.device))
         results = self.val_metrics(fake_imgs, imgs)
-        
+
 
         self.log_dict({
             "val_g_loss": g_loss, 
