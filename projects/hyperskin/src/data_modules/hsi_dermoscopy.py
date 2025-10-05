@@ -3,18 +3,30 @@ from pathlib import Path
 
 from git import Optional
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 from torchvision.transforms import transforms as T
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
-from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
 import gdown
 import zipfile
+from PIL import Image
 
+if __name__ == "__main__":
+    import pyrootutils
+
+    pyrootutils.setup_root(Path(__file__).parent.parent.parent, 
+                           project_root_env_var=True, 
+                           dotenv=True, 
+                           pythonpath=True, 
+                           cwd=False)
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
+from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
+from src.utils.mosaic import plot_dataset_mosaic
 
 class HSIDermoscopyDataModule(pl.LightningDataModule):
 
@@ -31,6 +43,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         allowed_labels: Optional[list[int | str]] = None,
         google_drive_id: Optional[str] = None,
         balanced_sampling: bool = False,
+        synthetic_data_dir: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -241,6 +254,37 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             )
             self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
 
+            # Add synthetic data to training set if provided
+            if self.hparams.synthetic_data_dir is not None:
+                synthetic_dataset = HSIDermoscopyDataset(
+                    task=self.hparams.task,
+                    data_dir=self.hparams.synthetic_data_dir,
+                    transform=self.transforms_train,
+                )
+                
+                # Use all samples from synthetic dataset
+                synthetic_indices = np.arange(len(synthetic_dataset))
+                
+                # Apply label filtering if specified
+                if self.hparams.allowed_labels is not None:
+                    synthetic_labels = synthetic_dataset.labels_df["label"].map(
+                        synthetic_dataset.labels_map
+                    ).to_numpy()
+                    synthetic_indices, _ = self._filter_and_remap_indices(
+                        synthetic_indices, synthetic_labels, self.hparams.allowed_labels
+                    )
+                
+                synthetic_subset = torch.utils.data.Subset(
+                    synthetic_dataset, synthetic_indices
+                )
+                
+                # Concatenate real and synthetic training data
+                self.data_train = torch.utils.data.ConcatDataset(
+                    [self.data_train, synthetic_subset]
+                )
+                
+                print(f"Added {len(synthetic_subset)} synthetic samples to training set")
+
             self.data_val = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
@@ -262,9 +306,24 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
             HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
         ] and self.hparams.balanced_sampling:
-            labels = np.array(
-                [self.data_train.dataset.labels[i] for i in self.data_train.indices]
-            )
+            # Handle both Subset and ConcatDataset
+            if isinstance(self.data_train, torch.utils.data.ConcatDataset):
+                # Extract labels from concatenated datasets
+                labels = []
+                for dataset in self.data_train.datasets:
+                    if isinstance(dataset, torch.utils.data.Subset):
+                        labels.extend(
+                            [dataset.dataset.labels[i] for i in dataset.indices]
+                        )
+                    else:
+                        labels.extend(dataset.labels)
+                labels = np.array(labels)
+            else:
+                # Original Subset case
+                labels = np.array(
+                    [self.data_train.dataset.labels[i] for i in self.data_train.indices]
+                )
+            
             sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
             return DataLoader(
                 self.data_train,
@@ -318,3 +377,376 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
     def teardown(self, stage=None):
         # Called on every process after trainer is done
         pass
+
+    def export_dataset(
+        self,
+        output_dir: str,
+        splits: Optional[list[str]] = None,
+        mode: str = "rgb",
+        extension: Optional[str] = None,
+        bands: Optional[list[int]] = None,
+        crop_with_mask: bool = False,
+        bbox_scale: float = 1.5,
+        structure: str = "original",
+        allowed_labels: Optional[list[int | str]] = None,
+    ) -> None:
+        """
+        Export dataset with flexible options.
+
+        Args:
+            output_dir: Root directory for exported files
+            splits: List of splits to export (["train", "val", "test"]).
+                    If None, exports all splits.
+            mode: "rgb" or "hyper" for export format
+            extension: Custom file extension (default: .png for rgb, .mat for hyper)
+            bands: Band indices to export/use for RGB
+            crop_with_mask: Whether to crop images using mask bounding boxes
+            bbox_scale: Scale factor for bounding box (default 1.5 = 50% padding)
+            structure: Directory structure:
+                - "original": Maintains original folder structure
+                - "flat": No subdirectories, filename includes label
+                - "imagenet": train/val/test dirs with class subdirs
+                - "flat_with_masks": Flat with separate images/ and masks/ folders
+                - "images_only": Flat with only images, no masks
+            allowed_labels: List of labels to export (can be int or str).
+                            If None, exports all labels.
+        """
+        from scipy.io import loadmat, savemat
+
+        if splits is None:
+            splits = ["train", "val", "test"]
+
+        # Ensure setup has been called
+        if self.train_indices is None:
+            self.setup_splits()
+
+        output_root = Path(output_dir)
+        output_root.mkdir(parents=True, exist_ok=True)
+
+        # Determine file extension
+        if extension is None:
+            extension = ".png" if mode == "rgb" else ".mat"
+        elif not extension.startswith("."):
+            extension = f".{extension}"
+
+        # Get full dataset for accessing samples
+        full_dataset = HSIDermoscopyDataset(
+            task=self.hparams.task, data_dir=self.hparams.data_dir
+        )
+
+        # Convert allowed_labels to set of integers for filtering
+        allowed_label_ints = None
+        if allowed_labels is not None:
+            allowed_label_ints = set()
+            for label in allowed_labels:
+                if isinstance(label, str):
+                    if label in full_dataset.labels_map:
+                        allowed_label_ints.add(full_dataset.labels_map[label])
+                    else:
+                        raise ValueError(
+                            f"Label '{label}' not found in dataset. "
+                            f"Available labels: {list(full_dataset.labels_map.keys())}"
+                        )
+                else:
+                    allowed_label_ints.add(label)
+
+        # Helper function to get label name
+        def get_label_name(idx: int) -> str:
+            label_int = full_dataset.labels[idx]
+            for name, val in full_dataset.labels_map.items():
+                if val == label_int:
+                    return name
+            return "unknown"
+
+        # Helper function to check if index should be exported
+        def should_export(idx: int) -> bool:
+            if allowed_label_ints is None:
+                return True
+            return full_dataset.labels[idx] in allowed_label_ints
+
+        # Helper function to process and export a single image
+        def export_image(
+            idx: int, split_name: str, counter: dict[str, int]
+        ) -> tuple[Optional[Path], Optional[Path]]:
+            # Check if this label should be exported
+            if not should_export(idx):
+                return None, None
+
+            row = full_dataset.labels_df.iloc[idx]
+            label_name = get_label_name(idx)
+
+            # Load hyperspectral cube
+            cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
+
+            # Convert to export mode
+            if mode == "rgb":
+                rgb_data = self._convert_to_rgb(cube, bands)
+            else:  # hyper
+                rgb_data = cube if bands is None else cube[:, :, bands]
+
+            # Crop if requested
+            if crop_with_mask and row.get("mask") and Path(row["mask"]).exists():
+                mask = np.array(Image.open(row["mask"]).convert("L"))
+                rgb_data = self._crop_with_bbox(rgb_data, mask, bbox_scale)
+                if rgb_data is None:
+                    return None, None
+
+            # Determine output paths based on structure
+            img_path, mask_path = self._get_export_paths(
+                output_root,
+                structure,
+                split_name,
+                label_name,
+                idx,
+                counter,
+                extension,
+            )
+
+            # Save image
+            if mode == "rgb":
+                Image.fromarray(rgb_data).save(img_path)
+            else:
+                savemat(img_path, {"cube": rgb_data})
+
+            # Save mask if applicable
+            if (
+                not crop_with_mask
+                and structure not in ["images_only"]
+                and row.get("mask")
+                and Path(row["mask"]).exists()
+            ):
+                mask_img = Image.open(row["mask"])
+                mask_img.save(mask_path)
+            else:
+                mask_path = None
+
+            return img_path, mask_path
+
+        # Export each split
+        path_mapping = {}
+        split_indices_map = {
+            "train": self.train_indices,
+            "val": self.val_indices,
+            "test": self.test_indices,
+        }
+
+        total_exported = 0
+        for split_name in splits:
+            if split_name not in split_indices_map:
+                print(f"Warning: Unknown split '{split_name}', skipping")
+                continue
+
+            indices = split_indices_map[split_name]
+            counter = {"count": 0}
+
+            # Filter indices by allowed labels if specified
+            if allowed_label_ints is not None:
+                filtered_indices = [
+                    idx for idx in indices if should_export(idx)
+                ]
+                if len(filtered_indices) == 0:
+                    print(
+                        f"Warning: No samples in '{split_name}' split match "
+                        f"allowed_labels={allowed_labels}"
+                    )
+                    continue
+            else:
+                filtered_indices = indices
+
+            for idx in tqdm(
+                filtered_indices,
+                desc=f"Exporting {split_name} split ({mode} mode)",
+            ):
+                img_path, mask_path = export_image(idx, split_name, counter)
+                if img_path:
+                    orig_path = full_dataset.labels_df.iloc[idx]["file_path"]
+                    path_mapping[str(img_path)] = str(orig_path)
+                    if mask_path:
+                        path_mapping[str(mask_path)] = str(
+                            full_dataset.labels_df.iloc[idx]["mask"]
+                        )
+                    total_exported += 1
+
+        # Save path mapping
+        mapping_file = output_root / "path_mapping.csv"
+        pd.DataFrame.from_dict(
+            path_mapping, orient="index", columns=["original_path"]
+        ).to_csv(mapping_file)
+
+        print(f"\nExported {total_exported} samples to {output_root}")
+        print(f"Structure: {structure}, Mode: {mode}, Cropped: {crop_with_mask}")
+        if allowed_labels:
+            print(f"Filtered to labels: {allowed_labels}")
+        print(f"Saved path mapping to {mapping_file}")
+
+    def _convert_to_rgb(
+        self, cube: np.ndarray, bands: Optional[list[int]]
+    ) -> np.ndarray:
+        """Convert hyperspectral cube to RGB image."""
+        if bands is None:
+            # No bands specified: mean across all bands
+            band_data = np.mean(cube, axis=2, keepdims=True)
+            rgb = np.repeat(band_data, 3, axis=2)
+        elif len(bands) == 1:
+            # Single band: replicate on 3 channels
+            band_data = cube[:, :, bands[0:1]]
+            rgb = np.repeat(band_data, 3, axis=2)
+        elif len(bands) == 3:
+            # Three bands: use for RGB
+            rgb = cube[:, :, bands]
+        else:
+            # More than 3: take mean and replicate
+            band_data = np.mean(cube[:, :, bands], axis=2, keepdims=True)
+            rgb = np.repeat(band_data, 3, axis=2)
+
+        # Normalize to 0-255
+        rgb_min, rgb_max = rgb.min(), rgb.max()
+        if rgb_max > rgb_min:
+            return ((rgb - rgb_min) / (rgb_max - rgb_min) * 255).astype("uint8")
+        else:
+            return np.zeros_like(rgb, dtype="uint8")
+
+    def _crop_with_bbox(
+        self, img: np.ndarray, mask: np.ndarray, bbox_scale: float
+    ) -> Optional[np.ndarray]:
+        """Crop image using mask bounding box with scaling."""
+        ys, xs = np.where(mask > 0)
+        if len(ys) == 0 or len(xs) == 0:
+            return None
+
+        h, w = img.shape[:2]
+        y_min, y_max = ys.min(), ys.max()
+        x_min, x_max = xs.min(), xs.max()
+
+        bbox_h = y_max - y_min + 1
+        bbox_w = x_max - x_min + 1
+        cy = (y_min + y_max) / 2
+        cx = (x_min + x_max) / 2
+
+        new_h = bbox_h * bbox_scale
+        new_w = bbox_w * bbox_scale
+
+        y_min = max(0, int(round(cy - new_h / 2)))
+        y_max = min(h - 1, int(round(cy + new_h / 2)))
+        x_min = max(0, int(round(cx - new_w / 2)))
+        x_max = min(w - 1, int(round(cx + new_w / 2)))
+
+        return img[y_min : y_max + 1, x_min : x_max + 1]
+
+    def _get_export_paths(
+        self,
+        output_root: Path,
+        structure: str,
+        split_name: str,
+        label_name: str,
+        idx: int,
+        counter: dict,
+        extension: str,
+    ) -> tuple[Path, Optional[Path]]:
+        """Determine output paths based on directory structure."""
+        counter["count"] += 1
+        filename = f"{label_name}_{counter['count']:05d}{extension}"
+
+        if structure == "original":
+            # Maintain original folder structure
+            img_path = output_root / split_name / label_name / filename
+            img_path.parent.mkdir(parents=True, exist_ok=True)
+            mask_path = (
+                output_root / split_name / label_name / filename.replace(
+                    extension, "_mask.png"
+                )
+            )
+
+        elif structure == "imagenet":
+            # ImageNet structure: split/class/images
+            img_path = output_root / split_name / label_name / filename
+            img_path.parent.mkdir(parents=True, exist_ok=True)
+            mask_path = img_path.parent / filename.replace(extension, "_mask.png")
+
+        elif structure == "flat":
+            # Flat with label in filename
+            filename = f"{split_name}_{filename}"
+            img_path = output_root / filename
+            mask_path = output_root / filename.replace(extension, "_mask.png")
+
+        elif structure == "flat_with_masks":
+            # Separate images/ and masks/ directories
+            images_dir = output_root / "images"
+            masks_dir = output_root / "masks"
+            images_dir.mkdir(exist_ok=True)
+            masks_dir.mkdir(exist_ok=True)
+            filename = f"{split_name}_{filename}"
+            img_path = images_dir / filename
+            mask_path = masks_dir / filename.replace(extension, "_mask.png")
+
+        elif structure == "images_only":
+            # Only images, no subdirectories
+            filename = f"{split_name}_{filename}"
+            img_path = output_root / filename
+            mask_path = None
+
+        else:
+            raise ValueError(f"Unknown structure: {structure}")
+
+        return img_path, mask_path
+
+if __name__ == "__main__":
+    import pyrootutils
+    pyrootutils.setup_root(Path(__file__).parent.parent.parent, 
+                           project_root_env_var=True, 
+                           dotenv=True, 
+                           pythonpath=True, 
+                           cwd=False)
+
+    # Example usage
+    image_size = 224
+    data_module = HSIDermoscopyDataModule(
+        task="CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI",
+        train_val_test_split=(0.7, 0.15, 0.15),
+        batch_size=8,
+        data_dir="data/hsi_dermoscopy",
+        image_size=image_size,
+        transforms={
+            "train": [
+                {"class_path": "HorizontalFlip", "init_args": {"p": 0.5}},
+                {"class_path": "VerticalFlip", "init_args": {"p": 0.5}},
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+            "val": [
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+            "test": [
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+        },
+        google_drive_id="18fRaTH4FReHretz3OBJr3-takvxtDy1E",
+        synthetic_data_dir="data/hsi_dermoscopy_cropped_synth"
+    )
+    data_module.prepare_data()
+    data_module.setup()
+
+    print(f"Train samples: {len(data_module.data_train)}")
+    print(f"Val samples: {len(data_module.data_val)}")
+    print(f"Test samples: {len(data_module.data_test)}")
+
+    train_dataloader = data_module.train_dataloader()
+    train_dataset = train_dataloader.dataset
+
+    plot_dataset_mosaic(train_dataset, m=0, n=50, save_path="melanoma_train_mosaic.png", nrow=10)
+
+    # Export dataset example
+    # data_module.export_dataset(
+    #     output_dir="export/train_cropped",
+    #     splits=["train"],
+    #     crop_with_mask=True,
+    #     bbox_scale=1.5,
+    #     structure="flat",
+    #     mode="hyper",
+    #     allowed_labels=["melanoma"],
+    # )

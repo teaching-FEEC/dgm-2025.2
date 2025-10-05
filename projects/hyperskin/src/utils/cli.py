@@ -72,6 +72,11 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 if has_augmentation:
                     run_name += "aug_"
                     tags.append("augmented")
+                
+            # Synthetic data
+            if hasattr(data_args, "synthetic_data_dir") and data_args.synthetic_data_dir is not None:
+                run_name += "synth_"
+                tags.append("synthetic_data")
 
         # Handle model-related tags
         if hasattr(self.config.model, "init_args"):
