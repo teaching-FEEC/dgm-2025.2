@@ -1,0 +1,54 @@
+model:
+  class_path: src.modules.shs_gan_module.SHSGAN
+  init_args:
+    # --- Generator/Discriminator settings ---
+    in_channels: 1            # e.g. RGB input (3)
+    out_channels: 16          # number of HSI spectral bands
+    img_size: [256, 256]      # input resolution of RGB/noise
+    base_filters: 64          # base feature maps in generator U-Net
+    critic_fft_arm: True     # whether Critic uses the FFT branch
+
+    # --- Training hyperparameters ---
+    lr: 0.0002
+    betas: [0.5, 0.999]       # Momentum terms of Adam
+    lambda_gp: 10.0           # Coefficient for the gradient penalty term in WGAN-GP. Higher values enforce Lipschitz more strongly but can over-regularize.
+    n_critic: 5               # Number of critic (discriminator) updates for each generator update
+    # --- Logging ---
+    num_log_samples: 2        # Number of synthetic samples to generate and log at the end of each epoch
+    log_channels: [0, 1, 2]   # channels used for pseudo-RGB logging
+
+trainer:
+  log_every_n_steps: 10  # Logs metrics every x training steps.
+  max_epochs: 100
+
+  logger:
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, gan, shs-gan]
+      log_model: false
+
+  callbacks:
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-g_loss={val/g_loss:.4f}-d_loss={val/d_loss:.4f}
+        monitor: val_g_loss        
+        verbose: true
+        save_last: true
+        mode: min
+        auto_insert_metric_name: false
+
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val_g_loss        
+        min_delta: 0.01
+        patience: 15
+        verbose: true
+        mode: min
+        strict: true
+
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: epoch

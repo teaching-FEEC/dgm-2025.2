@@ -1,0 +1,59 @@
+data:
+  class_path: data_modules.HSIDermoscopyDataModule
+  init_args:
+    task: GENERATION
+    train_val_test_split: [0.7, 0.15, 0.15]
+    image_size: 256
+    batch_size: 4
+    num_workers: 8
+    pin_memory: True
+    allowed_labels: [melanoma]
+    #data_dir: data/hsi_dermoscopy
+    #google_drive_id: 1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx
+    data_dir: data/hsi_dermoscopy_cropped
+    google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
+    balanced_sampling: False
+    
+    transforms:
+      train:
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      val:
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      test:
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: Resize
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
