@@ -19,17 +19,15 @@ from PIL import Image
 if __name__ == "__main__":
     import pyrootutils
 
-    pyrootutils.setup_root(Path(__file__).parent.parent.parent, 
-                           project_root_env_var=True, 
-                           dotenv=True, 
-                           pythonpath=True, 
-                           cwd=False)
+    pyrootutils.setup_root(
+        Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
+    )
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
 from src.utils.mosaic import plot_dataset_mosaic
 
-class HSIDermoscopyDataModule(pl.LightningDataModule):
 
+class HSIDermoscopyDataModule(pl.LightningDataModule):
     def __init__(
         self,
         task: str | HSIDermoscopyTask,
@@ -101,7 +99,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
             os.makedirs(os.path.dirname(self.hparams.data_dir), exist_ok=True)
 
-            with zipfile.ZipFile(filename, 'r') as zip_ref:
+            with zipfile.ZipFile(filename, "r") as zip_ref:
                 zip_ref.extractall(Path(self.hparams.data_dir).parent)
                 if downloaded:
                     os.remove(filename)
@@ -115,9 +113,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             if isinstance(allowed_labels[0], str):
                 # Map strings to dataset integers
                 string_to_int = {
-                    name: idx for name, idx in HSIDermoscopyDataset(
-                        task=self.hparams.task,
-                        data_dir=self.hparams.data_dir
+                    name: idx
+                    for name, idx in HSIDermoscopyDataset(
+                        task=self.hparams.task, data_dir=self.hparams.data_dir
                     ).labels_map.items()
                 }
                 allowed_labels = [string_to_int[label] for label in allowed_labels]
@@ -139,9 +137,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
     def setup_splits(self):
         seed = 42
-        full_dataset = HSIDermoscopyDataset(
-            task=self.hparams.task, data_dir=self.hparams.data_dir
-        )
+        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
 
         indices = np.arange(len(full_dataset))
         labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
@@ -169,8 +165,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             train_size, val_size, test_size = self.hparams.train_val_test_split
             if train_size + val_size + test_size != len(full_dataset):
                 raise ValueError(
-                    "When using absolute numbers for train/val/test split, "
-                    "the sum must equal the dataset length."
+                    "When using absolute numbers for train/val/test split, the sum must equal the dataset length."
                 )
 
             train_idx, temp_idx, train_y, temp_y = train_test_split(
@@ -190,9 +185,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             )
 
         # Ratio-based splits
-        elif all(isinstance(x, float) for x in self.hparams.train_val_test_split) and \
-                abs(sum(self.hparams.train_val_test_split) - 1.0) < 1e-6:
-
+        elif (
+            all(isinstance(x, float) for x in self.hparams.train_val_test_split)
+            and abs(sum(self.hparams.train_val_test_split) - 1.0) < 1e-6
+        ):
             train_ratio, val_ratio, test_ratio = self.hparams.train_val_test_split
 
             train_idx, temp_idx, train_y, temp_y = train_test_split(
@@ -212,9 +208,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 stratify=temp_y,
             )
         else:
-            raise ValueError(
-                "train_val_test_split must be either all integers or floats summing to 1."
-            )
+            raise ValueError("train_val_test_split must be either all integers or floats summing to 1.")
 
         self.train_indices, self.val_indices, self.test_indices = (
             train_idx,
@@ -236,8 +230,11 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
     def setup(self, stage: str = None):
         if self.train_indices is None or self.val_indices is None or self.test_indices is None:
             split_dir = Path(self.hparams.data_dir).parent / "splits"
-            if (split_dir / "train.txt").exists() and (split_dir / "val.txt").exists() and \
-            (split_dir / "test.txt").exists():
+            if (
+                (split_dir / "train.txt").exists()
+                and (split_dir / "val.txt").exists()
+                and (split_dir / "test.txt").exists()
+            ):
                 self.train_indices = np.loadtxt(split_dir / "train.txt", dtype=int)
                 self.val_indices = np.loadtxt(split_dir / "val.txt", dtype=int)
                 self.test_indices = np.loadtxt(split_dir / "test.txt", dtype=int)
@@ -246,7 +243,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 self.setup_splits()
 
         # Use the indices from setup_splits to create the splits
-        if stage in ['fit', 'validate'] or stage is None and (self.data_train is None or self.data_val is None):
+        if stage in ["fit", "validate"] or stage is None and (self.data_train is None or self.data_val is None):
             self.data_train = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
@@ -261,28 +258,22 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
                 )
-                
+
                 # Use all samples from synthetic dataset
                 synthetic_indices = np.arange(len(synthetic_dataset))
-                
+
                 # Apply label filtering if specified
                 if self.hparams.allowed_labels is not None:
-                    synthetic_labels = synthetic_dataset.labels_df["label"].map(
-                        synthetic_dataset.labels_map
-                    ).to_numpy()
+                    synthetic_labels = synthetic_dataset.labels_df["label"].map(synthetic_dataset.labels_map).to_numpy()
                     synthetic_indices, _ = self._filter_and_remap_indices(
                         synthetic_indices, synthetic_labels, self.hparams.allowed_labels
                     )
-                
-                synthetic_subset = torch.utils.data.Subset(
-                    synthetic_dataset, synthetic_indices
-                )
-                
+
+                synthetic_subset = torch.utils.data.Subset(synthetic_dataset, synthetic_indices)
+
                 # Concatenate real and synthetic training data
-                self.data_train = torch.utils.data.ConcatDataset(
-                    [self.data_train, synthetic_subset]
-                )
-                
+                self.data_train = torch.utils.data.ConcatDataset([self.data_train, synthetic_subset])
+
                 print(f"Added {len(synthetic_subset)} synthetic samples to training set")
 
             self.data_val = HSIDermoscopyDataset(
@@ -293,7 +284,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
         # Assign test dataset
-        if stage == 'test' or stage is None and self.data_test is None:
+        if stage == "test" or stage is None and self.data_test is None:
             self.data_test = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
@@ -302,28 +293,28 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
     def train_dataloader(self):
-        if self.hparams.task in [
-            HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
-            HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
-        ] and self.hparams.balanced_sampling:
+        if (
+            self.hparams.task
+            in [
+                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
+                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
+            ]
+            and self.hparams.balanced_sampling
+        ):
             # Handle both Subset and ConcatDataset
             if isinstance(self.data_train, torch.utils.data.ConcatDataset):
                 # Extract labels from concatenated datasets
                 labels = []
                 for dataset in self.data_train.datasets:
                     if isinstance(dataset, torch.utils.data.Subset):
-                        labels.extend(
-                            [dataset.dataset.labels[i] for i in dataset.indices]
-                        )
+                        labels.extend([dataset.dataset.labels[i] for i in dataset.indices])
                     else:
                         labels.extend(dataset.labels)
                 labels = np.array(labels)
             else:
                 # Original Subset case
-                labels = np.array(
-                    [self.data_train.dataset.labels[i] for i in self.data_train.indices]
-                )
-            
+                labels = np.array([self.data_train.dataset.labels[i] for i in self.data_train.indices])
+
             sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
             return DataLoader(
                 self.data_train,
@@ -339,6 +330,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 pin_memory=self.hparams.pin_memory,
                 shuffle=True,
             )
+
     def val_dataloader(self):
         return DataLoader(
             self.data_val,
@@ -358,7 +350,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         )
 
     def all_dataloader(self):
-        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
+        full_dataset = HSIDermoscopyDataset(
+            task=self.hparams.task, data_dir=self.hparams.data_dir, transform=self.transforms_test
+        )
 
         # use _filter_and_remap_indices to filter the full dataset
         indices = np.arange(len(full_dataset))
@@ -430,9 +424,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             extension = f".{extension}"
 
         # Get full dataset for accessing samples
-        full_dataset = HSIDermoscopyDataset(
-            task=self.hparams.task, data_dir=self.hparams.data_dir
-        )
+        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
 
         # Convert allowed_labels to set of integers for filtering
         allowed_label_ints = None
@@ -465,9 +457,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             return full_dataset.labels[idx] in allowed_label_ints
 
         # Helper function to process and export a single image
-        def export_image(
-            idx: int, split_name: str, counter: dict[str, int]
-        ) -> tuple[Optional[Path], Optional[Path]]:
+        def export_image(idx: int, split_name: str, counter: dict[str, int]) -> tuple[Optional[Path], Optional[Path]]:
             # Check if this label should be exported
             if not should_export(idx):
                 return None, None
@@ -541,14 +531,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
             # Filter indices by allowed labels if specified
             if allowed_label_ints is not None:
-                filtered_indices = [
-                    idx for idx in indices if should_export(idx)
-                ]
+                filtered_indices = [idx for idx in indices if should_export(idx)]
                 if len(filtered_indices) == 0:
-                    print(
-                        f"Warning: No samples in '{split_name}' split match "
-                        f"allowed_labels={allowed_labels}"
-                    )
+                    print(f"Warning: No samples in '{split_name}' split match allowed_labels={allowed_labels}")
                     continue
             else:
                 filtered_indices = indices
@@ -562,16 +547,12 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                     orig_path = full_dataset.labels_df.iloc[idx]["file_path"]
                     path_mapping[str(img_path)] = str(orig_path)
                     if mask_path:
-                        path_mapping[str(mask_path)] = str(
-                            full_dataset.labels_df.iloc[idx]["mask"]
-                        )
+                        path_mapping[str(mask_path)] = str(full_dataset.labels_df.iloc[idx]["mask"])
                     total_exported += 1
 
         # Save path mapping
         mapping_file = output_root / "path_mapping.csv"
-        pd.DataFrame.from_dict(
-            path_mapping, orient="index", columns=["original_path"]
-        ).to_csv(mapping_file)
+        pd.DataFrame.from_dict(path_mapping, orient="index", columns=["original_path"]).to_csv(mapping_file)
 
         print(f"\nExported {total_exported} samples to {output_root}")
         print(f"Structure: {structure}, Mode: {mode}, Cropped: {crop_with_mask}")
@@ -579,9 +560,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             print(f"Filtered to labels: {allowed_labels}")
         print(f"Saved path mapping to {mapping_file}")
 
-    def _convert_to_rgb(
-        self, cube: np.ndarray, bands: Optional[list[int]]
-    ) -> np.ndarray:
+    def _convert_to_rgb(self, cube: np.ndarray, bands: Optional[list[int]]) -> np.ndarray:
         """Convert hyperspectral cube to RGB image."""
         if bands is None:
             # No bands specified: mean across all bands
@@ -606,9 +585,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         else:
             return np.zeros_like(rgb, dtype="uint8")
 
-    def _crop_with_bbox(
-        self, img: np.ndarray, mask: np.ndarray, bbox_scale: float
-    ) -> Optional[np.ndarray]:
+    def _crop_with_bbox(self, img: np.ndarray, mask: np.ndarray, bbox_scale: float) -> Optional[np.ndarray]:
         """Crop image using mask bounding box with scaling."""
         ys, xs = np.where(mask > 0)
         if len(ys) == 0 or len(xs) == 0:
@@ -651,11 +628,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             # Maintain original folder structure
             img_path = output_root / split_name / label_name / filename
             img_path.parent.mkdir(parents=True, exist_ok=True)
-            mask_path = (
-                output_root / split_name / label_name / filename.replace(
-                    extension, "_mask.png"
-                )
-            )
+            mask_path = output_root / split_name / label_name / filename.replace(extension, "_mask.png")
 
         elif structure == "imagenet":
             # ImageNet structure: split/class/images
@@ -690,13 +663,13 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
 
         return img_path, mask_path
 
+
 if __name__ == "__main__":
     import pyrootutils
-    pyrootutils.setup_root(Path(__file__).parent.parent.parent, 
-                           project_root_env_var=True, 
-                           dotenv=True, 
-                           pythonpath=True, 
-                           cwd=False)
+
+    pyrootutils.setup_root(
+        Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
+    )
 
     # Example usage
     image_size = 224
@@ -726,7 +699,7 @@ if __name__ == "__main__":
             ],
         },
         google_drive_id="18fRaTH4FReHretz3OBJr3-takvxtDy1E",
-        synthetic_data_dir="data/hsi_dermoscopy_cropped_synth"
+        synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
     )
     data_module.prepare_data()
     data_module.setup()
