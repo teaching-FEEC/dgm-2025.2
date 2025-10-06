@@ -240,6 +240,22 @@ class image(base):
             )
         else:
             self.cri_gan = None
+            
+        # canny edge loss
+        if train_opt.get("cannyedge_opt"):
+            self.cri_canny = build_loss(train_opt["cannyedge_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_canny = None
+        
+        # patch variance loss
+        if train_opt.get("patchvariance_opt"):
+            self.cri_patchvariance = build_loss(train_opt["patchvariance_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_patchvariance = None
 
         # ldl loss
         if train_opt.get("ldl_opt"):
@@ -574,6 +590,16 @@ class image(base):
                 l_g_percep = self.cri_perceptual(self.output, self.gt)
                 l_g_total += l_g_percep
                 loss_dict["l_g_percep"] = l_g_percep
+            # canny edge loss
+            if self.cri_canny:
+                l_g_canny = self.cri_canny(self.output, self.gt)
+                l_g_total += l_g_canny
+                loss_dict["l_g_canny"] = l_g_canny
+            # patch variance loss
+            if self.cri_patchvariance:
+                l_g_patchvariance = self.cri_patchvariance(self.output, self.gt)
+                l_g_total += l_g_patchvariance
+                loss_dict["l_g_patchvariance"] = l_g_patchvariance
             # dists loss
             if self.cri_dists:
                 l_g_dists = self.cri_dists(self.output, self.gt)

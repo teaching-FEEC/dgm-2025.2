@@ -5,4 +5,4 @@
 *.webp
 *.pth
 */tb_logger/**
-.onnx
+*.onnx

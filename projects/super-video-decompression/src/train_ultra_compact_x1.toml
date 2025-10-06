@@ -1,5 +1,5 @@
 
-name = "test2_all_super_ultra_compact_base"
+name = "train_ultra_compact_1x"
 model_type = "image"
 scale = 1
 use_amp = true
@@ -13,7 +13,7 @@ type = "paired"
 dataroot_gt = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\train\all_12'
 dataroot_lq = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\train\all_34'
 patch_size = 64
-batch_size = 16
+batch_size = 32
 #accumulate = 1
 augmentation = [ "none" ] #, "mixup", "cutmix", "resizemix", "cutblur" 
 aug_prob = [ 0.5 ] #, 0.1, 0.1, 0.1, 0.5
@@ -37,15 +37,15 @@ type = "calculate_dists"
 #type = "calculate_topiq"
 
 [path]
-pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\1x-SuperUltraCompact-Pretrain.pth'
+pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\1x_UltraCompact_Pretrain_nc8.pth'
 #pretrain_network_d = 'experiments\pretrain_d.pth'
 
 [network_g]
 type = "compact"
-num_feat = 24 #super ultra compact
-num_conv = 8  #super ultra compact
-#num_conv = 8  # ultra compact
-#num_feat = 64 # ultra compact
+#num_feat = 24 #super ultra compact
+#num_conv = 8  #super ultra compact
+num_conv = 8  # ultra compact
+num_feat = 64 # ultra compact
 
 [network_d]
 type = "metagan"
@@ -100,13 +100,13 @@ type = "gan_loss"
 gan_type = "bce"
 loss_weight = 0.3
 
-#[train.dists_opt]
-#type = "dists_loss"
-#loss_weight = 0.3
+[train.dists_opt]
+type = "dists_loss"
+loss_weight = 0.3
 
-#[train.cannyedge_opt]
-#type = "canny_edge_loss"
-#loss_weight = 1.0
+[train.cannyedge_opt]
+type = "canny_edge_loss"
+loss_weight = 1.0
 
 #[train.msswd_opt]
 #type = "msswd_loss"
@@ -119,8 +119,6 @@ loss_weight = 0.3
 ##patchloss = true
 ##ipk = true
 ##patch_weight = 1.0
-
-
 
 #[train.ff_opt]
 #type = "ff_loss"

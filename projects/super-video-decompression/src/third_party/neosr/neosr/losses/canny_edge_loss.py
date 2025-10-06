@@ -3,6 +3,8 @@ from CannyEdgeDetectorModel import DifferentiableCanny
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from neosr.utils.registry import LOSS_REGISTRY
+
 
 class CharbonnierLoss(nn.Module):
     """Charbonnier Loss (a smooth L1 variant)."""
@@ -62,9 +64,11 @@ def masked_loss(pred, target, mask, base_loss=torch.nn.MSELoss(reduction='mean')
     # Apply base loss only on selected pixels
     return base_loss(pred_masked, target_masked)
 
-class CannyEdgeLoss(nn.Module):
-    def __init__(self, kernel_size=5, sigma=1.0, low_threshold=0.09, high_threshold=0.26, mask_threshold=0.5, loss_type="charbonnier", alpha=0.25, sharpness=2):
+@LOSS_REGISTRY.register()
+class canny_edge_loss(nn.Module):
+    def __init__(self, kernel_size=5, sigma=1.0, low_threshold=0.09, high_threshold=0.26, mask_threshold=0.5, loss_type="charbonnier", alpha=0.25, sharpness=2, loss_weight: float = 1.0):
         super().__init__()
+        self.loss_weight = loss_weight
         self.alpha = alpha
         self.sharpness = sharpness
         self.canny = DifferentiableCanny(kernel_size, sigma, low_threshold, high_threshold)
@@ -95,98 +99,10 @@ class CannyEdgeLoss(nn.Module):
         # Difference
         #loss = self.criterion(edges_pred, edges_gt)
         diceLoss = dice_Loss(edges_pred, edges_gt) #masked_loss(edges_pred, edges_gt, mask, dice_Loss ) 
-        imgLoss = self.criterion(pred, target) #masked_loss(pred, target, mask,self.criterion)
+        #imgLoss = self.criterion(pred, target) #masked_loss(pred, target, mask,self.criterion)
         
         maskedImageLoss = masked_loss(pred, target, mask,self.criterion)
-        
-        print("Dice Loss:",diceLoss)
-        print("Masked Dice Loss:",masked_loss(edges_pred, edges_gt, mask, dice_Loss ) )
-        print("Image Loss:",imgLoss)
-        print("Masked Image Loss:",masked_loss(pred, target, mask,self.criterion))
-        
-        loss = maskedImageLoss + diceLoss
+        loss = (1 - self.alpha) * maskedImageLoss + self.alpha * diceLoss
+        #loss = maskedImageLoss + diceLoss
 
-        return loss, mask, diceLoss, imgLoss
-    
-    
-import torch
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-
-# Assume DifferentiableCanny and CannyEdgeLoss are already defined above
-from PIL import Image
-import torchvision.transforms as T
-
-def load_image(path, size):
-    # Open image, resize, convert to tensor in [0,1]
-    img = Image.open(path).convert("RGB")
-    transform = T.Compose([
-        T.Resize(size),
-        T.ToTensor(),  # Converts to [C,H,W] float32 in [0,1]
-    ])
-    return transform(img).unsqueeze(0) 
-
-def test_canny_loss():
-    # Create two toy RGB images [B,3,H,W]
-    '''
-    B, C, H, W = 1, 3, 64, 64
-    img1 = torch.zeros((B, C, H, W))
-    img2 = torch.zeros((B, C, H, W))
-
-    # Draw a white square in img1
-    img1[:, :, 16:48, 16:48] = 1.0
-    # Draw a slightly shifted square in img2
-    img2[:, :, 20:52, 20:52] = 1.0
-    '''   
-    img1 = load_image('./frame_00256l.webp', size=(202,480))
-    img2 = load_image('./frame_00256h.webp', size=(202,480))
-    img1 #= img2
-    
-    #plt.imshow(img1.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
-    #plt.show()
-    #plt.imshow(img2.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
-    #plt.show()
-    canny = DifferentiableCanny(5, 1, 0.09, 0.26)
-    pred = canny(img1)
-    #plt.imshow(pred.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
-    #plt.show()
-    pred = canny(img2)
-    #plt.imshow(pred.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
-    #plt.show()
-    
-    # Instantiate loss
-    loss_fn = CannyEdgeLoss(loss_type="charbonnier")
-
-    # Forward pass
-    loss, mask, diceLoss, imgLoss = loss_fn(img1, img2)
-    print("Final Edge Loss:",loss)
-
-    # Recompute edges + mask just for visualization
-    edges_pred = loss_fn.canny(img1)
-    edges_gt   = loss_fn.canny(img2)
-    #mask = ((edges_pred > 0.5) | (edges_gt > 0.5)).float()
-    #print("ImgLoss value:", imgLoss.item())
-    #print("EdgeLoss value:", diceLoss.item())
-    #print("Loss value:", loss.item())
-    #print("Mask shape:", mask.shape)
-
-    # Convert mask to numpy for plotting (take first batch, first channel)
-    mask_np = mask[0,0].detach().cpu().numpy()
-
-    #plt.imshow(mask_np, cmap="gray")
-    #plt.title("Canny OR Mask")
-    #plt.axis("off")
-    #plt.show()
-    
-    
-test_canny_loss()
-
-'''
-criterion = FractionBoostedCharbonnierLoss(eps=1e-3, boost_factor=3.0)
-
-pred   = torch.tensor([1])  # predictions
-target = torch.zeros_like(pred)                   # ground truth
-
-loss = criterion(pred, target)
-print("Loss:", loss.item())
-'''
+        return loss * self.loss_weight
