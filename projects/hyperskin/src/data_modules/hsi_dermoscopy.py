@@ -22,6 +22,8 @@ if __name__ == "__main__":
     pyrootutils.setup_root(
         Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
     )
+
+from src.utils.transform import smallest_maxsize_and_centercrop
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
 from src.utils.mosaic import plot_dataset_mosaic
@@ -383,6 +385,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         bbox_scale: float = 1.5,
         structure: str = "original",
         allowed_labels: Optional[list[int | str]] = None,
+        image_size: Optional[int] = None
     ) -> None:
         """
         Export dataset with flexible options.
@@ -404,6 +407,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 - "images_only": Flat with only images, no masks
             allowed_labels: List of labels to export (can be int or str).
                             If None, exports all labels.
+            image_size: If specified, resize images to this size using smallest max size and center crop.
         """
         from scipy.io import loadmat, savemat
 
@@ -457,7 +461,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             return full_dataset.labels[idx] in allowed_label_ints
 
         # Helper function to process and export a single image
-        def export_image(idx: int, split_name: str, counter: dict[str, int]) -> tuple[Optional[Path], Optional[Path]]:
+        def export_image(idx: int, split_name: str, counter: dict[str, int],
+                         image_size: int) -> tuple[Optional[Path], Optional[Path]]:
             # Check if this label should be exported
             if not should_export(idx):
                 return None, None
@@ -491,6 +496,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 counter,
                 extension,
             )
+
+            if image_size is not None:
+                rgb_data = smallest_maxsize_and_centercrop(cube, image_size)
 
             # Save image
             if mode == "rgb":
@@ -542,7 +550,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 filtered_indices,
                 desc=f"Exporting {split_name} split ({mode} mode)",
             ):
-                img_path, mask_path = export_image(idx, split_name, counter)
+                img_path, mask_path = export_image(idx, split_name, counter, image_size)
                 if img_path:
                     orig_path = full_dataset.labels_df.iloc[idx]["file_path"]
                     path_mapping[str(img_path)] = str(orig_path)
@@ -672,7 +680,7 @@ if __name__ == "__main__":
     )
 
     # Example usage
-    image_size = 224
+    image_size = 256
     data_module = HSIDermoscopyDataModule(
         task="CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI",
         train_val_test_split=(0.7, 0.15, 0.15),
@@ -698,8 +706,8 @@ if __name__ == "__main__":
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
         },
-        google_drive_id="18fRaTH4FReHretz3OBJr3-takvxtDy1E",
-        synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
+        google_drive_id="1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx",
+        # synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
     )
     data_module.prepare_data()
     data_module.setup()
@@ -708,18 +716,19 @@ if __name__ == "__main__":
     print(f"Val samples: {len(data_module.data_val)}")
     print(f"Test samples: {len(data_module.data_test)}")
 
-    train_dataloader = data_module.train_dataloader()
-    train_dataset = train_dataloader.dataset
+    # train_dataloader = data_module.train_dataloader()
+    # train_dataset = train_dataloader.dataset
 
-    plot_dataset_mosaic(train_dataset, m=0, n=50, save_path="melanoma_train_mosaic.png", nrow=10)
+    # plot_dataset_mosaic(train_dataset, m=0, n=50, save_path="melanoma_train_mosaic.png", nrow=10)
 
     # Export dataset example
-    # data_module.export_dataset(
-    #     output_dir="export/train_cropped",
-    #     splits=["train"],
-    #     crop_with_mask=True,
-    #     bbox_scale=1.5,
-    #     structure="flat",
-    #     mode="hyper",
-    #     allowed_labels=["melanoma"],
-    # )
+    data_module.export_dataset(
+        output_dir="export/melanoma_dysplastic_nevi_train_cropped",
+        splits=["train"],
+        crop_with_mask=True,
+        bbox_scale=1.5,
+        structure="imagenet",
+        mode="hyper",
+        image_size=image_size,
+        # allowed_labels=["melanoma"],
+    )
