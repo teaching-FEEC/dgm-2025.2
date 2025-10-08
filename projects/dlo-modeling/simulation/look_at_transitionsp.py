@@ -1,10 +1,9 @@
 import numpy as np
-d = np.load("rope_minimal.npz", allow_pickle=True)
-S = d["samples"]  # (N, L, 4)
-print(S.shape)
+d = np.load("rope_states_actions.npz", allow_pickle=True)
+S = d["states"]    # (N, L, 3)
+A = d["actions"]   # (N, 4)  [dx,dy,dz, link_id_as_float]
+li = d["link_index"]
 
-# Example: first transition
-xyz = S[0, :, :3]      # (L,3)
-acted_link = int(S[0, 0, 3])   # same for all links in transition 0
-print("acted_link:", acted_link)
-print(xyz)
+print(S.shape, A.shape)
+print("First action offset:", A[0, :3], "link:", int(A[0, 3]))
+print(S)
