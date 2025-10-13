@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+from scipy.io import savemat
 
 import gdown
 import zipfile
@@ -44,6 +45,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         google_drive_id: Optional[str] = None,
         balanced_sampling: bool = False,
         synthetic_data_dir: Optional[str] = None,
+        global_max: float = 2.0600955486297607,
+        global_min: float = -0.19400253891944885,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -70,6 +73,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         self.train_indices: np.ndarray = None
         self.val_indices: np.ndarray = None
         self.test_indices: np.ndarray = None
+
+        self.global_max = global_max
+        self.global_min = global_min
 
     def get_transforms(self, transforms: dict, stage: str) -> list[A.BasicTransform]:
         transforms_list = []
@@ -374,6 +380,64 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         # Called on every process after trainer is done
         pass
 
+
+    def _export_single_crop(
+        self,
+        cube: np.ndarray,
+        mask: np.ndarray,
+        output_root: Path,
+        structure: str,
+        split_name: str,
+        label_name: str,
+        counter: dict,
+        extension: str,
+        mode: str,
+        bands: Optional[list[int]],
+        bbox_scale: float,
+        image_size: Optional[int],
+        global_normalization: bool
+    ) -> tuple[Optional[Path], Optional[Path]]:
+        """Export a single cropped image based on one mask."""
+        # Convert to export mode
+        if mode == "rgb":
+            rgb_data = self._convert_to_rgb(cube, bands)
+        else:  # hyper
+            rgb_data = cube if bands is None else cube[:, :, bands]
+
+        # Crop
+        cropped_data = self._crop_with_bbox(rgb_data, mask, bbox_scale)
+        if cropped_data is None:
+            return None, None
+
+        counter["count"] += 1
+
+        # Determine output paths
+        img_path, mask_path = self._get_export_paths(
+            output_root,
+            structure,
+            split_name,
+            label_name,
+            counter["count"],
+            counter,
+            extension,
+        )
+
+        if image_size is not None:
+            cropped_data = smallest_maxsize_and_centercrop(cropped_data, image_size)
+
+        # Save image
+        if mode == "rgb":
+            cropped_data = cropped_data.astype("uint8")
+            Image.fromarray(cropped_data).save(img_path)
+        else:
+            if global_normalization:
+                cropped_data = (cropped_data - self.global_min) / (self.global_max - self.global_min)
+                cropped_data = np.clip(cropped_data, 0, 1) * 255
+                cropped_data = cropped_data.astype("uint8")
+            savemat(img_path, {"cube": cropped_data})
+
+        return img_path, mask_path
+
     def export_dataset(
         self,
         output_dir: str,
@@ -385,7 +449,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         bbox_scale: float = 1.5,
         structure: str = "original",
         allowed_labels: Optional[list[int | str]] = None,
-        image_size: Optional[int] = None
+        image_size: Optional[int] = None,
+        global_normalization: bool = False,
     ) -> None:
         """
         Export dataset with flexible options.
@@ -399,15 +464,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             bands: Band indices to export/use for RGB
             crop_with_mask: Whether to crop images using mask bounding boxes
             bbox_scale: Scale factor for bounding box (default 1.5 = 50% padding)
-            structure: Directory structure:
-                - "original": Maintains original folder structure
-                - "flat": No subdirectories, filename includes label
-                - "imagenet": train/val/test dirs with class subdirs
-                - "flat_with_masks": Flat with separate images/ and masks/ folders
-                - "images_only": Flat with only images, no masks
-            allowed_labels: List of labels to export (can be int or str).
-                            If None, exports all labels.
-            image_size: If specified, resize images to this size using smallest max size and center crop.
+            structure: Directory structure
+            allowed_labels: List of labels to export (can be int or str)
+            image_size: If specified, resize images to this size
+            global_normalization: If True, use global min-max normalization for both RGB and hyperspectral data
         """
         from scipy.io import loadmat, savemat
 
@@ -427,10 +487,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         elif not extension.startswith("."):
             extension = f".{extension}"
 
-        # Get full dataset for accessing samples
+        # Get full dataset
         full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
 
-        # Convert allowed_labels to set of integers for filtering
+        # Convert allowed_labels to set of integers
         allowed_label_ints = None
         if allowed_labels is not None:
             allowed_label_ints = set()
@@ -440,13 +500,11 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                         allowed_label_ints.add(full_dataset.labels_map[label])
                     else:
                         raise ValueError(
-                            f"Label '{label}' not found in dataset. "
-                            f"Available labels: {list(full_dataset.labels_map.keys())}"
+                            f"Label '{label}' not found in dataset. Available: {list(full_dataset.labels_map.keys())}"
                         )
                 else:
                     allowed_label_ints.add(label)
 
-        # Helper function to get label name
         def get_label_name(idx: int) -> str:
             label_int = full_dataset.labels[idx]
             for name, val in full_dataset.labels_map.items():
@@ -454,71 +512,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                     return name
             return "unknown"
 
-        # Helper function to check if index should be exported
         def should_export(idx: int) -> bool:
             if allowed_label_ints is None:
                 return True
             return full_dataset.labels[idx] in allowed_label_ints
-
-        # Helper function to process and export a single image
-        def export_image(idx: int, split_name: str, counter: dict[str, int],
-                         image_size: int) -> tuple[Optional[Path], Optional[Path]]:
-            # Check if this label should be exported
-            if not should_export(idx):
-                return None, None
-
-            row = full_dataset.labels_df.iloc[idx]
-            label_name = get_label_name(idx)
-
-            # Load hyperspectral cube
-            cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
-
-            # Convert to export mode
-            if mode == "rgb":
-                rgb_data = self._convert_to_rgb(cube, bands)
-            else:  # hyper
-                rgb_data = cube if bands is None else cube[:, :, bands]
-
-            # Crop if requested
-            if crop_with_mask and row.get("mask") and Path(row["mask"]).exists():
-                mask = np.array(Image.open(row["mask"]).convert("L"))
-                rgb_data = self._crop_with_bbox(rgb_data, mask, bbox_scale)
-                if rgb_data is None:
-                    return None, None
-
-            # Determine output paths based on structure
-            img_path, mask_path = self._get_export_paths(
-                output_root,
-                structure,
-                split_name,
-                label_name,
-                idx,
-                counter,
-                extension,
-            )
-
-            if image_size is not None:
-                rgb_data = smallest_maxsize_and_centercrop(cube, image_size)
-
-            # Save image
-            if mode == "rgb":
-                Image.fromarray(rgb_data).save(img_path)
-            else:
-                savemat(img_path, {"cube": rgb_data})
-
-            # Save mask if applicable
-            if (
-                not crop_with_mask
-                and structure not in ["images_only"]
-                and row.get("mask")
-                and Path(row["mask"]).exists()
-            ):
-                mask_img = Image.open(row["mask"])
-                mask_img.save(mask_path)
-            else:
-                mask_path = None
-
-            return img_path, mask_path
 
         # Export each split
         path_mapping = {}
@@ -537,11 +534,11 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             indices = split_indices_map[split_name]
             counter = {"count": 0}
 
-            # Filter indices by allowed labels if specified
+            # Filter indices by allowed labels
             if allowed_label_ints is not None:
                 filtered_indices = [idx for idx in indices if should_export(idx)]
                 if len(filtered_indices) == 0:
-                    print(f"Warning: No samples in '{split_name}' split match allowed_labels={allowed_labels}")
+                    print(f"Warning: No samples in '{split_name}' match allowed_labels={allowed_labels}")
                     continue
             else:
                 filtered_indices = indices
@@ -550,12 +547,89 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 filtered_indices,
                 desc=f"Exporting {split_name} split ({mode} mode)",
             ):
-                img_path, mask_path = export_image(idx, split_name, counter, image_size)
-                if img_path:
-                    orig_path = full_dataset.labels_df.iloc[idx]["file_path"]
-                    path_mapping[str(img_path)] = str(orig_path)
-                    if mask_path:
-                        path_mapping[str(mask_path)] = str(full_dataset.labels_df.iloc[idx]["mask"])
+                if not should_export(idx):
+                    continue
+
+                row = full_dataset.labels_df.iloc[idx]
+                label_name = get_label_name(idx)
+
+                # Load hyperspectral cube
+                cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
+
+                # Get masks for this image
+                mask_paths = full_dataset.get_masks_list(idx)
+
+                if crop_with_mask and mask_paths:
+                    # Export one cropped image per mask
+                    for mask_idx, mask_path in enumerate(mask_paths):
+                        mask = np.array(Image.open(mask_path).convert("L"))
+
+                        img_path, _ = self._export_single_crop(
+                            cube,
+                            mask,
+                            output_root,
+                            structure,
+                            split_name,
+                            label_name,
+                            counter,
+                            extension,
+                            mode,
+                            bands,
+                            bbox_scale,
+                            image_size,
+                            global_normalization
+                        )
+
+                        if img_path:
+                            path_mapping[str(img_path)] = str(row["file_path"])
+                            total_exported += 1
+                else:
+                    # Export without cropping (original behavior)
+                    counter["count"] += 1
+
+                    # Convert to export mode
+                    if mode == "rgb":
+                        rgb_data = self._convert_to_rgb(cube, bands)
+                    else:
+                        rgb_data = cube if bands is None else cube[:, :, bands]
+
+                    if image_size is not None:
+                        rgb_data = smallest_maxsize_and_centercrop(rgb_data, image_size)
+
+                    # Determine output paths
+                    img_path, mask_path = self._get_export_paths(
+                        output_root,
+                        structure,
+                        split_name,
+                        label_name,
+                        idx,
+                        counter,
+                        extension,
+                    )
+
+                    # Save image
+                    if mode == "rgb":
+                        Image.fromarray(rgb_data).save(img_path)
+                    else:
+                        if global_normalization:
+                            rgb_data = (rgb_data - self.global_min) / (self.global_max - self.global_min)
+                            rgb_data = np.clip(rgb_data, 0, 1) * 255
+                            rgb_data = rgb_data.astype("uint8")
+                        savemat(img_path, {"cube": rgb_data})
+
+                    path_mapping[str(img_path)] = str(row["file_path"])
+
+                    # Save mask if applicable
+                    if structure not in ["images_only"] and mask_paths and mask_path is not None:
+                        # For non-cropped export, combine all masks
+                        masks = [np.array(Image.open(mp).convert("L")) for mp in mask_paths]
+                        combined_mask = masks[0].copy()
+                        for mask in masks[1:]:
+                            combined_mask = np.maximum(combined_mask, mask)
+
+                        Image.fromarray(combined_mask).save(mask_path)
+                        path_mapping[str(mask_path)] = ";".join(mask_paths)
+
                     total_exported += 1
 
         # Save path mapping
@@ -586,12 +660,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             band_data = np.mean(cube[:, :, bands], axis=2, keepdims=True)
             rgb = np.repeat(band_data, 3, axis=2)
 
-        # Normalize to 0-255
-        rgb_min, rgb_max = rgb.min(), rgb.max()
-        if rgb_max > rgb_min:
-            return ((rgb - rgb_min) / (rgb_max - rgb_min) * 255).astype("uint8")
-        else:
-            return np.zeros_like(rgb, dtype="uint8")
+        # Normalize to 0-255 using global min-max normalization
+        rgb = (rgb - self.global_min) / (self.global_max - self.global_min) * 255
+        rgb = np.clip(rgb, 0, 255).astype("uint8")
+        return rgb
 
     def _crop_with_bbox(self, img: np.ndarray, mask: np.ndarray, bbox_scale: float) -> Optional[np.ndarray]:
         """Crop image using mask bounding box with scaling."""
@@ -723,11 +795,11 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/melanoma_train_val_cropped",
-        splits=["train", "val"],
+        output_dir="export/melanoma_train_croppedv2_256",
+        splits=["train"],
         crop_with_mask=True,
         bbox_scale=1.5,
-        structure="imagenet",
+        structure="flat",
         mode="hyper",
         image_size=image_size,
         allowed_labels=["melanoma"],

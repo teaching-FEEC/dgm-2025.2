@@ -2,6 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python Debugger: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Debug  Training (Fit)",
       "type": "debugpy",
       "request": "launch",
@@ -19,7 +26,7 @@
       ],
       "console": "integratedTerminal",
       "env": {
-        "DEBUG": "0"  // run normally (no remote wait)
+        "DEBUG": "0" // run normally (no remote wait)
       }
     },
     {
@@ -41,10 +48,10 @@
       ],
       "console": "integratedTerminal",
       "env": {
-        "DEBUG": "0"  // run normally (no remote wait)
+        "DEBUG": "0" // run normally (no remote wait)
       }
     },
-        {
+    {
       "name": "Debug Fast Validation",
       "type": "debugpy",
       "request": "launch",
@@ -61,7 +68,7 @@
       "justMyCode": false,
       "console": "integratedTerminal",
       "env": {
-        "DEBUG": "0"  // run normally (no remote wait)
+        "DEBUG": "0" // run normally (no remote wait)
       }
     },
     {
