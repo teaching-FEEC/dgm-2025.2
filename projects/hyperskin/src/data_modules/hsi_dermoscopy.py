@@ -723,12 +723,12 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/melanoma_dysplastic_nevi_train_cropped",
-        splits=["train"],
+        output_dir="export/melanoma_train_val_cropped",
+        splits=["train", "val"],
         crop_with_mask=True,
         bbox_scale=1.5,
         structure="imagenet",
         mode="hyper",
         image_size=image_size,
-        # allowed_labels=["melanoma"],
+        allowed_labels=["melanoma"],
     )
