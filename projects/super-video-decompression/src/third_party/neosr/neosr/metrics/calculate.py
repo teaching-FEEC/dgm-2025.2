@@ -61,7 +61,7 @@ def calculate_psnr(
 
     mse = np.mean((img - img2) ** 2)
     if mse <= 0:
-        return float("inf")
+        return 50.0 # fix psnr for all black images
     return 10.0 * np.log10(255.0 * 255.0 / mse)
 
 
@@ -160,8 +160,9 @@ def calculate_ssim(
     ssims = []
     ssims.extend([_ssim(img[..., i], img2[..., i]) for i in range(img.shape[2])])
     ssim_result = np.array(ssims).mean()
+    
     if ssim_result <= 0:
-        return float("inf")
+        return 0 #fix for all black
     return ssim_result
 
 

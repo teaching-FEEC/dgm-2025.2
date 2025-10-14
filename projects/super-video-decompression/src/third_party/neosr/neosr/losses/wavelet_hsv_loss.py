@@ -383,57 +383,6 @@ class SWTForward(nn.Module):
 
         return coeffs
 
-'''
-WAVELET GUIDED LUMA VERSION, comes from Broadcast tv history and video compression
-'''
-@torch.no_grad()
-def wavelet_guided(output: Tensor, gt: Tensor) -> tuple[Tensor, Tensor]:
-    # wavelet = pywt.Wavelet("sym7")  # type: ignore[reportAttributeAccessIssue]
-    wavelet = pywt.Wavelet("sym19")  # type: ignore[reportAttributeAccessIssue]
-    dlo = wavelet.dec_lo
-    an_lo = np.divide(dlo, sum(dlo))
-    an_hi = wavelet.dec_hi
-    rlo = wavelet.rec_lo
-    syn_lo = 2 * np.divide(rlo, sum(rlo))
-    syn_hi = wavelet.rec_hi
-
-    filters = pywt.Wavelet("wavelet_normalized", [an_lo, an_hi, syn_lo, syn_hi])  # type: ignore[reportAttributeAccessIssue]
-    sfm = SWTForward(1, filters, "periodic").to(
-        gt.device, dtype=gt.dtype, non_blocking=True
-    )
-
-    # wavelet bands of sr image
-    sr_img_y = 16.0 + (
-        output[:, 0:1, :, :] * 65.481
-        + output[:, 1:2, :, :] * 128.553
-        + output[:, 2:, :, :] * 24.966
-    )
-    wavelet_sr: Tensor = sfm(sr_img_y)[0]
-
-    # LL: Tensor = wavelet_sr[:, 0:1, :, :] * 0.02
-    LH: Tensor = wavelet_sr[:, 1:2, :, :] * 0.035
-    HL: Tensor = wavelet_sr[:, 2:3, :, :] * 0.025
-    HH: Tensor = wavelet_sr[:, 3:, :, :] * 0.02
-
-    combined_HF = torch.cat((LH, HL, HH), dim=1)
-
-    # wavelet bands of hr image
-    hr_img_y = 16.0 + (
-        gt[:, 0:1, :, :] * 65.481
-        + gt[:, 1:2, :, :] * 128.553
-        + gt[:, 2:, :, :] * 24.966
-    )
-    wavelet_hr: Tensor = sfm(hr_img_y)[0]
-
-    # LL_gt: Tensor = wavelet_hr[:, 0:1, :, :] * 0.02
-    LH_gt: Tensor = wavelet_hr[:, 1:2, :, :] * 0.035
-    HL_gt: Tensor = wavelet_hr[:, 2:3, :, :] * 0.025
-    HH_gt: Tensor = wavelet_hr[:, 3:, :, :] * 0.02
-
-    combined_HF_gt = torch.cat((LH_gt, HL_gt, HH_gt), dim=1)
-
-    return combined_HF, combined_HF_gt
-
 
 def rgb_to_hsv_torch(img):
     # expects [B,3,H,W], RGB in [0,1]
@@ -469,8 +418,8 @@ def wavelet_guided_hsv(output: Tensor, gt: Tensor) -> tuple[Tensor, Tensor]:
 
     # ----- Convert RGB -> HSV ----- 
     # output, gt assumed in [0,1] range
-    output_hsv = torch.stack(torch.unbind(rgb_to_hsv_torch(output), dim=1))
-    gt_hsv = torch.stack(torch.unbind(rgb_to_hsv_torch(gt), dim=1))
+    output_hsv = torch.stack(torch.unbind(output, dim=1))
+    gt_hsv = torch.stack(torch.unbind(gt, dim=1))
 
     # Extract S and V channels
     output_S = output_hsv[:, 1:2, :, :]
@@ -512,40 +461,73 @@ def wavelet_guided_hsv(output: Tensor, gt: Tensor) -> tuple[Tensor, Tensor]:
     return HF_S, HF_S_gt, HF_V, HF_V_gt
 
 
-def charbonnier_loss(x: Tensor, y: Tensor, eps: float = 1e-6) -> Tensor:
-    """Charbonnier loss: differentiable L1 variant"""
-    diff = x - y
-    loss = torch.sqrt(diff * diff + eps * eps)
-    return loss.mean()
 
 
 
-def wavelet_loss_hsv(output: Tensor, gt: Tensor) -> Tensor:
-    """
-    Computes combined wavelet-charbonnier loss:
-    - Hue: Charbonnier in HSV color space (pixel domain)
-    - Saturation & Value: Charbonnier in wavelet high-frequency domain
-    """
-    # Convert RGB -> HSV (assumes [0,1])
-    hsv_out = rgb_to_hsv_torch(output)  # [B,3,H,W]
-    hsv_gt = rgb_to_hsv_torch(gt)
+@LOSS_REGISTRY.register()
+class wavelet_loss_hsv(nn.Module):
+    def __init__(self, loss_weight: float = 1.0, device='cuda', dtype=torch.float32):
+        super().__init__()
+        self.loss_weight = loss_weight
 
-    # Split channels
-    H_out, S_out, V_out = hsv_out[:,0:1], hsv_out[:,1:2], hsv_out[:,2:3]
-    H_gt, S_gt, V_gt = hsv_gt[:,0:1], hsv_gt[:,1:2], hsv_gt[:,2:3]
+        # ----- Build Wavelet -----
+        wavelet = pywt.Wavelet("sym19")
+        dlo = wavelet.dec_lo
+        an_lo = np.divide(dlo, sum(dlo))
+        an_hi = wavelet.dec_hi
+        rlo = wavelet.rec_lo
+        syn_lo = 2 * np.divide(rlo, sum(rlo))
+        syn_hi = wavelet.rec_hi
+        filters = pywt.Wavelet("wavelet_normalized", [an_lo, an_hi, syn_lo, syn_hi])
 
-    # ---- Charbonnier loss on Hue ----
-    loss_H = charbonnier_loss(H_out, H_gt)
 
-    # ---- Wavelet high-frequency on S and V ----
-    HF_S_out, HF_S_gt, HF_V_out, HF_V_gt = wavelet_guided_hsv(output, gt)
+        self.sfm = SWTForward(1, filters, "periodic").to(device=device, dtype=dtype, non_blocking=True)
 
-    # Charbonnier loss on wavelet HF
-    loss_S = charbonnier_loss(HF_S_out, HF_S_gt)
-    loss_V = charbonnier_loss(HF_V_out, HF_V_gt)
+    @staticmethod
+    def charbonnier_loss(x: torch.Tensor, y: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+        diff = x - y
+        return torch.mean(torch.sqrt(diff * diff + eps * eps))
 
-    # ---- Combine losses ----
-    # You can weight Hue, S, V differently
-    loss = 0.2*loss_H + 0.4*loss_S + 0.4*loss_V
+    def get_hf_channel(self, x: torch.Tensor) -> torch.Tensor:
+        coeffs = self.sfm(x)[0]
+        LH = coeffs[:, 1:2, :, :] * 0.035
+        HL = coeffs[:, 2:3, :, :] * 0.025
+        HH = coeffs[:, 3:, :, :] * 0.02
+        return torch.cat((LH, HL, HH), dim=1)
 
-    return loss
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        # Convert RGB -> HSV
+        hsv_pred = rgb_to_hsv_torch(pred)
+        hsv_target = rgb_to_hsv_torch(target)
+
+        # Hue loss
+        loss_H = self.charbonnier_loss(hsv_pred[:, 0:1], hsv_target[:, 0:1])
+        '''
+        output_hsv = torch.stack(torch.unbind(hsv_pred, dim=1))
+        gt_hsv = torch.stack(torch.unbind(hsv_target, dim=1))
+
+        # Extract S and V channels
+        
+        output_S = output_hsv[:, 1:2, :, :]
+        output_V = output_hsv[:, 2:3, :, :]
+        gt_S = gt_hsv[:, 1:2, :, :]
+        gt_V = gt_hsv[:, 2:3, :, :]
+
+        # Saturation & Value wavelet HF
+        HF_S_pred = self.get_hf_channel(output_S)
+        HF_S_target = self.get_hf_channel(output_V)
+        HF_V_pred = self.get_hf_channel(gt_S)
+        HF_V_target = self.get_hf_channel(gt_V)
+        '''
+        # Saturation & Value wavelet HF
+        HF_S_pred = self.get_hf_channel(hsv_pred[:, 1:2])
+        HF_S_target = self.get_hf_channel(hsv_target[:, 1:2])
+        HF_V_pred = self.get_hf_channel(hsv_pred[:, 2:3])
+        HF_V_target = self.get_hf_channel(hsv_target[:, 2:3])
+
+        loss_S = self.charbonnier_loss(HF_S_pred, HF_S_target)
+        loss_V = self.charbonnier_loss(HF_V_pred, HF_V_target)
+
+        # Combine losses
+        loss = 0.2 * loss_H + 0.4 * loss_S + 0.4 * loss_V
+        return loss * self.loss_weight
