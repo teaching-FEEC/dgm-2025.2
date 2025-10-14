@@ -45,8 +45,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         google_drive_id: Optional[str] = None,
         balanced_sampling: bool = False,
         synthetic_data_dir: Optional[str] = None,
-        global_max: float = 2.0600955486297607,
-        global_min: float = -0.19400253891944885,
+        global_max: float | list[float] = None,
+        global_min: float | list[float] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -74,8 +74,13 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         self.val_indices: np.ndarray = None
         self.test_indices: np.ndarray = None
 
-        self.global_max = global_max
-        self.global_min = global_min
+        self.global_max = [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
+                           0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
+                           1.4947973, 1.4737314, 1.6318618, 1.7226081]
+
+        self.global_min = [0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
+                           0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
+                           0.01310135, 0.01476806, 0.01932094, 0.02020744]
 
     def get_transforms(self, transforms: dict, stage: str) -> list[A.BasicTransform]:
         transforms_list = []
@@ -381,6 +386,31 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         pass
 
 
+    def global_normalization(self, cube: np.ndarray, clip_interval: tuple[int, int] = (0, 1)) -> np.ndarray:
+        if self.global_max is None or self.global_min is None:
+            raise ValueError("Global max and min values must be set for global normalization.")
+
+        if isinstance(self.global_min, int) and isinstance(self.global_max, int):
+            # single value provided, use for all bands
+            cube = (cube - self.global_min) / (self.global_max - self.global_min)
+            if clip_interval == (-1, 1):
+                cube = cube * 2 - 1
+        elif isinstance(self.global_min, list) and isinstance(self.global_max, list):
+            if len(self.global_min) != cube.shape[2] or len(self.global_max) != cube.shape[2]:
+                raise ValueError(
+                    "Length of global_min and global_max lists must match number of bands in cube"
+                )
+            # per-band normalization
+            for b in range(cube.shape[2]):
+                cube[:, :, b] = (cube[:, :, b] - self.global_min[b]) / (
+                    self.global_max[b] - self.global_min[b]
+                )
+                if clip_interval == (-1, 1):
+                    cube[:, :, b] = cube[:, :, b] * 2 - 1
+        cube = np.clip(cube, clip_interval[0], clip_interval[1])
+        cube = cube.astype("float32")
+        return cube
+
     def _export_single_crop(
         self,
         cube: np.ndarray,
@@ -431,9 +461,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             Image.fromarray(cropped_data).save(img_path)
         else:
             if global_normalization:
-                cropped_data = (cropped_data - self.global_min) / (self.global_max - self.global_min)
-                cropped_data = np.clip(cropped_data, 0, 1) * 255
-                cropped_data = cropped_data.astype("uint8")
+                cropped_data = self.global_normalization(cropped_data, clip_interval=(-1, 1))
             savemat(img_path, {"cube": cropped_data})
 
         return img_path, mask_path
@@ -612,9 +640,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                         Image.fromarray(rgb_data).save(img_path)
                     else:
                         if global_normalization:
-                            rgb_data = (rgb_data - self.global_min) / (self.global_max - self.global_min)
-                            rgb_data = np.clip(rgb_data, 0, 1) * 255
-                            rgb_data = rgb_data.astype("uint8")
+                            rgb_data = self.global_normalization(rgb_data, clip_interval=(-1, 1))
                         savemat(img_path, {"cube": rgb_data})
 
                     path_mapping[str(img_path)] = str(row["file_path"])
@@ -661,8 +687,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             rgb = np.repeat(band_data, 3, axis=2)
 
         # Normalize to 0-255 using global min-max normalization
-        rgb = (rgb - self.global_min) / (self.global_max - self.global_min) * 255
-        rgb = np.clip(rgb, 0, 255).astype("uint8")
+        rgb = self.global_normalization(rgb, clip_interval=(0, 1))
+        rgb = (rgb * 255).astype("uint8")
         return rgb
 
     def _crop_with_bbox(self, img: np.ndarray, mask: np.ndarray, bbox_scale: float) -> Optional[np.ndarray]:
@@ -795,12 +821,13 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/melanoma_train_croppedv2_256",
-        splits=["train"],
+        output_dir="export/melanoma_train_val_croppedv2_256",
+        splits=["train", "val"],
         crop_with_mask=True,
         bbox_scale=1.5,
-        structure="flat",
+        structure="imagenet",
         mode="hyper",
         image_size=image_size,
         allowed_labels=["melanoma"],
+        global_normalization=True
     )
