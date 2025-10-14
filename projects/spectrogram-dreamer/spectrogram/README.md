@@ -3,9 +3,9 @@
 Códigos para gerar, visualizar e reconstruir áudio a partir de espectrogramas.
 
 Principais scripts:
-- [projects/spectrogram-dreamer/spectrogram/spectogram.py](projects/spectrogram-dreamer/spectrogram/spectogram.py) — gera espectrogramas a partir de arquivos de áudio.
-- [projects/spectrogram-dreamer/spectrogram/pt2png.py](projects/spectrogram-dreamer/spectrogram/pt2png.py) — converte arquivos `.pt` de espectrograma em imagens PNG.
-- [projects/spectrogram-dreamer/spectrogram/pt2audio.py](projects/spectrogram-dreamer/spectrogram/pt2audio.py) — reconstrói áudio a partir de espectrogramas log-mel usando Griffin-Lim.
+- [projects/spectrogram-dreamer/spectrogram/spectogram.py](spectogram.py) — gera espectrogramas a partir de arquivos de áudio.
+- [projects/spectrogram-dreamer/spectrogram/pt2png.py](pt2png.py) — converte arquivos `.pt` de espectrograma em imagens PNG.
+- [projects/spectrogram-dreamer/spectrogram/pt2audio.py](pt2audio.py) — reconstrói áudio a partir de espectrogramas log-mel usando Griffin-Lim.
 
 ### Instalação
 ```bash
