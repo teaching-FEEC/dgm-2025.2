@@ -17,7 +17,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 	parser.add_argument("--cmap", type=str, default="magma", help="Mapa de cores do espectrograma")
 	parser.add_argument("--no-recursive", action="store_true", help="Não buscar em subdiretórios")
 	parser.add_argument("--overwrite", action="store_true", help="Sobrescrever espectrogramas existentes")
-	parser.add_argument("--log-mel", action="store_true", help="Converter espectrogramas para escala log-mel")
+	parser.add_argument("--log-mel", default=True, action="store_true", help="Converter espectrogramas para escala log-mel")
 	return parser.parse_args(argv)
 
 args = parse_args()
@@ -56,18 +56,21 @@ for fname in os.listdir(input_dir):
         waveform = resampler(waveform)
         sr = sr_target
 
-
+    # Espectrograma
     spec = stft(waveform)
 
-    #normalização z-score
-    spec = torch.log1p(spec)
-    spec = (spec - spec.mean()) / (spec.std() + 1e-8)
-
+    # Coloca em escala logarítmica
+    spec = torch.log(spec + 1e-6)
+    
+    # Se log-mel for especificado, converte para escala mel
     if args.log_mel:
         mel = torchaudio.transforms.MelScale(
             n_mels=80, sample_rate=sr, n_stft=spec.size(1)
         )
         spec = mel(spec)
+
+    # Normalização z-score
+    spec = (spec - spec.mean()) / (spec.std() + 1e-8)
 
     base = os.path.splitext(fname)[0]
     torch.save(spec, os.path.join(output_dir, base + ".pt"))
@@ -76,4 +79,3 @@ for fname in os.listdir(input_dir):
 
 end_time = time.time()
 print(f"Tempo total de execução: {end_time - start_time:.2f} segundos")
-
