@@ -67,6 +67,4 @@ if waveform_reconstructed.dim() == 1:
 output_audio_path = os.path.join(output_dir, base_name + "_reconstruido.wav")
 torchaudio.save(output_audio_path, waveform_reconstructed, sr)
 
-print(f"\nSucesso! Áudio reconstruído salvo em: {output_audio_path}")
-
-# python reconstruir_audio.py -i /caminho/specs -f seu_audio.pt -o /caminho/reconstruidos --gl-iters 64
+print(f"Áudio reconstruído salvo em: {output_audio_path}")
