@@ -18,7 +18,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cmap", type=str, default="magma", help="Mapa de cores do espectrograma")
     parser.add_argument("--no-recursive", action="store_true", help="Não buscar em subdiretórios")
     parser.add_argument("--overwrite", action="store_true", help="Sobrescrever espectrogramas existentes")
-    parser.add_argument("--log-mel", default=True, action="store_true", help="Converter espectrogramas para escala log-mel")
     return parser.parse_args(argv)
 
 args = parse_args()
@@ -58,19 +57,17 @@ for fname in os.listdir(input_dir):
         waveform = resampler(waveform)
         sr = sr_target
 
+    mel_spectrogram_transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sr,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        n_mels=n_mels,
+        power=2.0 # Potência (magnitude^2) para o cálculo padrão de dB
+    )
+    spec = mel_spectrogram_transform(waveform)
 
-    if args.log_mel:
-        mel_spectrogram_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=sr,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            n_mels=n_mels,
-            power=2.0 # Usamos potência (magnitude^2) para o cálculo padrão de dB
-        )
-        spec = mel_spectrogram_transform(waveform)
-
-        amplitude_to_db_transform = torchaudio.transforms.AmplitudeToDB()
-        spec = amplitude_to_db_transform(spec)
+    amplitude_to_db_transform = torchaudio.transforms.AmplitudeToDB()
+    spec = amplitude_to_db_transform(spec)
     
     mean = spec.mean()
     std = spec.std()
