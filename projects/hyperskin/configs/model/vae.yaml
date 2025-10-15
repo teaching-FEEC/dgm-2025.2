@@ -1,0 +1,50 @@
+model:
+  class_path: src.modules.vae_module.VAE
+  init_args:
+    # --- Generator/Discriminator settings ---
+    img_channels: 16          # number of HSI spectral bands
+    img_size: [256, 256]      # input resolution of RGB/noise
+    latent_dim: 20
+
+    # --- Training hyperparameters ---
+    lr: 0.0002
+    betas: [0.5, 0.999]       # Momentum terms of Adam
+    weight_decay: 1e-5
+    kld_weight: 1e-2
+    
+
+trainer:
+  log_every_n_steps: 10  # Logs metrics every x training steps.
+  max_epochs: 100
+
+  logger:
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, gan, shs-gan]
+      log_model: false
+
+  callbacks:
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-g_loss={val/g_loss:.4f}-d_loss={val/d_loss:.4f}
+        monitor: val_g_loss        
+        verbose: true
+        save_last: true
+        mode: min
+        auto_insert_metric_name: false
+
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val_g_loss        
+        min_delta: 0.01
+        patience: 15
+        verbose: true
+        mode: min
+        strict: true
+
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: epoch
