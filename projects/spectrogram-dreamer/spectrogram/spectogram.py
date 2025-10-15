@@ -5,6 +5,8 @@ from pathlib import Path
 
 import torch
 import torchaudio
+import librosa
+import numpy as np
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Gerar espectrogramas a partir de arquivos de áudio usando librosa.stft")
@@ -45,17 +47,24 @@ for fname in os.listdir(input_dir):
         print(f"Pulado: {fname} (já existe)")
         continue
 
-    waveform, sr = torchaudio.load(path)
+    # Usa librosa para carregar MP3 (mais robusto)
+    try:
+        # Carrega com librosa
+        waveform_np, sr = librosa.load(path, sr=sr_target, mono=False)
+        
+        # Converte para tensor torch
+        if waveform_np.ndim == 1:
+            waveform = torch.from_numpy(waveform_np).unsqueeze(0)  # Mono: (samples,) -> (1, samples)
+        else:
+            waveform = torch.from_numpy(waveform_np)  # Stereo: (2, samples)
+            
+    except Exception as e:
+        print(f"Erro ao carregar {fname}: {e}")
+        continue
 
     # Se necessário, converte para mono
     if waveform.size(0) > 1:
         waveform = torch.mean(waveform, dim=0, keepdim=True)
-
-    # Se sr_target foi especificado e é diferente do sr original, reamostra
-    if sr_target is not None and sr != sr_target:
-        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=sr_target)
-        waveform = resampler(waveform)
-        sr = sr_target
 
     mel_spectrogram_transform = torchaudio.transforms.MelSpectrogram(
         sample_rate=sr,
@@ -80,8 +89,8 @@ for fname in os.listdir(input_dir):
         'sr': sr,
         'n_fft': n_fft,
         'hop_length': hop_length,
-        'n_mels': n_mels if args.log_mel else None,
-        'is_log_mel': args.log_mel
+        'n_mels': n_mels,
+        'is_log_mel': True
     }, os.path.join(output_dir, base + ".pt"))
 
     print(f"Processado: {fname}")
