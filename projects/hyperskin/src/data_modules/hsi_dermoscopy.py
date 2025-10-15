@@ -66,6 +66,39 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             if "test" in transforms:
                 self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
 
+        # if global_max and global_min are provided, add NormalizeByMinMax to transforms
+        from src.transforms import NormalizeByMinMax
+
+        if global_max is not None and global_min is not None:
+            if isinstance(global_max, list) and isinstance(global_min, list):
+                transform = NormalizeByMinMax(
+                    mins=global_min,
+                    maxs=global_max,
+                    range_mode="0_1" if self.hparams.task != HSIDermoscopyTask.GENERATION else "-1_1",
+                    clip=True,
+                )
+            elif isinstance(global_max, (int, float)) and isinstance(global_min, (int, float)):
+                transform = NormalizeByMinMax(
+                    mins=[global_min] * 16,
+                    maxs=[global_max] * 16,
+                    range_mode="0_1" if self.hparams.task != HSIDermoscopyTask.GENERATION else "-1_1",
+                    clip=True,
+                )
+            else:
+                raise ValueError("global_max and global_min must be both lists or both scalars")
+            if self.transforms_train is not None:
+                self.transforms_train.transforms.append(transform)
+            else:
+                self.transforms_train = A.Compose([transform])
+            if self.transforms_val is not None:
+                self.transforms_val.transforms.append(transform)
+            else:
+                self.transforms_val = A.Compose([transform])
+            if self.transforms_test is not None:
+                self.transforms_test.transforms.append(transform)
+            else:
+                self.transforms_test = A.Compose([transform])
+
         self.data_train: Dataset = None
         self.data_val: Dataset = None
         self.data_test: Dataset = None
@@ -74,13 +107,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         self.val_indices: np.ndarray = None
         self.test_indices: np.ndarray = None
 
-        self.global_max = [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
-                           0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
-                           1.4947973, 1.4737314, 1.6318618, 1.7226081]
+        self.global_max = global_max
 
-        self.global_min = [0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
-                           0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
-                           0.01310135, 0.01476806, 0.01932094, 0.02020744]
+        self.global_min = global_min
 
     def get_transforms(self, transforms: dict, stage: str) -> list[A.BasicTransform]:
         transforms_list = []
@@ -385,7 +414,6 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         # Called on every process after trainer is done
         pass
 
-
     def global_normalization(self, cube: np.ndarray, clip_interval: tuple[int, int] = (0, 1)) -> np.ndarray:
         if self.global_max is None or self.global_min is None:
             raise ValueError("Global max and min values must be set for global normalization.")
@@ -397,14 +425,10 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 cube = cube * 2 - 1
         elif isinstance(self.global_min, list) and isinstance(self.global_max, list):
             if len(self.global_min) != cube.shape[2] or len(self.global_max) != cube.shape[2]:
-                raise ValueError(
-                    "Length of global_min and global_max lists must match number of bands in cube"
-                )
+                raise ValueError("Length of global_min and global_max lists must match number of bands in cube")
             # per-band normalization
             for b in range(cube.shape[2]):
-                cube[:, :, b] = (cube[:, :, b] - self.global_min[b]) / (
-                    self.global_max[b] - self.global_min[b]
-                )
+                cube[:, :, b] = (cube[:, :, b] - self.global_min[b]) / (self.global_max[b] - self.global_min[b])
                 if clip_interval == (-1, 1):
                     cube[:, :, b] = cube[:, :, b] * 2 - 1
         cube = np.clip(cube, clip_interval[0], clip_interval[1])
@@ -425,7 +449,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         bands: Optional[list[int]],
         bbox_scale: float,
         image_size: Optional[int],
-        global_normalization: bool
+        global_normalization: bool,
+        original_path: str,  # Added parameter
+        crop_idx: int,  # Added parameter
     ) -> tuple[Optional[Path], Optional[Path]]:
         """Export a single cropped image based on one mask."""
         # Convert to export mode
@@ -450,6 +476,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             counter["count"],
             counter,
             extension,
+            original_path=original_path,  # Pass original path
+            crop_idx=crop_idx,  # Pass crop index
         )
 
         if image_size is not None:
@@ -605,7 +633,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                             bands,
                             bbox_scale,
                             image_size,
-                            global_normalization
+                            global_normalization,
+                            original_path=str(row["file_path"]),  # Pass original path
+                            crop_idx=mask_idx,  # Pass crop index
                         )
 
                         if img_path:
@@ -633,6 +663,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                         idx,
                         counter,
                         extension,
+                        original_path=str(row["file_path"]),  # Pass original path
+                        crop_idx=None,  # No crop index for non-cropped
                     )
 
                     # Save image
@@ -725,26 +757,50 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         idx: int,
         counter: dict,
         extension: str,
+        original_path: Optional[str] = None,  # Added parameter
+        crop_idx: Optional[int] = None,  # Added parameter
     ) -> tuple[Path, Optional[Path]]:
         """Determine output paths based on directory structure."""
-        counter["count"] += 1
-        filename = f"{label_name}_{counter['count']:05d}{extension}"
 
         if structure == "original":
-            # Maintain original folder structure
-            img_path = output_root / split_name / label_name / filename
+            if original_path is None:
+                raise ValueError("original_path must be provided for structure='original'")
+
+            # Get the relative path from the data directory
+            original_path_obj = Path(original_path)
+            data_dir = Path(self.hparams.data_dir)
+
+            try:
+                # Get relative path from data_dir
+                rel_path = original_path_obj.relative_to(data_dir)
+            except ValueError:
+                # Fallback: preserve at least the last few directory levels
+                rel_path = Path(*original_path_obj.parts[-3:])
+
+            # Create filename
+            base_name = rel_path.stem
+            if crop_idx is not None:
+                filename = f"{base_name}_crop{crop_idx:02d}{extension}"
+            else:
+                filename = f"{base_name}{extension}"
+
+            # Preserve directory structure
+            img_path = output_root / rel_path.parent / filename
             img_path.parent.mkdir(parents=True, exist_ok=True)
-            mask_path = output_root / split_name / label_name / filename.replace(extension, "_mask.png")
+            mask_path = img_path.parent / filename.replace(extension, "_mask.png")
 
         elif structure == "imagenet":
             # ImageNet structure: split/class/images
+            counter["count"] += 1
+            filename = f"{label_name}_{counter['count']:05d}{extension}"
             img_path = output_root / split_name / label_name / filename
             img_path.parent.mkdir(parents=True, exist_ok=True)
             mask_path = img_path.parent / filename.replace(extension, "_mask.png")
 
         elif structure == "flat":
             # Flat with label in filename
-            filename = f"{split_name}_{filename}"
+            counter["count"] += 1
+            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
             img_path = output_root / filename
             mask_path = output_root / filename.replace(extension, "_mask.png")
 
@@ -754,13 +810,15 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             masks_dir = output_root / "masks"
             images_dir.mkdir(exist_ok=True)
             masks_dir.mkdir(exist_ok=True)
-            filename = f"{split_name}_{filename}"
+            counter["count"] += 1
+            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
             img_path = images_dir / filename
             mask_path = masks_dir / filename.replace(extension, "_mask.png")
 
         elif structure == "images_only":
             # Only images, no subdirectories
-            filename = f"{split_name}_{filename}"
+            counter["count"] += 1
+            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
             img_path = output_root / filename
             mask_path = None
 
@@ -821,13 +879,13 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/melanoma_train_val_croppedv2_256",
-        splits=["train", "val"],
+        output_dir="export/hsi_dermoscopy_croppedv2_256",
+        # splits=["train", "val", "test"],
         crop_with_mask=True,
-        bbox_scale=1.5,
-        structure="imagenet",
+        bbox_scale=2,
+        structure="original",
         mode="hyper",
         image_size=image_size,
-        allowed_labels=["melanoma"],
-        global_normalization=True
+        # allowed_labels=["melanoma"],
+        global_normalization=False,
     )
