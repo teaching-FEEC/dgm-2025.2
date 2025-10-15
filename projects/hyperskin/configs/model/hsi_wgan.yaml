@@ -1,0 +1,61 @@
+model:
+  class_path: modules.WGANModule
+  init_args:
+    img_channels: 16
+    img_size: 64
+    latent_dim: 100
+    d_lr: 0.00005
+    g_lr: 0.0002
+    weight_decay: 0
+    b1: 0.5
+    b2: 0.9
+    n_critic: 1
+    clip_value: 0.01
+    grad_penalty: 10
+    constraint_method: "gp"
+    calculate_metrics: True
+    metrics: ["fid"]
+    summary: True
+    log_images_after_n_epochs: 10
+    log_metrics_after_n_epochs: 10
+trainer:
+  log_every_n_steps: 1
+  max_epochs: 400
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      # adding the run name manually will override the automatic naming
+      # name: densenet201_hsi_classifier
+      log_model: false
+      notes: "Write something interesting about this experiment here."
+      
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-g_loss={g_loss:.4f}
+        monitor: g_loss
+        verbose: true
+        save_last: true
+        save_top_k: 1
+        mode: min
+        auto_insert_metric_name: false
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: EarlyStopping
+      init_args:
+        monitor: g_loss
+        min_delta: 0.01
+        patience: 80
+        verbose: true
+        mode: min
+        strict: true
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: epoch
