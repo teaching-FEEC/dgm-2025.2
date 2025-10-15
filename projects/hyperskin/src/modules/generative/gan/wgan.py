@@ -69,6 +69,10 @@ class WGANModule(DCGAN):
             loss_dict = self._calculate_d_loss(x, x_hat)
             d_optim.zero_grad(set_to_none=True)
             self.manual_backward(loss_dict["d_loss"])
+
+            d_grad_norm = self._compute_grad_norm(self.D)
+            loss_dict["d_grad_norm"] = d_grad_norm
+
             d_optim.step()
 
         # Train Generator
@@ -76,10 +80,16 @@ class WGANModule(DCGAN):
             loss_dict = self._calculate_g_loss(x_hat)
             g_optim.zero_grad(set_to_none=True)
             self.manual_backward(loss_dict["g_loss"])
+
+            g_grad_norm = self._compute_grad_norm(self.G)
+            loss_dict["g_grad_norm"] = g_grad_norm
+
             g_optim.step()
 
+        log_loss_dict = {f"train/{k}": v for k, v in loss_dict.items()}
+
         self.log_dict(
-            loss_dict,
+            log_loss_dict,
             prog_bar=True,
             logger=True,
             sync_dist=torch.cuda.device_count() > 1,
@@ -170,6 +180,28 @@ class WGANModule(DCGAN):
                 -self.hparams.clip_value,
                 self.hparams.clip_value,
             )
+
+    @staticmethod
+    def _compute_grad_norm(model: torch.nn.Module) -> torch.Tensor:
+        """
+        Computes the total (global) L2 norm of gradients across all parameters in a model.
+
+        Args:
+            model (torch.nn.Module): The model for which to compute gradient norms.
+
+        Returns:
+            torch.Tensor: Scalar tensor indicating the global gradient norm.
+        """
+        total_norm = 0.0
+        parameters = [p for p in model.parameters() if p.grad is not None]
+        if not parameters:
+            return torch.tensor(0.0)
+
+        for p in parameters:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+        return torch.tensor(total_norm, device=parameters[0].device)
 
     def configure_optimizers(self):
         if self.hparams.constraint_method == "clip":

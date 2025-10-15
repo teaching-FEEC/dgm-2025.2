@@ -5,7 +5,7 @@ model:
     img_size: 64
     latent_dim: 100
     d_lr: 0.00005
-    g_lr: 0.0002
+    g_lr: 0.00002
     weight_decay: 0
     b1: 0.5
     b2: 0.9
@@ -39,8 +39,8 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
     - class_path: ModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-g_loss={g_loss:.4f}
-        monitor: g_loss
+        filename: epoch={epoch:02d}-val/g_loss={val/g_loss:.4f}
+        monitor: val/g_loss
         verbose: true
         save_last: true
         save_top_k: 1
@@ -49,9 +49,9 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     - class_path: EarlyStopping
       init_args:
-        monitor: g_loss
+        monitor: val/g_loss
         min_delta: 0.01
-        patience: 80
+        patience: 200
         verbose: true
         mode: min
         strict: true

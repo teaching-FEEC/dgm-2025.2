@@ -167,7 +167,7 @@ class GAN(pl.LightningModule):
             self.manual_backward(loss_dict["g_loss"])
             g_optim.step()
 
-        loss_dict = {f"{mode}_{k}": v for k, v in loss_dict.items()}
+        loss_dict = {f"{mode}/{k}": v for k, v in loss_dict.items()}
         self.log_dict(
             loss_dict,
             prog_bar=True,
@@ -193,6 +193,7 @@ class GAN(pl.LightningModule):
         if self.calculate_metrics and (self.current_epoch + 1) % self.hparams.log_metrics_after_n_epochs == 0:
             metrics = self.compute_metrics()
 
+            metrics = {f"val/{k}": v for k, v in metrics.items()}
             self.log_dict(
                 metrics,
                 prog_bar=True,
