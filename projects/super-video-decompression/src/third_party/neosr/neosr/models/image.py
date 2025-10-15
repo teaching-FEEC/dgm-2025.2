@@ -240,6 +240,14 @@ class image(base):
             )
         else:
             self.cri_gan = None
+        
+        # hsv wavelet loss
+        if train_opt.get("wavelet_hsv_opt"):
+            self.cri_wavelet_hsv = build_loss(train_opt["wavelet_hsv_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_wavelet_hsv = None
             
         # canny edge loss
         if train_opt.get("cannyedge_opt"):
@@ -590,6 +598,11 @@ class image(base):
                 l_g_percep = self.cri_perceptual(self.output, self.gt)
                 l_g_total += l_g_percep
                 loss_dict["l_g_percep"] = l_g_percep
+            # hsv wavelet loss
+            if self.cri_wavelet_hsv:
+                l_g_wavelet_hsv = self.cri_wavelet_hsv(self.output, self.gt)
+                l_g_total += l_g_wavelet_hsv
+                loss_dict["l_g_wavelet_hsv"] = l_g_wavelet_hsv
             # canny edge loss
             if self.cri_canny:
                 l_g_canny = self.cri_canny(self.output, self.gt)
@@ -937,13 +950,13 @@ class image(base):
                     save_img_path = (
                         Path(v_folder)
                         / dataset_name
-                        / f"{img_name}_{self.opt['val']['suffix']}.png"
+                        / f"{img_name}{self.opt['val']['suffix']}.png"
                     )
                 else:
                     save_img_path = (
                         Path(v_folder)
                         / dataset_name
-                        / f"{img_name}_{self.opt['name']}.png"
+                        / f"{img_name}{self.opt['name']}.png"
                     )
                 imwrite(sr_img, str(save_img_path))  # type: ignore[arg-type]
 

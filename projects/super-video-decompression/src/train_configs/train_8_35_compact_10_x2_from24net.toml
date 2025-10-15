@@ -1,7 +1,7 @@
 
-name = "train_ultra_compact_1x"
+name = "train_8_35_compact_10_x2_from24net"
 model_type = "image"
-scale = 1
+scale = 2
 use_amp = true
 bfloat16 = true
 fast_matmul = true
@@ -10,42 +10,40 @@ compile = false
 
 [datasets.train]
 type = "paired"
-dataroot_gt = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\train\all_12'
-dataroot_lq = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\train\all_34'
-patch_size = 64
+dataroot_gt = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\lq_10_2X_splitdb\train\hq'
+dataroot_lq = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\lq_10_2X_splitdb\train\lq'
+patch_size = 60
 batch_size = 32
 #accumulate = 1
 augmentation = [ "none" ] #, "mixup", "cutmix", "resizemix", "cutblur" 
-aug_prob = [ 0.5 ] #, 0.1, 0.1, 0.1, 0.5
+aug_prob = [ 1 ] #, 0.1, 0.1, 0.1, 0.5
 
 [datasets.val]
 name = "val"
 type = "paired"
-dataroot_gt = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\validation\cam2cut_12'
-dataroot_lq = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\validation\cam2cut_34'
+dataroot_gt = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\lq_10_2X_splitdb\val\hq'
+dataroot_lq = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\processed\lq_10_2X_splitdb\val\lq'
 [val]
 val_freq = 1000
 tile = 200
 [val.metrics.psnr]
 type = "calculate_psnr"
-[val.metrics.ssim]
-type = "calculate_ssim"
-[val.metrics.dists]
-type = "calculate_dists"
+#[val.metrics.ssim]
+#type = "calculate_ssim"
+#[val.metrics.dists]
+#type = "calculate_dists"
 #better = "lower"
 #[val.metrics.topiq]
 #type = "calculate_topiq"
 
 [path]
-pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\1x_UltraCompact_Pretrain_nc8.pth'
+pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\2x_compact_8_35_intermediate_pretrain_from24net.pth'
 #pretrain_network_d = 'experiments\pretrain_d.pth'
 
 [network_g]
 type = "compact"
-#num_feat = 24 #super ultra compact
-#num_conv = 8  #super ultra compact
-num_conv = 8  # ultra compact
-num_feat = 64 # ultra compact
+num_feat = 35
+num_conv = 8 
 
 [network_d]
 type = "metagan"
@@ -82,6 +80,14 @@ warmup_steps = 600
 type = "mssim_loss"
 loss_weight = 1.0
 
+[train.cannyedge_opt]
+type = "canny_edge_loss"
+loss_weight = 1.0
+
+[train.patchvariance_opt]
+type = "patch_variance_loss"
+loss_weight = 1.0
+
 [train.consistency_opt]
 type = "consistency_loss"
 loss_weight = 1.0
@@ -100,14 +106,6 @@ type = "gan_loss"
 gan_type = "bce"
 loss_weight = 0.3
 
-[train.dists_opt]
-type = "dists_loss"
-loss_weight = 0.3
-
-[train.cannyedge_opt]
-type = "canny_edge_loss"
-loss_weight = 1.0
-
 #[train.msswd_opt]
 #type = "msswd_loss"
 #loss_weight = 1.0
@@ -119,6 +117,10 @@ loss_weight = 1.0
 ##patchloss = true
 ##ipk = true
 ##patch_weight = 1.0
+
+#[train.dists_opt]
+#type = "dists_loss"
+#loss_weight = 0.5
 
 #[train.ff_opt]
 #type = "ff_loss"
@@ -133,7 +135,7 @@ loss_weight = 1.0
 #loss_weight = 1.0
 
 [logger]
-total_iter = 100000
+total_iter = 1500000
 save_checkpoint_freq = 1000
 use_tb_logger = true
 #save_tb_img = true
