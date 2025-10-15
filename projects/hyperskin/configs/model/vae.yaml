@@ -1,50 +1,47 @@
 model:
-  class_path: src.modules.vae_module.VAE
+  class_path: modules.VAE
   init_args:
-    # --- Generator/Discriminator settings ---
-    img_channels: 16          # number of HSI spectral bands
-    img_size: [256, 256]      # input resolution of RGB/noise
+    img_channels: 16
+    img_size: 256
     latent_dim: 20
-
-    # --- Training hyperparameters ---
     lr: 0.0002
-    betas: [0.5, 0.999]       # Momentum terms of Adam
+    betas: [0.5, 0.999]
     weight_decay: 1e-5
     kld_weight: 1e-2
-    
+    metrics: [ssim, psnr, sam]
 
 trainer:
-  log_every_n_steps: 10  # Logs metrics every x training steps.
+  log_every_n_steps: 10
   max_epochs: 100
 
   logger:
-    class_path: WandbLogger
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       save_dir: logs
       entity: k298976-unicamp
       project: hypersynth
-      tags: [hsi, gan, shs-gan]
+      tags: [hsi, vae]
       log_model: false
 
   callbacks:
-    - class_path: ModelCheckpoint
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-g_loss={val/g_loss:.4f}-d_loss={val/d_loss:.4f}
-        monitor: val_g_loss        
+        filename: epoch={epoch:02d}-val_loss={val_loss:.4f}
+        monitor: val_loss          # <-- VAE key
         verbose: true
         save_last: true
         mode: min
         auto_insert_metric_name: false
 
-    - class_path: EarlyStopping
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
-        monitor: val_g_loss        
-        min_delta: 0.01
+        monitor: val_loss          # <-- VAE key
+        min_delta: 0.0001
         patience: 15
         verbose: true
         mode: min
         strict: true
 
-    - class_path: LearningRateMonitor
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
       init_args:
         logging_interval: epoch
