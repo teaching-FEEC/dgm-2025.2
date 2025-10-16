@@ -39,6 +39,18 @@ def adapt_input_conv(in_chans: int, conv_weight: torch.Tensor) -> torch.Tensor:
     conv_weight = conv_weight.to(conv_type)
     return conv_weight
 
+class InceptionV3Wrapper(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.model = InceptionV3(*args, **kwargs)
+
+    def forward(self, x):
+        # InceptionV3 returns a list → take the first (and usually only) output tensor
+        if x.dtype == torch.uint8:
+            x = x.float() / 255.0
+        out = self.model(x)
+        out = out[-1] if isinstance(out, (list, tuple)) else out
+        return out.squeeze(-1).squeeze(-1)
 
 class InceptionV3(nn.Module):
     """Pretrained InceptionV3 network returning feature maps"""

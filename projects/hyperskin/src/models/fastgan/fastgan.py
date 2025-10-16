@@ -386,13 +386,13 @@ class Discriminator(nn.Module):
             # size --> (batch size, 3, 32, 32)
             # 根据随机数不同选用不同位置，返回重建的part图像，即随机重建一部分
             if part == 0:
-                rec_img_part = self.decoder_part(feat_32[:, :, :8, :8])
+                rec_img_part = self.decoder_part(feat_32[:, :, :8, :8].contiguous())
             if part == 1:
-                rec_img_part = self.decoder_part(feat_32[:, :, :8, 8:])
+                rec_img_part = self.decoder_part(feat_32[:, :, :8, 8:].contiguous())
             if part == 2:
-                rec_img_part = self.decoder_part(feat_32[:, :, 8:, :8])
+                rec_img_part = self.decoder_part(feat_32[:, :, 8:, :8].contiguous())
             if part == 3:
-                rec_img_part = self.decoder_part(feat_32[:, :, 8:, 8:])
+                rec_img_part = self.decoder_part(feat_32[:, :, 8:, 8:].contiguous())
 
             return torch.cat([rf_0, rf_1]), [rec_img_big, rec_img_small, rec_img_part]
             # 是真实图像，返回值则增添了重构的图像

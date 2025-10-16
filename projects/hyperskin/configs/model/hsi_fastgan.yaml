@@ -9,12 +9,15 @@ model:
     nlr: 0.0002
     nbeta1: 0.5
     nbeta2: 0.999
-    log_images_on_epoch_n: 20
+    log_images_on_step_n: 50
+    val_check_interval: 50
 seed_everything: 114514
 trainer:
   # precision: 16-mixed
-  log_every_n_steps: 1
-  max_epochs: 400
+  max_epochs: -1
+  log_every_n_steps: 20
+  max_steps: 100_000
+  check_val_every_n_epoch:
 
   logger:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
@@ -36,24 +39,26 @@ trainer:
     #     saved_image_folder: logs/images
     #     nc: 16
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
-    # - class_path: ModelCheckpoint
-    #   init_args:
-    #     filename: epoch={epoch:02d}-val/g_loss={val/g_loss:.4f}
-    #     monitor: val/g_loss
-    #     verbose: true
-    #     save_last: true
-    #     save_top_k: 1
-    #     mode: min
-    #     auto_insert_metric_name: false
-    # # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: step={global_step}-val_MIFID={val/MIFID:.4f}
+        monitor: val/MIFID
+        verbose: true
+        save_last: true
+        save_top_k: 1
+        mode: min
+        auto_insert_metric_name: false
+        every_n_train_steps: 200
+    # # # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     # - class_path: EarlyStopping
     #   init_args:
-    #     monitor: val/g_loss
+    #     monitor: val/SAM
     #     min_delta: 0.01
     #     patience: 200
     #     verbose: true
     #     mode: min
     #     strict: true
+    #     check_on_train_epoch_end: False
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
     - class_path: LearningRateMonitor
       init_args:

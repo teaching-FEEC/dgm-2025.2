@@ -7,7 +7,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from torchvision.transforms import transforms as T
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 import albumentations as A
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -24,11 +24,10 @@ if __name__ == "__main__":
         Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
     )
 
+from src.samplers.infinite import InfiniteSamplerWrapper
 from src.utils.transform import smallest_maxsize_and_centercrop
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
-from src.utils.mosaic import plot_dataset_mosaic
-
 
 class HSIDermoscopyDataModule(pl.LightningDataModule):
     def __init__(
@@ -47,6 +46,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         synthetic_data_dir: Optional[str] = None,
         global_max: float | list[float] = None,
         global_min: float | list[float] = None,
+        infinite_train: bool = False,
+        sample_size: Optional[int] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -335,6 +336,8 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
     def train_dataloader(self):
+        sampler = None
+
         if (
             self.hparams.task
             in [
@@ -364,14 +367,21 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 num_workers=self.hparams.num_workers,
                 pin_memory=self.hparams.pin_memory,
             )
-        else:
-            return DataLoader(
-                self.data_train,
-                batch_size=self.hparams.batch_size,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                shuffle=True,
-            )
+
+        if self.hparams.infinite_train:
+            if self.hparams.sample_size and self.hparams.sample_size > 0 and \
+                self.hparams.sample_size < len(self.data_train):
+                sampler = InfiniteSamplerWrapper(SubsetRandomSampler(torch.arange(self.hparams.sample_size)))
+            else:
+                sampler = InfiniteSamplerWrapper(self.data_train)
+        return DataLoader(
+            self.data_train,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=True if sampler is None else False,
+            sampler=sampler,
+        )
 
     def val_dataloader(self):
         return DataLoader(

@@ -49,6 +49,9 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 elif "segmentation" in task:
                     run_name += "seg_"
                     tags.append("segmentation")
+                elif "generation" in task:
+                    run_name += "gen_"
+                    tags.append("generation")
 
                 if run_name:
                     first_underscore_index = task.find("_")
@@ -65,6 +68,8 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                     "CenterCrop",
                     "Resize",
                     "Equalize",
+                    "SmallestMaxSize",
+                    "LongestMaxSize",
                 ]
                 has_augmentation = any(
                     transform.get("class_path") not in not_augs for transform in transforms
@@ -72,11 +77,16 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 if has_augmentation:
                     run_name += "aug_"
                     tags.append("augmented")
-                
+
             # Synthetic data
             if hasattr(data_args, "synthetic_data_dir") and data_args.synthetic_data_dir is not None:
                 run_name += "synth_"
                 tags.append("synthetic_data")
+
+        if hasattr(self.config, "model") and self.config.model is not None and \
+                "class_path" in self.config.model and "fastgan" in self.config.model["class_path"].lower():
+            run_name += "fastgan_"
+            tags.append("fastgan")
 
         # Handle model-related tags
         if hasattr(self.config.model, "init_args"):
@@ -112,7 +122,11 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                     run_name += "fb_"
                     tags.append("frozen_backbone")
 
-            # Optimizer
+            if hasattr(model_args, "nz"):
+                nz = model_args.nz
+                tags.append(f"z{nz}")
+
+        # Optimizer
         if hasattr(self.config, "optimizer") and self.config.optimizer is not None and \
                 "class_path" in self.config.optimizer:
             optimizer = self.config.optimizer["class_path"]

@@ -11,7 +11,7 @@ import warnings
 import torchvision
 
 from src.losses.lpips import PerceptualLoss
-from src.metrics.inception import InceptionV3
+from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import weights_init
 from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
 from src.models.fastgan.fastgan import Generator, Discriminator
@@ -19,6 +19,15 @@ from src.transforms.diffaug import DiffAugment
 import os
 import torchvision.utils as vutils
 import wandb
+from torchmetrics.image import (
+    SpectralAngleMapper,
+    RelativeAverageSpectralError,
+    StructuralSimilarityIndexMeasure,
+    TotalVariation
+)
+from torchmetrics.image.mifid import MemorizationInformedFrechetInceptionDistance
+from torchmetrics.image.fid import FrechetInceptionDistance
+
 warnings.filterwarnings('ignore')
 
 
@@ -47,9 +56,11 @@ class FastGANModule(pl.LightningModule):
                  ngf: int = 64,
                  nz: int = 256,
                  nlr: float = 0.0002,
-                 nbeta1: float = 0.5,
+                 nbeta1: float = "0.5",
                  nbeta2: float = 0.999,
-                 log_images_on_epoch_n: int = 1,
+                 log_images_on_step_n: int = 1,
+                 val_check_interval: int = 500,
+                 num_val_batches: int = 8,
                  ):
         super().__init__()
         self.save_hyperparameters()
@@ -72,6 +83,24 @@ class FastGANModule(pl.LightningModule):
         self.register_buffer("fixed_noise", torch.FloatTensor(8, self.hparams.nz).normal_(0, 1))
         self.last_real = None
         self.last_rec = None
+
+        # Validation metrics
+        self.sam = SpectralAngleMapper()
+        self.rase = RelativeAverageSpectralError()
+        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
+        self.tv = TotalVariation()
+
+        self.inception_model = InceptionV3Wrapper(
+            normalize_input=False, in_chans=self.hparams.nc
+        )
+        self.inception_model.eval()
+        self.mifid = MemorizationInformedFrechetInceptionDistance(self.inception_model)
+        self.mifid.eval()
+        self.fid = FrechetInceptionDistance(
+            self.inception_model,
+            input_img_size=(self.hparams.nc, self.hparams.im_size, self.hparams.im_size),
+        )
+        self.fid.eval()
 
     def forward(self, z):
         return self.netG(z)
@@ -150,18 +179,29 @@ class FastGANModule(pl.LightningModule):
 
         # --------- EMA update after G step ---------
         for p, avg_p in zip(self.netG.parameters(), self.avg_param_G):
-            avg_p.mul_(0.999).add_(0.001 * p.data)
+            avg_p.mul_(0.999).add_(p.data, alpha=0.001)
 
+        # --------- Log losses ---------
+        d_loss_total = err_dr + err_df
+        self.log("train/d_loss_real", err_dr, on_step=True, on_epoch=False)
+        self.log("train/d_loss_fake", err_df, on_step=True, on_epoch=False)
+        self.log("train/d_loss_total", d_loss_total, on_step=True, on_epoch=False)
+        self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
 
-               # Store some visuals
+        # Store some visuals
         if batch_idx == 0:
             num_images = min(8, batch_size)
-            self.last_real = real_image[:num_images].detach()
-            self.last_rec = (rec_all[:num_images].detach(), rec_small[:num_images].detach(),
-                             rec_part[:num_images].detach())
+            self.last_real = real_image[:num_images].detach().cpu()
+            self.last_rec = (rec_all[:num_images].detach().cpu(), rec_small[:num_images].detach().cpu(),
+                             rec_part[:num_images].detach().cpu())
 
-    def on_train_epoch_end(self) -> None:
-        if (self.current_epoch + 1) % self.hparams.log_images_on_epoch_n == 0:
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        batch_size = len(batch)
+
+        if ((self.global_step + 1) // batch_size) % self.hparams.val_check_interval == 0:
+            self._run_validation()
+
+        if ((self.global_step + 1) // batch_size) % self.hparams.log_images_on_step_n == 0:
             backup_para = copy_G_params(self.netG)
             load_params(self.netG, self.avg_param_G)
             self.netG.eval()
@@ -172,7 +212,7 @@ class FastGANModule(pl.LightningModule):
             sample = sample.clamp(0, 1)
 
             # Create and log sample grid
-            sample_grid = torchvision.utils.make_grid(sample, nrow=4)
+            sample_grid = torchvision.utils.make_grid(sample, nrow=4).detach().cpu()
             self.logger.experiment.log({
                 "generated_samples": wandb.Image(sample_grid)
             })
@@ -187,13 +227,91 @@ class FastGANModule(pl.LightningModule):
                 rec = rec.clamp(0, 1)
 
                 # Create and log reconstruction grid
-                rec_grid = torchvision.utils.make_grid(rec, nrow=4)
+                rec_grid = torchvision.utils.make_grid(rec, nrow=4).detach().cpu()
                 self.logger.experiment.log({
                     "reconstructions": wandb.Image(rec_grid)
                 })
 
+            self.last_real = None
+            self.last_rec = None
+
             load_params(self.netG, backup_para)
             self.netG.train()
+
+    def _run_validation(self):
+        """Run validation metrics on multiple batches from val_dataloader 
+        using rolling sums for efficiency."""
+        self.mifid.reset()
+        self.fid.reset()
+        self.sam.reset()
+        self.rase.reset()
+        self.ssim.reset()
+        self.tv.reset()
+
+        val_loader = self.trainer.datamodule.train_dataloader()
+
+        # rolling sums for basic metrics
+        sam_sum = 0.0
+        rase_sum = 0.0
+        ssim_sum = 0.0
+        tv_sum = 0.0
+        count = 0
+
+        with torch.no_grad():
+            for i, (real_image, _) in enumerate(val_loader):
+                if i >= self.hparams.num_val_batches:
+                    break
+
+                real_image = real_image.to(self.device, non_blocking=True)
+                batch_size = real_image.size(0)
+                noise = torch.randn(batch_size, self.hparams.nz, device=self.device)
+
+                fake_images = self(noise)
+                fake = fake_images[0].float()
+
+                # Normalize [-1,1] → [0,1]
+                fake_norm = (fake + 1) / 2
+                real_norm = (real_image + 1) / 2
+                fake_norm = fake_norm.clamp(0, 1)
+                real_norm = real_norm.clamp(0, 1)
+
+                # Update metrics that need all pairs (cumulative, no reduction)
+                self.mifid.update(fake, real=False)
+                self.mifid.update(real_image, real=True)
+                self.fid.update(fake, real=False)
+                self.fid.update(real_image, real=True)
+
+                # Rolling sum updates
+                sam_sum += self.sam(fake_norm, real_norm).item()
+                rase_sum += self.rase(fake_norm, real_norm).item()
+                ssim_sum += self.ssim(fake_norm, real_norm).item()
+                tv_sum += self.tv(fake_norm).item()
+                count += 1
+
+            # Compute overall metrics
+            mean_sam = sam_sum / max(count, 1)
+            mean_rase = rase_sum / max(count, 1)
+            mean_ssim = ssim_sum / max(count, 1)
+            mean_tv = tv_sum / max(count, 1)
+
+            mifid = self.mifid.compute()
+            fid = self.fid.compute()
+
+            self.log_dict(
+                {
+                    "val/SAM": mean_sam,
+                    "val/RASE": mean_rase,
+                    "val/SSIM": mean_ssim,
+                    "val/TV": mean_tv,
+                    "val/MIFID": mifid,
+                    "val/FID": fid,
+                },
+                prog_bar=True,
+                sync_dist=True,
+            )
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def configure_optimizers(self):
         opt_g = optim.Adam(self.netG.parameters(),

@@ -19,11 +19,13 @@
         "configs/data/hsi_dermoscopy_croppedv2.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
-        "configs/model/hsi_wgan.yaml",
+        "configs/model/hsi_fastgan.yaml",
+        // "configs/model/hsi_wgan.yaml",
         // "configs/model/hsi_seg.yaml",
         // "--trainer.logger.name",
         // "exp1"
       ],
+      "justMyCode": false,
       "console": "integratedTerminal",
       "env": {
         "DEBUG": "0" // run normally (no remote wait)
