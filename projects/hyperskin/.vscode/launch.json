@@ -16,10 +16,10 @@
       "args": [
         "fit",
         "-c",
-        "configs/data/hsi_dermoscopy_cropped_aug.yaml",
+        "configs/data/hsi_dermoscopy_croppedv2.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
-        "configs/model/hsi_classifier_densenet201_best.yaml",
+        "configs/model/hsi_wgan.yaml",
         // "configs/model/hsi_seg.yaml",
         // "--trainer.logger.name",
         // "exp1"
