@@ -256,6 +256,22 @@ class image(base):
             )
         else:
             self.cri_canny = None
+            
+        # patch variance loss
+        if train_opt.get("patchvariance_combined_opt"):
+            self.cri_combined_patchvariance = build_loss(train_opt["patchvariance_combined_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_combined_patchvariance = None
+        
+        # patch variance loss
+        if train_opt.get("faceaware_combined_opt"):
+            self.cri_combined_faceaware = build_loss(train_opt["faceaware_combined_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_combined_faceaware = None
         
         # patch variance loss
         if train_opt.get("patchvariance_opt"):
@@ -453,8 +469,14 @@ class image(base):
     @torch.no_grad()
     def feed_data(self, data: dict[str, str | Tensor]) -> None:
         self.lq = data["lq"].to(self.device, non_blocking=True)  # type: ignore[union-attr]
+        self.gt_file_path = None
+        self.top_gt = None
+        self.left_gt = None
         if "gt" in data:
             self.gt = data["gt"].to(self.device, non_blocking=True)  # type: ignore[union-attr]
+            self.gt_file_path = data["gt_path"]
+            self.top_gt = data["top_gt"]
+            self.left_gt = data["left_gt"]
 
         # augmentation
         if self.is_train and self.aug is not None:
@@ -608,11 +630,21 @@ class image(base):
                 l_g_canny = self.cri_canny(self.output, self.gt)
                 l_g_total += l_g_canny
                 loss_dict["l_g_canny"] = l_g_canny
-            # patch variance loss
+            # mse patch variance loss
             if self.cri_patchvariance:
                 l_g_patchvariance = self.cri_patchvariance(self.output, self.gt)
                 l_g_total += l_g_patchvariance
                 loss_dict["l_g_patchvariance"] = l_g_patchvariance
+            # mse charb ssim combined face aware loss
+            if self.cri_combined_faceaware:
+                l_g_combined_faceaware = self.cri_combined_faceaware(self.output, self.gt,self.gt_file_path,self.top_gt,self.left_gt,self.patch_size,self.scale)
+                l_g_total += l_g_combined_faceaware
+                loss_dict["l_g_combined_faceaware"] = l_g_combined_faceaware
+            # mse charb ssim combined patch variance loss
+            if self.cri_combined_patchvariance:
+                l_g_combined_patchvariance = self.cri_combined_patchvariance(self.output, self.gt)
+                l_g_total += l_g_combined_patchvariance
+                loss_dict["l_g_combined_patchvariance"] = l_g_combined_patchvariance
             # dists loss
             if self.cri_dists:
                 l_g_dists = self.cri_dists(self.output, self.gt)
