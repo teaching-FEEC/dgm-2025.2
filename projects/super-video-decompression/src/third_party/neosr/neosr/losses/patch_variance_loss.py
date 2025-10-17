@@ -14,7 +14,7 @@ where patches with high variance have more weight and low variance less weight
 def patch_variance_loss_fn(pred, target, patch_size=20, alpha=430, loss_weight: float = 1.0):
     B, C, H, W = target.shape
     unfold = torch.nn.Unfold(kernel_size=patch_size, stride=patch_size)
-    fold = torch.nn.Fold(output_size=(H, W), kernel_size=patch_size, stride=patch_size)
+    #fold = torch.nn.Fold(output_size=(H, W), kernel_size=patch_size, stride=patch_size)
 
     # Flatten patches: [B, C*patch_size*patch_size, num_patches]
     pred_patches = unfold(pred)

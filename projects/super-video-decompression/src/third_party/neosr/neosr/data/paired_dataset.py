@@ -148,12 +148,17 @@ class paired(data.Dataset):
             rot = self.opt.get("use_rot", True)
 
             # random crop
-            img_gt, img_lq = paired_random_crop(
+            img_gt, img_lq, top_gt, left_gt = paired_random_crop(
                 img_gt, img_lq, patch_size, scale, gt_path
             )
             # flip, rotation
             img_gt, img_lq = basic_augment([img_gt, img_lq], hflip=flip, rotation=rot)  # type: ignore[misc,assignment]
-
+        else:
+            # ---- For validation/testing, use full images ----
+            #_, _, H, W = img_gt.shape  # assume tensors [B,C,H,W] or single [C,H,W]
+            #patch_size = None
+            top_gt = Tensor([0])
+            left_gt = Tensor([0])
         # crop the unmatched GT images during validation or testing
         if self.opt["phase"] != "train":
             img_gt = img_gt[0 : img_lq.shape[0] * scale, 0 : img_lq.shape[1] * scale, :]  # type: ignore[index,union-attr,call-overload]
@@ -167,5 +172,5 @@ class paired(data.Dataset):
         if self.mean is not None or self.std is not None:
             normalize(img_lq, self.mean, self.std, inplace=True)  # type: ignore[reportArgumentType]
             normalize(img_gt, self.mean, self.std, inplace=True)  # type: ignore[reportArgumentType]
-
-        return {"lq": img_lq, "gt": img_gt, "lq_path": lq_path, "gt_path": gt_path}
+        #print("SHAPES:::",img_gt.shape, img_lq.shape)
+        return {"lq": img_lq, "gt": img_gt, "lq_path": lq_path, "gt_path": gt_path, "top_gt": top_gt, "left_gt": left_gt}

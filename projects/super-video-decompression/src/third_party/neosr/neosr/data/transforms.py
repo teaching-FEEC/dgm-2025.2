@@ -128,7 +128,7 @@ def paired_random_crop(
         img_gts = img_gts[0]
     if len(img_lqs) == 1:
         img_lqs = img_lqs[0]
-    return img_gts, img_lqs
+    return img_gts, img_lqs, top_gt, left_gt
 
 
 def basic_augment(

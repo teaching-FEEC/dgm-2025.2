@@ -252,7 +252,7 @@ class otf(image):  # type: ignore[reportGeneralTypeIssues]
 
             # random crop
             patch_size = self.opt["datasets"]["train"].get("patch_size")
-            (self.gt), self.lq = paired_random_crop(  # type: ignore[reportAttributeAccessIssue,assignment]
+            (self.gt), self.lq, top_gt, left_gt = paired_random_crop(  # type: ignore[reportAttributeAccessIssue,assignment]
                 [self.gt], self.lq, patch_size, self.opt["scale"]
             )
 
