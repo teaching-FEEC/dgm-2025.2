@@ -3,11 +3,12 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 import re
+import time  # <--- Added this import
 
 XML_PATH = "rope_chain.xml"
 FORCE_MAG = 2.0
 FORCE_STEPS = 100
-NUM_TRANSITIONS = 500
+NUM_TRANSITIONS = 3000
 SETTLE_TIME = 5.0
 USE_VIEWER = False           # set True if you want to watch
 
@@ -56,10 +57,16 @@ def main():
     for _ in range(int(SETTLE_TIME / m.opt.timestep)):
         step()
 
+    # <--- Added global start time
+    global_start_time = time.perf_counter()
+
     if USE_VIEWER:
         with mujoco.viewer.launch_passive(m, d) as viewer:
             for i in range(NUM_TRANSITIONS):
-                print(i)
+                # <--- Added transition start time
+                transition_start_time = time.perf_counter()
+                
+                # print(i) # <--- Replaced this
                 s_before = np.array(d.xpos[link_ids, :], dtype=np.float64)
                 states[i] = s_before
 
@@ -78,9 +85,20 @@ def main():
                 actions[i, :3] = offset.astype(np.float32)
                 actions[i,  3] = float(li)
                 link_index[i]  = li
+
+                # <--- Added timing calculations and print
+                current_time = time.perf_counter()
+                transition_time = current_time - transition_start_time
+                total_time = current_time - global_start_time
+                print(f"Transition {i+1}/{NUM_TRANSITIONS} | "
+                      f"Transition Time: {transition_time:.4f}s | "
+                      f"Total Runtime: {total_time:.2f}s")
     else:
         for i in range(NUM_TRANSITIONS):
-            print(i)
+            # <--- Added transition start time
+            transition_start_time = time.perf_counter()
+            
+            # print(i) # <--- Replaced this
             s_before = np.array(d.xpos[link_ids, :], dtype=np.float64)
             states[i] = s_before
 
@@ -100,8 +118,16 @@ def main():
             actions[i,  3] = float(li)
             link_index[i]  = li
 
+            # <--- Added timing calculations and print
+            current_time = time.perf_counter()
+            transition_time = current_time - transition_start_time
+            total_time = current_time - global_start_time
+            print(f"Transition {i+1}/{NUM_TRANSITIONS} | "
+                  f"Transition Time: {transition_time:.4f}s | "
+                  f"Total Runtime: {total_time:.2f}s")
+
     np.savez_compressed(
-        "rope_states_actions.npz",
+        "3000_rope_states_actions.npz",
         states=states,                 # (N, L, 3)
         actions=actions,               # (N, 4) -> [dx,dy,dz, link_id_as_float]
         link_index=link_index,         # (N,)   -> same link id, as int
