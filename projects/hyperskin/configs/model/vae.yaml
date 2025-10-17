@@ -3,8 +3,8 @@ model:
   init_args:
     img_channels: 16
     img_size: 256
-    latent_dim: 20
-    lr: 0.0002
+    latent_dim: 64
+    lr: 0.002
     betas: [0.5, 0.999]
     weight_decay: 1e-5
     kld_weight: 1e-2
@@ -12,7 +12,7 @@ model:
 
 trainer:
   log_every_n_steps: 10
-  max_epochs: 100
+  max_epochs: 1000
 
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
