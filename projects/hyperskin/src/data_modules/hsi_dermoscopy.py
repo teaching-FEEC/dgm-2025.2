@@ -885,7 +885,7 @@ if __name__ == "__main__":
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
         },
-        google_drive_id="1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx",
+        google_drive_id="1557yQpqO3baKVSqstuKLjr31NuC2eqcO",
         # synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
     )
     data_module.prepare_data()
