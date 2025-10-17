@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 import torch
 import torchaudio
+import scipy.io.wavfile as wavfile
+import numpy as np
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reconstruir áudio a partir de um espectrograma Log-Mel usando Griffin-Lim.")
@@ -65,6 +67,17 @@ if waveform_reconstructed.dim() == 1:
 	waveform_reconstructed = waveform_reconstructed.unsqueeze(0)
 
 output_audio_path = os.path.join(output_dir, base_name + "_reconstruido.wav")
-torchaudio.save(output_audio_path, waveform_reconstructed, sr)
+
+# Converte para numpy e salva com scipy (evita problema do torchcodec)
+waveform_np = waveform_reconstructed.squeeze(0).cpu().numpy()
+
+# Normaliza para int16
+if np.abs(waveform_np).max() > 0:
+	waveform_np = waveform_np / np.abs(waveform_np).max()
+waveform_int16 = np.int16(waveform_np * 32767)
+
+wavfile.write(output_audio_path, sr, waveform_int16)
 
 print(f"Áudio reconstruído salvo em: {output_audio_path}")
+print(f"Taxa de amostragem: {sr} Hz")
+print(f"Duração: {len(waveform_int16) / sr:.2f} segundos")
