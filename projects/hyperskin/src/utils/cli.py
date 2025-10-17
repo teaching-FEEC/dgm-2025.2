@@ -40,6 +40,17 @@ class WandbSaveConfigCallback(SaveConfigCallback):
             if hasattr(data_args, "balanced_sampling") and data_args.balanced_sampling:
                 tags.append("balanced_sampling")
 
+            if hasattr(data_args, "infinite_train") and data_args.infinite_train:
+                tags.append("infinite_train")
+
+            if hasattr(data_args, "allowed_labels") and data_args.allowed_labels:
+                labels = data_args.allowed_labels
+                if isinstance(labels, list):
+                    for label in labels:
+                        tags.append(label.lower())
+                elif isinstance(labels, str):
+                    tags.append(labels.lower())
+
             # Task
             if hasattr(data_args, "task"):
                 task = data_args.task.lower()
@@ -224,7 +235,7 @@ class WandbSaveConfigCallback(SaveConfigCallback):
 class CustomLightningCLI(LightningCLI):
     def __init__(
         self,
-        save_config_callback: Optional[type[SaveConfigCallback]] = WandbSaveConfigCallback,
+        save_config_callback: Optional[type[SaveConfigCallback]] = None,
         parser_kwargs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
@@ -233,6 +244,9 @@ class CustomLightningCLI(LightningCLI):
             for sub_command in ["fit", "validate", "test", "predict"]
         }
         new_parser_kwargs.update(parser_kwargs or {})
+
+        if os.environ.get("WANDB_MODE", "online") != "disabled" and save_config_callback is None:
+                save_config_callback = WandbSaveConfigCallback
 
         super().__init__(save_config_callback=save_config_callback, parser_kwargs=new_parser_kwargs, **kwargs)
 

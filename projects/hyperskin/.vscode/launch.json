@@ -32,6 +32,31 @@
       }
     },
     {
+      "name": "Debug  Predict",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "predict",
+        "-c",
+        "configs/data/hsi_dermoscopy_croppedv2.yaml",
+        // "configs/data/hsi_dermoscopy_seg.yaml",
+        "-c",
+        "configs/model/hsi_fastgan.yaml",
+        "--trainer.logger", "False",
+        // "configs/model/hsi_wgan.yaml",
+        // "configs/model/hsi_seg.yaml",
+        // "--trainer.logger.name",
+        // "exp1"
+      ],
+      "justMyCode": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0", // run normally (no remote wait)
+        "WANDB_MODE": "disabled"
+      }
+    },
+    {
       "name": "Debug Fast Training (Fit)",
       "type": "debugpy",
       "request": "launch",

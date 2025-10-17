@@ -9,7 +9,7 @@ data:
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy_croppedv2_256
-    google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
+    google_drive_id: 1EnDjh_tNlVDNUyPuFzyZ_rJNOzTcLeB3
     balanced_sampling: False
     infinite_train: True
     global_max: [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,

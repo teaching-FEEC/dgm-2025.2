@@ -193,12 +193,16 @@ class Generator(nn.Module):
         feat_256 = self.se_256(feat_16, self.feat_256(feat_128))
 
         if self.im_size == 256:
-            return [self.to_big(feat_256), self.to_128(feat_128)]
+            im_256 = torch.tanh(self.to_big(feat_256))
+            im_128 = torch.tanh(self.to_128(feat_128))
+            return [im_256, im_128]
 
         feat_512 = self.se_512(feat_32, self.feat_512(feat_256))
 
         if self.im_size == 512:
-            return [self.to_big(feat_512), self.to_128(feat_128)]
+            im_512 = torch.tanh(self.to_big(feat_512))
+            im_128 = torch.tanh(self.to_128(feat_128))
+            return [im_512, im_128]
 
         feat_1024 = self.feat_1024(feat_512)
 

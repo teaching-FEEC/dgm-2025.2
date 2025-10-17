@@ -327,7 +327,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
         # Assign test dataset
-        if stage == "test" or stage is None and self.data_test is None:
+        if stage in ["test", "predict"] or stage is None and self.data_test is None:
             self.data_test = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
@@ -400,6 +400,19 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             pin_memory=self.hparams.pin_memory,
             shuffle=False,
         )
+
+    def predict_dataloader(self):
+        if self.hparams.task == HSIDermoscopyTask.GENERATION:
+            dummy_dataset = torch.utils.data.TensorDataset(torch.zeros(1, 1))
+            return DataLoader(
+                dummy_dataset,
+                batch_size=1,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                shuffle=False,
+            )
+        else:
+            return self.test_dataloader()
 
     def all_dataloader(self):
         full_dataset = HSIDermoscopyDataset(

@@ -1,3 +1,5 @@
+from git import Optional
+import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -9,6 +11,7 @@ import pytorch_lightning as pl
 import warnings
 
 import torchvision
+from tqdm import tqdm
 
 from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
@@ -27,6 +30,7 @@ from torchmetrics.image import (
 )
 from torchmetrics.image.mifid import MemorizationInformedFrechetInceptionDistance
 from torchmetrics.image.fid import FrechetInceptionDistance
+from scipy.io import savemat
 
 warnings.filterwarnings('ignore')
 
@@ -59,8 +63,14 @@ class FastGANModule(pl.LightningModule):
                  nbeta1: float = "0.5",
                  nbeta2: float = 0.999,
                  log_images_on_step_n: int = 1,
+                 log_reconstructions: bool = False,
                  val_check_interval: int = 500,
                  num_val_batches: int = 8,
+                 pred_output_dir: str = "generated_samples",
+                 pred_num_samples: int = 100,
+                 pred_hyperspectral: bool = True,
+                 pred_global_min: Optional[float | list[float]] = None,
+                 pred_global_max: Optional[float | list[float]] = None,
                  ):
         super().__init__()
         self.save_hyperparameters()
@@ -189,7 +199,7 @@ class FastGANModule(pl.LightningModule):
         self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
 
         # Store some visuals
-        if batch_idx == 0:
+        if ((self.global_step + 1) // batch_size) % self.hparams.log_images_on_step_n == 0:
             num_images = min(8, batch_size)
             self.last_real = real_image[:num_images].detach().cpu()
             self.last_rec = (rec_all[:num_images].detach().cpu(), rec_small[:num_images].detach().cpu(),
@@ -217,7 +227,7 @@ class FastGANModule(pl.LightningModule):
                 "generated_samples": wandb.Image(sample_grid)
             })
 
-            if self.last_real is not None:
+            if self.last_real is not None and self.last_rec is not None and self.hparam.log_reconstructions:
                 rec_all, rec_small, rec_part = self.last_rec
                 rec = torch.cat(
                     [F.interpolate(self.last_real, 128), rec_all, rec_small, rec_part]
@@ -232,14 +242,14 @@ class FastGANModule(pl.LightningModule):
                     "reconstructions": wandb.Image(rec_grid)
                 })
 
-            self.last_real = None
-            self.last_rec = None
+                self.last_real = None
+                self.last_rec = None
 
             load_params(self.netG, backup_para)
             self.netG.train()
 
     def _run_validation(self):
-        """Run validation metrics on multiple batches from val_dataloader 
+        """Run validation metrics on multiple batches from val_dataloader
         using rolling sums for efficiency."""
         self.mifid.reset()
         self.fid.reset()
@@ -282,10 +292,29 @@ class FastGANModule(pl.LightningModule):
                 self.fid.update(real_image, real=True)
 
                 # Rolling sum updates
-                sam_sum += self.sam(fake_norm, real_norm).item()
-                rase_sum += self.rase(fake_norm, real_norm).item()
-                ssim_sum += self.ssim(fake_norm, real_norm).item()
-                tv_sum += self.tv(fake_norm).item()
+                eps = 1e-8
+
+                # Clamp inputs to avoid negative or zero spectral values
+                fake_norm = fake_norm.clamp(eps, 1.0)
+                real_norm = real_norm.clamp(eps, 1.0)
+
+                # Compute SAM safely (avoid NaNs)
+                try:
+                    sam_val = self.sam(fake_norm, real_norm)
+                    if torch.isnan(sam_val):
+                        sam_val = torch.tensor(0.0, device=self.device)
+                except Exception:
+                    sam_val = torch.tensor(0.0, device=self.device)
+
+                # Use nan_to_num fallback for safety in all metrics
+                rase_val = torch.nan_to_num(self.rase(fake_norm, real_norm), nan=0.0)
+                ssim_val = torch.nan_to_num(self.ssim(fake_norm, real_norm), nan=0.0)
+                tv_val = torch.nan_to_num(self.tv(fake_norm), nan=0.0)
+
+                sam_sum += sam_val.item()
+                rase_sum += rase_val.item()
+                ssim_sum += ssim_val.item()
+                tv_sum += tv_val.item()
                 count += 1
 
             # Compute overall metrics
@@ -313,6 +342,80 @@ class FastGANModule(pl.LightningModule):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def predict_step(
+        self,
+        batch,
+        batch_idx
+    ):
+        """
+        Generate and save new samples.
+        Uses datamodule.global_min/max if provided,
+        else falls back to self.hparams.global_min/max if available.
+        """
+
+        os.makedirs(self.hparams.pred_output_dir, exist_ok=True)
+        self.netG.eval()
+
+        # Load EMA parameters temporarily
+        backup_para = copy_G_params(self.netG)
+        load_params(self.netG, self.avg_param_G)
+
+        device = self.device
+        nz = self.hparams.nz
+
+        # --- Get normalization limits ---
+        gmin = gmax = None
+
+        if hasattr(self.hparams, "pred_global_min"):
+            gmin = getattr(self.hparams, "pred_global_min", None)
+            gmax = getattr(self.hparams, "pred_global_max", None)
+
+        with torch.no_grad():
+            for i in tqdm(range(self.hparams.pred_num_samples), desc="Generating samples"):
+                noise = torch.randn(1, nz, device=device)
+                fake_imgs = self(noise)
+                fake = fake_imgs[0].float().cpu()
+
+                if self.hparams.pred_hyperspectral:
+                    # ---------------------
+                    # Hyperspectral (denormalized cube)
+                    # ---------------------
+                    # fake_denorm = (fake + 1) / 2  # Convert [-1, 1] → [0, 1]
+                    fake_denorm = fake.clamp(-1, 1).add(1).div(2)  # Robust conversion [-1, 1] → [0, 1]
+
+                    if gmin is not None and gmax is not None:
+                        gmin_arr = np.array(gmin)
+                        gmax_arr = np.array(gmax)
+
+                        # Scalar or per-band
+                        if gmin_arr.size == 1:
+                            fake_denorm = fake_denorm * (gmax_arr - gmin_arr) + gmin_arr
+                        else:
+                            gmin_t = torch.tensor(gmin_arr).view(1, -1, 1, 1)
+                            gmax_t = torch.tensor(gmax_arr).view(1, -1, 1, 1)
+                            fake_denorm = fake_denorm * (gmax_t - gmin_t) + gmin_t
+
+                    fake_np = fake_denorm.squeeze().numpy()
+                    # reshape to (H, W, C)
+                    fake_np = np.transpose(fake_np, (1, 2, 0))
+                    mat_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.mat")
+                    savemat(mat_path, {"cube": fake_np})
+                else:
+                    # ---------------------
+                    # False RGB (mean spectra)
+                    # ---------------------
+                    fake_rgb = (fake + 1) / 2
+                    mean_band = fake_rgb.mean(dim=1, keepdim=True)
+                    rgb = mean_band.repeat(1, 3, 1, 1).clamp(0, 1)
+                    rgb_uint8 = (rgb * 255).byte()
+
+                    save_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.png")
+                    torchvision.utils.save_image(rgb_uint8 / 255.0, save_path)
+
+        # Restore generator after prediction
+        load_params(self.netG, backup_para)
+        self.netG.train()
+
     def configure_optimizers(self):
         opt_g = optim.Adam(self.netG.parameters(),
                            lr=self.hparams.nlr,
@@ -322,3 +425,11 @@ class FastGANModule(pl.LightningModule):
                            betas=(self.hparams.nbeta1, self.hparams.nbeta2))
         return [opt_g, opt_d]
 
+    def on_save_checkpoint(self, checkpoint):
+        checkpoint["avg_param_G"] = [p.clone().cpu() for p in self.avg_param_G]
+
+    def on_load_checkpoint(self, checkpoint):
+        if "avg_param_G" in checkpoint:
+            self.avg_param_G = [p.to(self.device) for p in checkpoint["avg_param_G"]]
+        else:
+            print("Warning: avg_param_G not found in checkpoint.")
