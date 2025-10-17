@@ -40,6 +40,17 @@ class WandbSaveConfigCallback(SaveConfigCallback):
             if hasattr(data_args, "balanced_sampling") and data_args.balanced_sampling:
                 tags.append("balanced_sampling")
 
+            if hasattr(data_args, "infinite_train") and data_args.infinite_train:
+                tags.append("infinite_train")
+
+            if hasattr(data_args, "allowed_labels") and data_args.allowed_labels:
+                labels = data_args.allowed_labels
+                if isinstance(labels, list):
+                    for label in labels:
+                        tags.append(label.lower())
+                elif isinstance(labels, str):
+                    tags.append(labels.lower())
+
             # Task
             if hasattr(data_args, "task"):
                 task = data_args.task.lower()
@@ -49,6 +60,9 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 elif "segmentation" in task:
                     run_name += "seg_"
                     tags.append("segmentation")
+                elif "generation" in task:
+                    run_name += "gen_"
+                    tags.append("generation")
 
                 if run_name:
                     first_underscore_index = task.find("_")
@@ -65,6 +79,8 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                     "CenterCrop",
                     "Resize",
                     "Equalize",
+                    "SmallestMaxSize",
+                    "LongestMaxSize",
                 ]
                 has_augmentation = any(
                     transform.get("class_path") not in not_augs for transform in transforms
@@ -72,11 +88,16 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 if has_augmentation:
                     run_name += "aug_"
                     tags.append("augmented")
-                
+
             # Synthetic data
             if hasattr(data_args, "synthetic_data_dir") and data_args.synthetic_data_dir is not None:
                 run_name += "synth_"
                 tags.append("synthetic_data")
+
+        if hasattr(self.config, "model") and self.config.model is not None and \
+                "class_path" in self.config.model and "fastgan" in self.config.model["class_path"].lower():
+            run_name += "fastgan_"
+            tags.append("fastgan")
 
         # Handle model-related tags
         if hasattr(self.config.model, "init_args"):
@@ -112,7 +133,11 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                     run_name += "fb_"
                     tags.append("frozen_backbone")
 
-            # Optimizer
+            if hasattr(model_args, "nz"):
+                nz = model_args.nz
+                tags.append(f"z{nz}")
+
+        # Optimizer
         if hasattr(self.config, "optimizer") and self.config.optimizer is not None and \
                 "class_path" in self.config.optimizer:
             optimizer = self.config.optimizer["class_path"]
@@ -210,7 +235,7 @@ class WandbSaveConfigCallback(SaveConfigCallback):
 class CustomLightningCLI(LightningCLI):
     def __init__(
         self,
-        save_config_callback: Optional[type[SaveConfigCallback]] = WandbSaveConfigCallback,
+        save_config_callback: Optional[type[SaveConfigCallback]] = None,
         parser_kwargs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
@@ -219,6 +244,9 @@ class CustomLightningCLI(LightningCLI):
             for sub_command in ["fit", "validate", "test", "predict"]
         }
         new_parser_kwargs.update(parser_kwargs or {})
+
+        if os.environ.get("WANDB_MODE", "online") != "disabled" and save_config_callback is None:
+                save_config_callback = WandbSaveConfigCallback
 
         super().__init__(save_config_callback=save_config_callback, parser_kwargs=new_parser_kwargs, **kwargs)
 
