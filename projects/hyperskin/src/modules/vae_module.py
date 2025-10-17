@@ -8,7 +8,7 @@ from torch.optim import Adam
 from torchinfo import summary
 from torchvision.utils import make_grid
 from torchmetrics import MeanMetric, MinMetric, MaxMetric
-from src.models.vae.vae_model import Encoder, Decoder
+from src.models.vae.vae_model import Encoder, Decoder, GenericDecoder, GenericEncoder
 from src.metrics.synthesis_metrics import SynthMetrics
 
 class VAE(pl.LightningModule):
@@ -22,13 +22,15 @@ class VAE(pl.LightningModule):
         weight_decay: float = 1e-5,
         kld_weight: float = 1e-2,
         metrics: list = ['ssim', 'psnr', 'sam'],
+        block:str ='conv',
     ):
         super().__init__()
         self.save_hyperparameters()  # keep YAML-compatible
 
-        # --- networks (pure construction; no I/O, no summaries) ---
-        self.encoder = Encoder(img_channels=img_channels, img_size=img_size, latent_dim=latent_dim)
-        self.decoder = Decoder(img_channels=img_channels, img_size=img_size, latent_dim=latent_dim)
+        #self.encoder = Encoder(img_channels=img_channels, img_size=img_size, latent_dim=latent_dim)
+        #self.decoder = Decoder(img_channels=img_channels, img_size=img_size, latent_dim=latent_dim)
+        self.encoder = GenericEncoder((img_channels,img_size,img_size),latent_dim=latent_dim,block_type=block,model_type='vae')
+        self.decoder = GenericDecoder((img_channels,img_size,img_size),latent_dim=latent_dim,block_type=block,model_type='vae',final_activation='sigmoid')
 
         
         self.train_loss = MeanMetric()
