@@ -9,7 +9,7 @@ import random
 import pytorch_lightning as pl
 
 import warnings
-
+from skimage import filters, morphology
 import torchvision
 from tqdm import tqdm
 
@@ -28,7 +28,6 @@ from torchmetrics.image import (
     StructuralSimilarityIndexMeasure,
     TotalVariation
 )
-from torchmetrics.image.mifid import MemorizationInformedFrechetInceptionDistance
 from torchmetrics.image.fid import FrechetInceptionDistance
 from scipy.io import savemat
 
@@ -91,8 +90,6 @@ class FastGANModule(pl.LightningModule):
         self.percept = PerceptualLoss(model='net-lin', net='vgg', use_gpu=True, in_chans=nc)
 
         self.register_buffer("fixed_noise", torch.FloatTensor(8, self.hparams.nz).normal_(0, 1))
-        self.last_real = None
-        self.last_rec = None
 
         # Validation metrics
         self.sam = SpectralAngleMapper()
@@ -104,13 +101,54 @@ class FastGANModule(pl.LightningModule):
             normalize_input=False, in_chans=self.hparams.nc
         )
         self.inception_model.eval()
-        self.mifid = MemorizationInformedFrechetInceptionDistance(self.inception_model)
-        self.mifid.eval()
         self.fid = FrechetInceptionDistance(
             self.inception_model,
             input_img_size=(self.hparams.nc, self.hparams.im_size, self.hparams.im_size),
         )
         self.fid.eval()
+
+        self.real_spectra = None
+        self.fake_spectra = None
+        self.lesion_class_name = None
+
+    def setup(self, stage: str) -> None:
+        datamodule = self.trainer.datamodule
+
+        if stage == 'fit':
+            train_dataset = datamodule.data_train
+        elif stage == 'validate':
+            train_dataset = datamodule.data_val
+        elif stage == 'test' or stage == 'predict':
+            train_dataset = datamodule.data_test
+        else:
+            raise ValueError(f"Unknown stage: {stage}")
+
+        if isinstance(train_dataset, torch.utils.data.ConcatDataset):
+            base_dataset = train_dataset.datasets[0]
+        else:
+            base_dataset = train_dataset
+
+        if isinstance(base_dataset, torch.utils.data.Subset):
+            base_dataset = base_dataset.dataset
+
+        train_indices = datamodule.train_indices
+        train_labels = np.array([base_dataset.labels[i] for i in train_indices])
+        unique_labels = np.unique(train_labels)
+
+        if len(unique_labels) == 1:
+            lesion_class_int = unique_labels[0]
+            inverse_labels_map = {v: k for k, v in base_dataset.labels_map.items()}
+            self.lesion_class_name = inverse_labels_map[lesion_class_int]
+
+        # Initialize spectra storage
+        self.real_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
+        self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
+
+        # get global min/max from datamodule if available
+        if hasattr(datamodule, "global_min") and hasattr(datamodule, "global_max") and \
+            (datamodule.global_min is not None) and (datamodule.global_max is not None):
+            self.hparams.pred_global_min = datamodule.global_min
+            self.hparams.pred_global_max = datamodule.global_max
 
     def forward(self, z):
         return self.netG(z)
@@ -198,24 +236,16 @@ class FastGANModule(pl.LightningModule):
         self.log("train/d_loss_total", d_loss_total, on_step=True, on_epoch=False)
         self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
 
-        # Store some visuals
-        if ((self.global_step + 1) // batch_size) % self.hparams.log_images_on_step_n == 0:
-            num_images = min(8, batch_size)
-            self.last_real = real_image[:num_images].detach().cpu()
-            self.last_rec = (rec_all[:num_images].detach().cpu(), rec_small[:num_images].detach().cpu(),
-                             rec_part[:num_images].detach().cpu())
-
     def on_train_batch_end(self, outputs, batch, batch_idx):
         batch_size = len(batch)
+        backup_para = copy_G_params(self.netG)
+        load_params(self.netG, self.avg_param_G)
+        self.netG.eval()
 
         if ((self.global_step + 1) // batch_size) % self.hparams.val_check_interval == 0:
             self._run_validation()
 
         if ((self.global_step + 1) // batch_size) % self.hparams.log_images_on_step_n == 0:
-            backup_para = copy_G_params(self.netG)
-            load_params(self.netG, self.avg_param_G)
-            self.netG.eval()
-
             sample = self(self.fixed_noise)[0].add(1).mul(0.5)
             if self.hparams.nc > 3:
                 sample = sample.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
@@ -227,31 +257,12 @@ class FastGANModule(pl.LightningModule):
                 "generated_samples": wandb.Image(sample_grid)
             })
 
-            if self.last_real is not None and self.last_rec is not None and self.hparam.log_reconstructions:
-                rec_all, rec_small, rec_part = self.last_rec
-                rec = torch.cat(
-                    [F.interpolate(self.last_real, 128), rec_all, rec_small, rec_part]
-                ).add(1).mul(0.5)
-                if self.hparams.nc > 3:
-                    rec = rec.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
-                rec = rec.clamp(0, 1)
-
-                # Create and log reconstruction grid
-                rec_grid = torchvision.utils.make_grid(rec, nrow=4).detach().cpu()
-                self.logger.experiment.log({
-                    "reconstructions": wandb.Image(rec_grid)
-                })
-
-                self.last_real = None
-                self.last_rec = None
-
-            load_params(self.netG, backup_para)
-            self.netG.train()
+        load_params(self.netG, backup_para)
+        self.netG.train()
 
     def _run_validation(self):
         """Run validation metrics on multiple batches from val_dataloader
         using rolling sums for efficiency."""
-        self.mifid.reset()
         self.fid.reset()
         self.sam.reset()
         self.rase.reset()
@@ -286,8 +297,6 @@ class FastGANModule(pl.LightningModule):
                 real_norm = real_norm.clamp(0, 1)
 
                 # Update metrics that need all pairs (cumulative, no reduction)
-                self.mifid.update(fake, real=False)
-                self.mifid.update(real_image, real=True)
                 self.fid.update(fake, real=False)
                 self.fid.update(real_image, real=True)
 
@@ -295,21 +304,25 @@ class FastGANModule(pl.LightningModule):
                 eps = 1e-8
 
                 # Clamp inputs to avoid negative or zero spectral values
-                fake_norm = fake_norm.clamp(eps, 1.0)
-                real_norm = real_norm.clamp(eps, 1.0)
+                fake_norm_clamped = fake_norm.clamp(eps, 1.0)
+                real_norm_clamped = real_norm.clamp(eps, 1.0)
 
                 # Compute SAM safely (avoid NaNs)
                 try:
-                    sam_val = self.sam(fake_norm, real_norm)
+                    sam_val = self.sam(fake_norm_clamped, real_norm_clamped)
                     if torch.isnan(sam_val):
                         sam_val = torch.tensor(0.0, device=self.device)
                 except Exception:
                     sam_val = torch.tensor(0.0, device=self.device)
 
                 # Use nan_to_num fallback for safety in all metrics
-                rase_val = torch.nan_to_num(self.rase(fake_norm, real_norm), nan=0.0)
-                ssim_val = torch.nan_to_num(self.ssim(fake_norm, real_norm), nan=0.0)
-                tv_val = torch.nan_to_num(self.tv(fake_norm), nan=0.0)
+                rase_val = torch.nan_to_num(
+                    self.rase(fake_norm_clamped, real_norm_clamped), nan=0.0
+                )
+                ssim_val = torch.nan_to_num(
+                    self.ssim(fake_norm_clamped, real_norm_clamped), nan=0.0
+                )
+                tv_val = torch.nan_to_num(self.tv(fake_norm_clamped), nan=0.0)
 
                 sam_sum += sam_val.item()
                 rase_sum += rase_val.item()
@@ -317,13 +330,16 @@ class FastGANModule(pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
+                # --- Compute spectra for this batch ---
+                if self.lesion_class_name is not None:
+                    self.compute_spectra_statistics(real_norm_clamped, fake_norm_clamped)
+
             # Compute overall metrics
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
             mean_ssim = ssim_sum / max(count, 1)
             mean_tv = tv_sum / max(count, 1)
 
-            mifid = self.mifid.compute()
             fid = self.fid.compute()
 
             self.log_dict(
@@ -332,15 +348,164 @@ class FastGANModule(pl.LightningModule):
                     "val/RASE": mean_rase,
                     "val/SSIM": mean_ssim,
                     "val/TV": mean_tv,
-                    "val/MIFID": mifid,
                     "val/FID": fid,
                 },
                 prog_bar=True,
                 sync_dist=True,
             )
 
+            # --- Plot mean spectra ---
+            if self.lesion_class_name is not None and (self.real_spectra or self.fake_spectra):
+                self._plot_mean_spectra()
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+
+    def compute_spectra_statistics(self, real_norm, fake_norm):
+        for img, spectra_dict in [
+            (real_norm, self.real_spectra),
+            (fake_norm, self.fake_spectra),
+        ]:
+            for b in range(img.size(0)):
+                # Convert to numpy: (C, H, W) -> (H, W, C)
+                image_np = img[b].cpu().numpy().transpose(1, 2, 0)
+
+                # Compute mean across spectral bands for thresholding
+                mean_image = image_np.mean(axis=-1)
+
+                # Otsu thresholding to separate lesion from background
+                try:
+                    otsu_thresh = filters.threshold_otsu(mean_image)
+                    binary_mask = mean_image < (otsu_thresh * 1)
+
+                    # Extract lesion spectrum (pixels inside mask)
+                    if np.any(binary_mask):
+                        spectrum = image_np[binary_mask].mean(axis=0)
+                        spectra_dict[self.lesion_class_name].append(spectrum)
+
+                    # Extract normal skin spectrum (pixels outside mask)
+                    normal_skin_mask = ~binary_mask
+                    if np.any(normal_skin_mask):
+                        normal_spectrum = image_np[normal_skin_mask].mean(axis=0)
+                        spectra_dict["normal_skin"].append(normal_spectrum)
+                except Exception:
+                    # Skip if Otsu fails (e.g., uniform image)
+                    continue
+
+
+    def _plot_mean_spectra(self):
+        """
+        Plot mean spectra comparing real vs synthetic data.
+        Creates separate plots for normal_skin and lesion class.
+        """
+        import matplotlib.pyplot as plt
+
+        labels = ["normal_skin", self.lesion_class_name]
+
+        # Compute statistics
+        real_stats = {}
+        fake_stats = {}
+
+        for label_name in labels:
+            if self.real_spectra.get(label_name):
+                arr = np.array(self.real_spectra[label_name])
+                real_stats[label_name] = {
+                    "mean": np.mean(arr, axis=0),
+                    "std": np.std(arr, axis=0),
+                }
+
+            if self.fake_spectra.get(label_name):
+                arr = np.array(self.fake_spectra[label_name])
+                fake_stats[label_name] = {
+                    "mean": np.mean(arr, axis=0),
+                    "std": np.std(arr, axis=0),
+                }
+
+        # Get number of bands
+        ref_stats = real_stats or fake_stats
+        ref_label = next(
+            (lbl for lbl in labels if ref_stats.get(lbl) is not None), None
+        )
+        if ref_label is None:
+            print("No stats available for plotting mean spectra")
+            return
+
+        n_bands = len(ref_stats[ref_label]["mean"])
+        bands = np.arange(1, n_bands + 1)
+
+        # Create subplots
+        fig, axes = plt.subplots(1, len(labels), figsize=(15, 5))
+        if len(labels) == 1:
+            axes = [axes]
+
+        for ax, lbl in zip(axes, labels):
+            rs = real_stats.get(lbl)
+            fs = fake_stats.get(lbl)
+
+            if rs is None and fs is None:
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"No data for {lbl}",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+                continue
+
+            # Plot real data
+            if rs is not None:
+                ax.plot(
+                    bands,
+                    rs["mean"],
+                    linestyle="-",
+                    linewidth=2.5,
+                    color="C0",
+                    label="Real",
+                )
+                ax.fill_between(
+                    bands,
+                    rs["mean"] - rs["std"],
+                    rs["mean"] + rs["std"],
+                    color="C0",
+                    alpha=0.15,
+                )
+
+            # Plot synthetic data
+            if fs is not None:
+                ax.plot(
+                    bands,
+                    fs["mean"],
+                    linestyle="--",
+                    linewidth=2.0,
+                    color="C3",
+                    label="Synthetic",
+                )
+                ax.fill_between(
+                    bands,
+                    fs["mean"] - fs["std"],
+                    fs["mean"] + fs["std"],
+                    color="C3",
+                    alpha=0.15,
+                )
+
+            ax.set_title(f"{lbl.replace('_', ' ').title()}")
+            ax.set_xlabel("Spectral Band")
+            ax.set_ylabel("Reflectance")
+            ax.legend()
+            ax.grid(True, alpha=0.25)
+
+        plt.suptitle(
+            "Mean Spectra Comparison: Real vs Synthetic",
+            fontsize=14,
+            y=1.02,
+        )
+        plt.tight_layout()
+
+        # Log to wandb
+        self.logger.experiment.log({"val/mean_spectra": wandb.Image(fig)})
+        plt.close(fig)
 
     def predict_step(
         self,
@@ -371,21 +536,25 @@ class FastGANModule(pl.LightningModule):
             gmax = getattr(self.hparams, "pred_global_max", None)
 
         with torch.no_grad():
+            noise = torch.randn(self.hparams.pred_num_samples, nz, device=device)
+            fake_imgs = self(noise)
+            fake = fake_imgs[0].float().cpu()
+
+            assert torch.min(fake) >= -1.0 and torch.max(fake) <= 1.0, \
+                "Generated images are out of expected range [-1, 1]"
+
             for i in tqdm(range(self.hparams.pred_num_samples), desc="Generating samples"):
-                noise = torch.randn(1, nz, device=device)
-                fake_imgs = self(noise)
-                fake = fake_imgs[0].float().cpu()
+                fake_img = fake[i : i + 1, :, :, :].to(device)
 
                 if self.hparams.pred_hyperspectral:
                     # ---------------------
                     # Hyperspectral (denormalized cube)
                     # ---------------------
-                    # fake_denorm = (fake + 1) / 2  # Convert [-1, 1] → [0, 1]
-                    fake_denorm = fake.clamp(-1, 1).add(1).div(2)  # Robust conversion [-1, 1] → [0, 1]
+                    fake_denorm = fake_img.add(1).div(2)
 
                     if gmin is not None and gmax is not None:
-                        gmin_arr = np.array(gmin)
-                        gmax_arr = np.array(gmax)
+                        gmin_arr = torch.tensor(gmin, device=device) if isinstance(gmin, list) else np.array(gmin)
+                        gmax_arr = torch.tensor(gmax, device=device) if isinstance(gmax, list) else np.array(gmax)
 
                         # Scalar or per-band
                         if gmin_arr.size == 1:
@@ -395,7 +564,7 @@ class FastGANModule(pl.LightningModule):
                             gmax_t = torch.tensor(gmax_arr).view(1, -1, 1, 1)
                             fake_denorm = fake_denorm * (gmax_t - gmin_t) + gmin_t
 
-                    fake_np = fake_denorm.squeeze().numpy()
+                    fake_np = fake_denorm.cpu().squeeze().numpy()
                     # reshape to (H, W, C)
                     fake_np = np.transpose(fake_np, (1, 2, 0))
                     mat_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.mat")

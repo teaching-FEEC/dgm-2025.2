@@ -9,23 +9,17 @@ model:
     nlr: 0.0002
     nbeta1: 0.5
     nbeta2: 0.999
-    log_images_on_step_n: 50
-    val_check_interval: 50
-    pred_global_max: [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
-                  0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
-                  1.4947973, 1.4737314, 1.6318618, 1.7226081]
-    pred_global_min: [0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
-                  0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
-                  0.01310135, 0.01476806, 0.01932094, 0.02020744]
+    log_images_on_step_n: 200
+    val_check_interval: 200
 seed_everything: 114514
 
-ckpt_path: logs/hypersynth/p9dz8o09/checkpoints/step=0-val_MIFID=104.0265.ckpt # dysplastic_nevi
-# ckpt_path: logs/hypersynth/ic81nq11/checkpoints/step=0-val_MIFID=94.2868_fixed.ckpt # melanoma
+# ckpt_path: logs/hypersynth/3113cnnm/checkpoints/step=0-val_FID=99.1142.ckpt # dysplastic_nevi
+# ckpt_path: logs/hypersynth/j7od0bbk/checkpoints/step=0-val_MIFID=114.7889.ckpt # melanoma
 
 trainer:
   # precision: 16-mixed
   max_epochs: -1
-  log_every_n_steps: 20
+  log_every_n_steps: 100
   max_steps: 100_000
   check_val_every_n_epoch:
 
@@ -51,14 +45,14 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
     - class_path: callbacks.FixedModelCheckpoint
       init_args:
-        filename: step={global_step}-val_MIFID={val/MIFID:.4f}
-        monitor: val/MIFID
+        filename: step={global_step}-val_FID={val/FID:.4f}
+        monitor: val/FID
         verbose: true
         save_last: true
         save_top_k: 1
         mode: min
         auto_insert_metric_name: false
-        every_n_train_steps: 200
+        every_n_train_steps: 600
     # # # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     # - class_path: EarlyStopping
     #   init_args:
