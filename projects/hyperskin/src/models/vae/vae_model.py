@@ -19,7 +19,6 @@ class Encoder(nn.Module):
     mean (mu) and log variance (log_var). These parameters parameterize the Gaussian
     distribution from which we can sample latent variables.
     """
-
     def __init__(
         self,
         img_channels: int,
