@@ -6,3 +6,4 @@ numpy==1.26.4
 soundfile==0.12.1
 tqdm>=4.65.0
 scipy>=1.11.0
+tensorboard>=2.12.0
