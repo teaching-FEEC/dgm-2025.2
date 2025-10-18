@@ -11,9 +11,9 @@ Principais scripts:
 ### Exemplos de uso
 
 ```bash
-python3 spectrogram/spectogram.py --ext mp3 --input-dir data/cv-corpus-21.0-delta-2025-03-14/pt/clips --output-dir data/spectrograms/
+python3 spectrogram/spectogram.py --ext mp3 --input-dir data/cv-corpus-21.0-delta-2025-03-14/pt/clips --output-dir data/raw_spectrograms/
 
-python3 spectrogram/pt2audio.py -i data/spectrograms -f data/spectrograms/common_voice_pt_41964522.pt -o spectrogram/reconstruido/ --gl-iters 64
+python3 spectrogram/pt2audio.py -i data/spectrograms -f common_voice_pt_41964522.pt -o spectrogram/reconstruido/ --gl-iters 64
 
-python3 spectrogram/pt2png.py --input-dir data/spectrograms --output-dir spectrograms/imgs/
+python3 spectrogram/pt2png.py --input-dir data/spectrograms --output-dir spectrogram/imgs/
 ```
