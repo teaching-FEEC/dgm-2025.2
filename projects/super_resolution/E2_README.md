@@ -1,5 +1,5 @@
 # `<Project Title in Portuguese>`
-# `<Image Super-Resolution with Generative Models>`
+# `<Project Title in English>`
 
 ## Presentation
 
@@ -7,11 +7,11 @@ This project originated in the context of the graduate course *IA376N - Generati
 offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).
 
 > Include name, RA, and specialization focus of each group member.  
-|Name  | RA | Specialization|
-|--|--|--|
-| Brendon Erick Euzébio Rus Peres  | 256130  | Computing Engineering |
-| Miguel Angelo Romanichen Suchodolak  | 178808  | Computing Engineering |
-| Núbia Sidene Almeida das Virgens  | 299001  | Computing Engineering |  
+> |Name  | RA | Specialization|
+> |--|--|--|
+> | Name1  | 123456  | Computer Engineering|
+> | Name2  | 123456  | Electrical Engineering|
+> | Name3  | 123456  | XXX|
 
 ## Abstract
 
@@ -73,4 +73,3 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 ## Bibliographic References
 > Indicate in this section the bibliographic references adopted in the project.
-
