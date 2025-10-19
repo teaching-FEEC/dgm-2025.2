@@ -139,7 +139,9 @@ def train_vq_tokenizer(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Treinar VQ Tokenizer para espectrogramas")
     parser.add_argument("--data-dir", "-d", type=Path, required=True, 
-                        help="Diretório com arquivos .pt de espectrograma")
+                        help="Diretório com arquivos .pt de espectrograma (TRAIN)")
+    parser.add_argument("--val-dir", type=Path, default=None,
+                        help="Diretório com arquivos .pt de validação (opcional)")
     parser.add_argument("--output-dir", "-o", type=Path, required=True, 
                         help="Diretório para salvar o modelo treinado")
     parser.add_argument("--patch-size", type=int, default=16, 
@@ -159,7 +161,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=1e-3, 
                         help="Taxa de aprendizado")
     parser.add_argument("--val-split", type=float, default=0.1, 
-                        help="Proporção dos dados para validação")
+                        help="Proporção dos dados para validação (usado se --val-dir não fornecido)")
     parser.add_argument("--device", type=str, default='cuda' if torch.cuda.is_available() else 'cpu', 
                         help="Dispositivo (cuda/cpu)")
     return parser.parse_args(argv)
@@ -171,38 +173,47 @@ if __name__ == "__main__":
     # Prepara diretórios
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Lista arquivos .pt
-    pt_files = [
+    # Lista arquivos .pt de treino
+    train_files = [
         os.path.join(args.data_dir, f) 
         for f in os.listdir(args.data_dir) 
         if f.endswith('.pt')
     ]
     
-    if len(pt_files) == 0:
+    if len(train_files) == 0:
         raise ValueError(f"Nenhum arquivo .pt encontrado em {args.data_dir}")
     
-    print(f"Encontrados {len(pt_files)} arquivos de espectrograma")
+    # Validação
+    if args.val_dir is not None:
+        # Usa diretório de validação separado
+        val_files = [
+            os.path.join(args.val_dir, f) 
+            for f in os.listdir(args.val_dir) 
+            if f.endswith('.pt')
+        ]
+        if len(val_files) == 0:
+            raise ValueError(f"Nenhum arquivo .pt encontrado em {args.val_dir}")
+        print(f"Encontrados {len(train_files)} arquivos de treino e {len(val_files)} de validação (diretórios separados)")
+    else:
+        # Faz split interno aleatório
+        print(f"Encontrados {len(train_files)} arquivos de espectrograma")
+        np.random.shuffle(train_files)
+        split_idx = int(len(train_files) * (1 - args.val_split))
+        val_files = train_files[split_idx:]
+        train_files = train_files[:split_idx]
+        print(f"Split interno: Train: {len(train_files)}, Val: {len(val_files)}")
     
-    # Split train/val
-    np.random.shuffle(pt_files)
-    split_idx = int(len(pt_files) * (1 - args.val_split))
-    train_files = pt_files[:split_idx]
-    val_files = pt_files[split_idx:]
+    print(f"Total - Train: {len(train_files)}, Val: {len(val_files)}")
     
-    print(f"Train: {len(train_files)}, Val: {len(val_files)}")
-    
-    # Tokenizador de patches
     patch_tokenizer = SpectrogramPatchTokenizer(
         patch_size=args.patch_size,
         stride=args.patch_size,  # Sem overlap
         normalize=True
     )
     
-    # Datasets
     train_dataset = SpectrogramPatchDataset(train_files, patch_tokenizer)
     val_dataset = SpectrogramPatchDataset(val_files, patch_tokenizer)
     
-    # DataLoaders
     train_loader = DataLoader(
         train_dataset, 
         batch_size=args.batch_size, 
@@ -216,7 +227,6 @@ if __name__ == "__main__":
         num_workers=0
     )
     
-    # Modelo
     model = SpectrogramVQTokenizer(
         n_mels=args.n_mels,
         patch_size=args.patch_size,
@@ -231,7 +241,6 @@ if __name__ == "__main__":
     print(f"  - Codebook size: {args.num_embeddings}")
     print(f"  - Device: {args.device}")
     
-    # Treina
     device = torch.device(args.device)
     trained_model = train_vq_tokenizer(
         model=model,
