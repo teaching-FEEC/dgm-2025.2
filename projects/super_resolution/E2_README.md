@@ -74,5 +74,24 @@ The presentation for the E2 delivery can be found here * ADD LINK
 > In the partial project submission (E2), it may contain information about which steps or how the project will be conducted until its completion.  
 > In the final project submission (E3), the conclusion is expected to outline, among other aspects, possibilities for the project’s continuation.  
 
-## Bibliographic References
-> Indicate in this section the bibliographic references adopted in the project.
+## Schedule  
+
+Delivery | Week | Activity |  
+|--------|------|----------|  
+E1       | 1–2  | Literature review, dataset preparation, and baseline setup (bicubic, ESRGAN). |  
+E2       | 3–4  | Initial implementation of the InvSR model. |  
+E2       | 5–6  | Model training and hyperparameter tuning. |  
+E2       | 7    | Intermediate evaluation and analysis of quantitative/qualitative results. |  
+E3       | 8    | Refinements (integration of additional techniques, e.g., perceptual loss). |  
+E3       | 9    | Final experiments, result consolidation, and comparison with benchmarks. |  
+E3       | 10   | Report writing and final presentation preparation. |  
+
+
+## Bibliographic References  
+- **Bjorn, M., et al.** - *"A Lightweight Image Super-Resolution Transformer Trained on Low-Resolution Images Only"* ([arXiv 2025](https://arxiv.org/))
+- **Miao, Y., et al.** - *"A general survey on medical image super-resolution via deep learning"* ([ScienceDirect 2025](https://www.sciencedirect.com/))
+- **Chen, Z., et al.** - *"NTIRE2025 Challenge on Image Super-Resolution (×4): Methods and Results"* ([arXiv 2025](https://arxiv.org/))
+- **Wang, W., et al.** - *"A lightweight large receptive field network LrfSR for image super resolution"* ([Nature 2025](https://www.nature.com/))
+- **Guo, Z., et al.** - *"Invertible Image Rescaling"* ([NeurIPS 2022](https://proceedings.neurips.cc/))
+- **Wang, X., et al.** - *"ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks"* ([ECCV 2018](https://arxiv.org/))
+- **Saharia, C., et al.** - *"Image Super-Resolution via Iterative Refinement"* ([IEEE TPAMI 2022](https://ieeexplore.ieee.org/))
