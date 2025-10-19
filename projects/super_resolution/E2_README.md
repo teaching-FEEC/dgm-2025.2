@@ -1,17 +1,20 @@
 # `<Project Title in Portuguese>`
-# `<Project Title in English>`
+# `<Image Super-Resolution with Generative Models>`
 
 ## Presentation
 
 This project originated in the context of the graduate course *IA376N - Generative AI: from models to multimodal applications*, 
 offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).
 
+### Deliverables
+The presentation for the E2 delivery can be found here * ADD LINK
+
 > Include name, RA, and specialization focus of each group member.  
 > |Name  | RA | Specialization|
 > |--|--|--|
-> | Name1  | 123456  | Computer Engineering|
-> | Name2  | 123456  | Electrical Engineering|
-> | Name3  | 123456  | XXX|
+> | Brendon Erick Euzébio Rus Peres  | 256130  | Computer Engineering|
+> | Miguel Angelo Romanichen Suchodolak | 178808 | Computer Engineering|
+> | Núbia Sidene Almeida das Virgens  | 299001  | Computer Engineering|
 
 ## Abstract
 
