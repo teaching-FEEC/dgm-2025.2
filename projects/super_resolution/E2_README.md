@@ -1,5 +1,5 @@
 # `<Project Title in Portuguese>`
-# `<Project Title in English>`
+# `<Image Super-Resolution with Generative Models>`
 
 ## Presentation
 
