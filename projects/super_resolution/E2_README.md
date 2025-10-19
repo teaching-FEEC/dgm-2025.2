@@ -18,16 +18,23 @@ The presentation for the E2 delivery can be found here * ADD LINK
 
 ## Abstract
 
-> Summary of the objective, methodology **and results** obtained (in submission E2 it is possible to report partial results). Suggested maximum of 100 words. 
-
-## Problem Description / Motivation
-
-> Description of the generating context of the project theme. Motivation for addressing this project theme.  
-
+The project addresses the problem of **image super-resolution**, a fundamental task in computer vision that aims to reconstruct high-quality images from their low-resolution counterparts. This problem has strong practical relevance in areas such as:
+- **Low-budget devices**: Get one poor picture and enhance it
+- **Medical Imaging**: Enhancing diagnostic image quality
+- **Satellite Analysis**: Improving remote sensing data
+- **Image Restoration**: Recovering historical or degraded photographs
+- **Personal Use**: Upscaling cherished memories and favorite images 
+  
 ## Objective
 
-> Description of what the project aims to do.  
-> It is possible to specify a general objective and specific objectives of the project.  
+The main objective of the project is to design and evaluate a **generative model** capable of improving the resolution and perceptual quality of input images. The model will receive as input a low-resolution image and will output a high-resolution reconstruction with enhanced details and sharper definition, in general its goals can be set by:
+
+- Improving resolution and perceptual quality of input images
+- Preserving fine details and texture information
+- Generating visually convincing high-resolution reconstructions
+- Outperforming traditional interpolation methods, like bicubic
+
+As inspiration, this project will draw on the methodology and architecture proposed in the repository [InvSR: Invertible Super-Resolution](https://github.com/zsyOAOA/InvSR).  
 
 ## Methodology
 
