@@ -36,8 +36,8 @@ trainer:
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: val_loss          # <-- VAE key
-        min_delta: 0.0001
-        patience: 15
+        min_delta: 0.00001
+        patience: 30
         verbose: true
         mode: min
         strict: true

@@ -98,6 +98,11 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 "class_path" in self.config.model and "fastgan" in self.config.model["class_path"].lower():
             run_name += "fastgan_"
             tags.append("fastgan")
+        
+        if hasattr(self.config, "model") and self.config.model is not None and \
+                "class_path" in self.config.model and "vae" in self.config.model["class_path"].lower():
+            run_name += "VAE_"
+            tags.append("VAE")
 
         # Handle model-related tags
         if hasattr(self.config.model, "init_args"):
