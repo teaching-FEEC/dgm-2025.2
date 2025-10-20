@@ -12,6 +12,10 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 | Ana Clara Caznok Silveira  | 231745  | Computer Engineering|
 | Aline Yoshida Machado | 265732 | Physics Engineering|
 
+## Abstract
+
+> Summary of the objective, methodology **and results** obtained (in submission E2 it is possible to report partial results). Suggested maximum of 100 words. 
+
 ## Project Summary Description
 Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. Thanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral tumor datasets are scarce, which often leads classification models to overfit or perform poorly in subsampled classes.
 
@@ -50,20 +54,6 @@ The project will be developed using Python, with the following libraries:
 
 ### Generative Models
 
-#### 3D-GAN [4]
-- The input of the discriminator are HSI images with spacial and spectral information. Initially the spectral bands are reduced using PCA preserving the top 3 components that retain most spectral energy while keeping spatial information  
-- The generator's inputs a random noise vector `z` plus class label `c` and outputs a synthetic spectral–spatial patches shaped like real HSI data after PCA. Its architecture is composed by convolutional layers and batch normalization layers  
-- The discriminator recieves the real and fake images, outputs a sigmoid classifier to distinguish real vs. fake and a softmax classifier to predict the class of the input patch  
-
-![3d-GAN Architecture Diagram](images/3D-GAN.png)
-
-#### AD-GAN [5]
-This GAN is similar to 3D-GAN's structure, however there are two modifications:
-1. Uses Adaptive DropBlock (AdapDrop) as regularization to avoid overfitting and improve diversity
-2. discriminator D has one output that returns either a specific class c or the fake label
-
-![AD-GAN Architecture Diagram](images/AD-GAN.png)
-
 #### SHS GAN [6]
 
 - The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
@@ -78,21 +68,8 @@ This GAN is similar to 3D-GAN's structure, however there are two modifications:
 
 ![SHS Architecture Diagram](images/SHS-GAN.png)
 
-
-#### DiffusionAAE [7]
-- Learn a compact latent space for hyperspectral patches with an Adversarial Autoencoder
-- Learn a class-conditional diffusion process in that latent space so it can generate realistic hyperspectral samples and improve classification robustness with high-quality augmentations.
-- The inputs of the models are HSI cubes and class labels
-
-![DifusionAAE Architecture Diagram](images/DiffusionAAE.png)
-
-### HUD Model
-- Uses a Unmixing Autoencoder (UAE) to project hyperspectral images into a low-dimensional abundance space.
-- Latent code has physical meaning (endmember abundances)
-- A U-Net diffusion model operates in the abundance space instead of raw spectral space. Learns to denoise Gaussian noise into valid abundance maps and ensures generated HSIs are both diverse and physically consistent.
-
-![Unmixed Guided Diffusion Model Architecture Diagram](images/UnmixedGuidedDiffusionModel.png)
-
+#### FastGAN
+*Kris TODO*
 
 #### Autoencoder
 - The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
@@ -107,37 +84,65 @@ We would like for the generated images to be: clear, realistic and useful.
 - Image realism : Spectral Angle Mapper for average melanoma spectral signature , SSIM with real images
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
 
+### Datasets and Evolution
+*Kris TODO*
+> List the datasets used in the project.  
+> For each dataset, include a mini-table in the model below and then provide details on how it was analyzed/used, as in the example below.  
+
+|Dataset | Web Address | Descriptive Summary|
+|----- | ----- | -----|
+|Dataset Title | http://base1.org/ | Brief summary (two or three lines) about the dataset.|
+
+> Provide a description of what you concluded about this dataset. Suggested guiding questions or information to include:  
+> * What is the dataset format, size, type of annotation?  
+> * What transformations and preprocessing were done? Cleaning, re-annotation, etc.  
+> * Include a summary with descriptive statistics of the dataset(s).  
+> * Use tables and/or charts to describe the main aspects of the dataset that are relevant to the project.  
+
+### Workflow
+> Use a tool that allows you to design the workflow and save it as an image (e.g., Draw.io). Insert the image in this section.  
+> You may choose to use a workflow manager (Sacred, Pachyderm, etc.), in which case use the manager to generate a diagram for you.  
+> Remember that the goal of drawing the workflow is to help anyone who wishes to reproduce your experiments.  
+
+
 ## Schedule
 ![Project Schedule](images/schedule.png)
-## Expected Results
-Working with HSI is inherently challenging due to the high dimensionality of the data. Each sample contains both spatial information and spectral information. Designing a generative model that captures both faithfully is a difficult task. In addition, the computational cost of training such models grows rapidly with input size and number of spectral bands. This is particularly critical in our context, where GPU resources may be limited.
 
 
-Another consideration is dataset size. Our dataset contains 348 hyperspectral skin images (272 × 512 × 16) divided into three classes. Compared to the benchmark HSI datasets used in generative AI research, which have thousands of labeled pixels or hundreds of spectral bands and our dataset is smaller in both sample count and spectral dimension. This difference might lead to lower metric scores than those reported in  studies.
+## Experiments, Results, and Discussion of Results
+> In each topic describe the experiments carried out, the results obtained, and a brief discussion of the results.
+### Data Preprocessing
+**Kris TODO*
 
-Regarding the models to be tested:
+### Classifier Training
 
-- GANs:
-We expect GANs to generate visually plausible HSI skin patches, but with the known risks of training instabilities and mode collapse. 
+### Generative Model Training
 
-- VAEs:
-VAEs will likely train in a more stable way and provide a well-structured latent space. However, they are prone to producing over-smoothed samples, lacking fine-grained spatial detail or realistic spectral variability. This makes them useful as a baseline model, but we do not expect VAEs to outperform GANs or diffusion models in terms of sample realism.
+#### FastGAN
+**Kris TODO*
 
-- Diffusion models:
-Diffusion models are expected to produce the most realistic and diverse samples, preserving both spatial and spectral structures of hyperspectral skin images. However, diffusion models come with the highest computational cost and slowest sampling speed. In our setting, these constraints might limit the maximum patch size or the the necessity to encode the data before adding noise.
+### Classifier Training with Synthetic Data
+**Kris TODO*
 
-Despite these limitations, if the generated synthetic data reaches a reasonable quality level, it can still provide significant value. The main benefit would be data augmentation.
+> In the partial project submission (E2), this section may contain partial results, explorations of implemented solutions, and  
+> discussions about such experiments, including decisions to change the project trajectory or the description of new experiments as a result of these explorations.  
 
+> In the final project submission (E3), this section should list the **main** results obtained (not necessarily all), which best represent the fulfillment of the project objectives.  
+
+> The discussion of results may be carried out in a separate section or integrated into the results section. This is a matter of style.  
+> It is considered fundamental that the presentation of results should not serve as a treatise whose only purpose is to show that "a lot of work was done."  
+> What is expected from this section is that it **presents and discusses** only the most **relevant results**, highlighting the **strengths and/or limitations** of the methodology, emphasizing aspects of **performance**, and containing content that can be classified as **organized, didactic, and reproducible sharing of knowledge relevant to the community**.  
+
+## Conclusion
+**Kris TODO*
+> The Conclusion section should recover the main information already presented in the report and point to future work.  
+> In the partial project submission (E2), it may contain information about which steps or how the project will be conducted until its completion.  
+> In the final project submission (E3), the conclusion is expected to outline, among other aspects, possibilities for the project’s continuation.  
 
 ## Bibliographic References
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: https://doi.org/10.1109/JSTARS.2025.3538759.
 2. Palsson, Burkni, Magnus O. Ulfarsson, and Johannes R. Sveinsson. 2023. "Synthesis of Synthetic Hyperspectral Images with Controllable Spectral Variability Using a Generative Adversarial Network" Remote Sensing 15, no. 16: 3919. https://doi.org/10.3390/rs15163919
 3. Liu, J., Wu, Z., Xiao, L., & Wu, X. J. (2022). Model Inspired Autoencoder for Unsupervised Hyperspectral Image Super-Resolution. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-12. https://doi.org/10.1109/tgrs.2022.3143156
-
 4. L. Zhu, Y. Chen, P. Ghamisi and J. A. Benediktsson, "Generative Adversarial Networks for Hyperspectral Image Classification," in IEEE Transactions on Geoscience and Remote Sensing, vol. 56, no. 9, pp. 5046-5063, Sept. 2018, doi: 10.1109/TGRS.2018.2805286.
-
-5. J. Wang, F. Gao, J. Dong and Q. Du, "Adaptive DropBlock-Enhanced Generative Adversarial Networks for Hyperspectral Image Classification," in IEEE Transactions on Geoscience and Remote Sensing, vol. 59, no. 6, pp. 5040-5053, June 2021, doi: 10.1109/TGRS.2020.3015843.
-
-6. J. Hauser, G. Shtendel, A. Zeligman, A. Averbuch and M. Nathan, "SHS-GAN: Synthetic Enhancement of a Natural Hyperspectral Database," in IEEE Transactions on Computational Imaging, vol. 7, pp. 505-517, 2021, doi: 10.1109/TCI.2021.3079818.
-
-7. Cao, Z., Li, J., & Xu, X. (2025). DiffusionAAE: Enhancing hyperspectral image classification with conditional diffusion model and Adversarial Autoencoder. Ecological Informatics, 87, 103118. https://doi.org/10.1016/j.ecoinf.2025.103118
+5. J. Hauser, G. Shtendel, A. Zeligman, A. Averbuch and M. Nathan, "SHS-GAN: Synthetic Enhancement of a Natural Hyperspectral Database," in IEEE Transactions on Computational Imaging, vol. 7, pp. 505-517, 2021, doi: 10.1109/TCI.2021.3079818.
+6. B. Liu, Y. Zhu, K. Song, and A. Elgammal, "Towards Faster and Stabilized GAN Training for High-Fidelity Few-Shot Image Synthesis," arXiv preprint arXiv:2101.04775, 2021. Available: https://arxiv.org/abs/2101.04775.
