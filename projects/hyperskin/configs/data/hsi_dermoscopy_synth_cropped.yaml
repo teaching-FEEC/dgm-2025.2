@@ -4,10 +4,10 @@ data:
     task: GENERATION
     train_val_test_split: [0.7, 0.15, 0.15]
     image_size: 256
-    batch_size: 4
-    num_workers: 8
+    batch_size: 2
+    num_workers: 0
     pin_memory: True
-    allowed_labels: [melanoma]
+    allowed_labels: null
     #data_dir: data/hsi_dermoscopy
     #google_drive_id: 1WyIHxY1zh_f3uXwUVRvX9CzuFtfJchmx
     data_dir: data/hsi_dermoscopy_cropped
