@@ -1,5 +1,5 @@
 # `<Project Title in Portuguese>`
-# `<Image Super-Resolution with Generative Models>`
+# `<Super-resolução de imagens com modelos generativos>`
 
 ## Presentation
 
@@ -38,48 +38,42 @@ As inspiration, this project will draw on the methodology and architecture propo
 
 ## Methodology
 
-> Clearly and objectively describe, citing references, the methodology proposed to achieve the project objectives.  
-> Describe datasets used.  
-> Cite reference algorithms.  
-> Justify the reasons for the chosen methods.  
-> Point out relevant tools.  
-> Describe the evaluation methodology (how will it be assessed whether the objectives were met or not?).  
+For the development of this stage of the project, two implementation approaches for the image super-resolution model were evaluated: one executed in the Google Colab environment and the other in a local environment using VS Code.
+
+Initially, both platforms were configured and tested with the goal of analyzing the model’s performance under different execution conditions. After the comparative tests, the VS Code environment was selected as the most suitable due to its better processing time, greater stability, and enhanced control over experiments.
+
+From this definition onward, all subsequent stages of training, validation, and performance analysis were carried out in VS Code. The main evaluation metrics — such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity) — were applied in this environment to assess the quality of the generated images and to compare the results with the high-resolution reference images.
 
 ### Datasets and Evolution
-> List the datasets used in the project.  
-> For each dataset, include a mini-table in the model below and then provide details on how it was analyzed/used, as in the example below.  
+ List the datasets used in the project.  
 
-|Dataset | Web Address | Descriptive Summary|
-|----- | ----- | -----|
-|Dataset Title | http://base1.org/ | Brief summary (two or three lines) about the dataset.|
+| Dataset | Type | Description | Usage | LINK |
+|---------|------|-------------|-------|-------|
+| **DIV2K** | Training/Validation | 2K resolution diverse images | Primary training data | Not yet here
+| **Flickr2K** | Training | High-quality photos from Flickr | Additional training data | [Flickr2K](https://www.kaggle.com/datasets/daehoyang/flickr2k?resource=download)
+| **Set5/Set14** | Evaluation | Standard benchmark sets | Performance evaluation | Not yet here
 
-> Provide a description of what you concluded about this dataset. Suggested guiding questions or information to include:  
-> * What is the dataset format, size, type of annotation?  
-> * What transformations and preprocessing were done? Cleaning, re-annotation, etc.  
-> * Include a summary with descriptive statistics of the dataset(s).  
-> * Use tables and/or charts to describe the main aspects of the dataset that are relevant to the project.  
+  - The project intends to use standard super-resolution datasets such as **DIV2K**, **Flickr2K**, and possibly **Set5/Set14** for evaluation.  
+  - These datasets were chosen because they are widely adopted benchmarks in super-resolution tasks, providing a reliable basis for comparison with the literature.  
 
 ### Workflow
-> Use a tool that allows you to design the workflow and save it as an image (e.g., Draw.io). Insert the image in this section.  
-> You may choose to use a workflow manager (Sacred, Pachyderm, etc.), in which case use the manager to generate a diagram for you.  
-> Remember that the goal of drawing the workflow is to help anyone who wishes to reproduce your experiments.  
+
+<img width="1284" height="2404" alt="image" src="https://github.com/user-attachments/assets/b1b9dfae-4fc9-475e-b238-a3268ce3109e" />
+
 
 ## Experiments, Results, and Discussion of Results
 
-> In the partial project submission (E2), this section may contain partial results, explorations of implemented solutions, and  
-> discussions about such experiments, including decisions to change the project trajectory or the description of new experiments as a result of these explorations.  
+In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
 
-> In the final project submission (E3), this section should list the **main** results obtained (not necessarily all), which best represent the fulfillment of the project objectives.  
+Two approaches were initially evaluated for implementing the image super-resolution model: one using Google Colab and another using a local environment (VS Code). After comparative tests, the VS Code environment was selected as the main platform due to its superior performance, stability, and control during model execution.
 
-> The discussion of results may be carried out in a separate section or integrated into the results section. This is a matter of style.  
-> It is considered fundamental that the presentation of results should not serve as a treatise whose only purpose is to show that "a lot of work was done."  
-> What is expected from this section is that it **presents and discusses** only the most **relevant results**, highlighting the **strengths and/or limitations** of the methodology, emphasizing aspects of **performance**, and containing content that can be classified as **organized, didactic, and reproducible sharing of knowledge relevant to the community**.  
+All subsequent experiments — including training, validation, and performance evaluation — were conducted in the VS Code environment. The validation process focused on analyzing key performance metrics, such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity), to assess the visual quality and fidelity of the generated images. These metrics and validation outputs can be viewed in detail at the following link:
+https://github.com/nubiasidene/dgm-2025.2-g4/tree/main/projects/super_resolution/validation
 
-## Conclusion
+The discussion of results highlights that both environments enabled correct model execution, but the local implementation in VS Code provided a significant reduction in simulation time (from minutes in Colab to milliseconds locally) and allowed greater control over experiments and reproducibility. These findings guided the group’s decision to continue project development exclusively in VS Code.
 
-> The Conclusion section should recover the main information already presented in the report and point to future work.  
-> In the partial project submission (E2), it may contain information about which steps or how the project will be conducted until its completion.  
-> In the final project submission (E3), the conclusion is expected to outline, among other aspects, possibilities for the project’s continuation.  
+At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
+
 
 ## Schedule  
 
