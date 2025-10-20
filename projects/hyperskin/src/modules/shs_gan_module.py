@@ -101,7 +101,7 @@ class SHSGAN(pl.LightningModule):
             if isinstance(logger, WandbLogger):
                 run = logger.experiment
                 new_nm = f"shsgan-f{self.hparams.base_filters}_fft-{self.hparams.critic_fft_arm}"
-                run.name = new_nm
+                # run.name = new_nm
                 run.notes = "Auto-named by on_train_start"
                 run.tags = list(set(run.tags or []).union({"gan", "hsi", "auto"}))
                 run.save(str(split_dir / "*.txt"), base_path=logger.save_dir)
@@ -187,6 +187,7 @@ class SHSGAN(pl.LightningModule):
 
 
 
+
     def training_step(self, batch, batch_idx):
         g_loss, d_loss, gp = self.gan_step(batch, stage="train")
         self.log("train/g_loss", self.train_g_loss, prog_bar=True, on_epoch=True)
@@ -219,6 +220,8 @@ class SHSGAN(pl.LightningModule):
             "val_gp": gp,
             **{f"val/{k}": v for k, v in results.items()}
         }, prog_bar=True)
+
+
     def on_validation_epoch_end(self):
         g_loss = self.val_g_loss.compute()
         self.val_g_loss_best.update(g_loss)

@@ -9,10 +9,10 @@ model:
     critic_fft_arm: false     # whether Critic uses the FFT branch
 
     # --- Training hyperparameters ---
-    lr: 0.0002
+    lr: 0.0001
     betas: [0.5, 0.999]       # Momentum terms of Adam
     lambda_gp: 10.0           # Coefficient for the gradient penalty term in WGAN-GP. Higher values enforce Lipschitz more strongly but can over-regularize.
-    n_critic: 5               # Number of critic (discriminator) updates for each generator update
+    n_critic: 10            # Number of critic (discriminator) updates for each generator update
     # --- Logging ---
     num_log_samples: 2        # Number of synthetic samples to generate and log at the end of each epoch
     log_channels: [0, 1, 2]   # channels used for pseudo-RGB logging
@@ -27,27 +27,28 @@ trainer:
       save_dir: logs
       entity: k298976-unicamp
       project: hypersynth
+      name: shsgan_exp09_allclasses_cropped_nofft_lr0.0001_lambda_gp10_ncritic10_batch2
       tags: [hsi, gan, shs-gan]
       log_model: false
 
   callbacks:
     - class_path: ModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-g_loss={val/g_loss:.4f}-d_loss={val/d_loss:.4f}
+        filename: Exp1_epoch={epoch:02d}-g_loss={val/g_loss:.4f}-d_loss={val/d_loss:.4f}
         monitor: val_g_loss        
         verbose: true
         save_last: true
         mode: min
         auto_insert_metric_name: false
 
-    - class_path: EarlyStopping
-      init_args:
-        monitor: val_g_loss        
-        min_delta: 0.01
-        patience: 15
-        verbose: true
-        mode: min
-        strict: true
+    # - class_path: EarlyStopping
+    #   init_args:
+    #     monitor: val_g_loss        
+    #     min_delta: 0.0001
+    #     patience: 15
+    #     verbose: true
+    #     mode: min
+    #     strict: true
 
     - class_path: LearningRateMonitor
       init_args:
