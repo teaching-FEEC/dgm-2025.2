@@ -129,6 +129,8 @@ class SpectrogramVQTokenizer(nn.Module):
         self.patch_size = patch_size
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
+        self.hidden_dim = hidden_dim
+        self.commitment_cost = commitment_cost
         
         input_dim = n_mels * patch_size
         

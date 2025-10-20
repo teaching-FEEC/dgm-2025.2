@@ -1,7 +1,10 @@
 import os
 import argparse
+import json
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict
+import time
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -62,6 +65,42 @@ def train_vq_tokenizer(
     
     best_val_loss = float('inf')
     
+    # Estruturas para armazenar histórico de métricas
+    history = {
+        'train_recon_loss': [],
+        'train_vq_loss': [],
+        'train_total_loss': [],
+        'val_recon_loss': [],
+        'val_vq_loss': [],
+        'val_total_loss': [],
+        'learning_rates': [],
+        'epochs': [],
+        'best_epoch': 0,
+        'best_val_loss': float('inf')
+    }
+    
+    # Informações de treino
+    training_info = {
+        'start_time': datetime.now().isoformat(),
+        'model_config': {
+            'n_mels': model.n_mels,
+            'patch_size': model.patch_size,
+            'embedding_dim': model.embedding_dim,
+            'num_embeddings': model.num_embeddings,
+            'hidden_dim': model.hidden_dim
+        },
+        'training_config': {
+            'num_epochs': num_epochs,
+            'learning_rate': learning_rate,
+            'batch_size': train_loader.batch_size,
+            'train_samples': len(train_loader.dataset),
+            'val_samples': len(val_loader.dataset),
+            'device': str(device)
+        }
+    }
+    
+    start_time = time.time()
+    
     for epoch in range(num_epochs):
         # Treinamento
         model.train()
@@ -90,6 +129,14 @@ def train_vq_tokenizer(
         train_recon_loss /= len(train_loader)
         train_vq_loss /= len(train_loader)
         
+        # Armazenar métricas de treino
+        train_total_loss = train_recon_loss + train_vq_loss
+        history['train_recon_loss'].append(train_recon_loss)
+        history['train_vq_loss'].append(train_vq_loss)
+        history['train_total_loss'].append(train_total_loss)
+        history['learning_rates'].append(learning_rate)
+        history['epochs'].append(epoch + 1)
+        
         # Validação
         model.eval()
         val_recon_loss = 0.0
@@ -108,13 +155,21 @@ def train_vq_tokenizer(
         val_recon_loss /= len(val_loader)
         val_vq_loss /= len(val_loader)
         
+        # Armazenar métricas de validação
+        val_total_loss = val_recon_loss + val_vq_loss
+        history['val_recon_loss'].append(val_recon_loss)
+        history['val_vq_loss'].append(val_vq_loss)
+        history['val_total_loss'].append(val_total_loss)
+        
         print(f"\nÉpoca {epoch+1}/{num_epochs}")
-        print(f"  Train - Recon Loss: {train_recon_loss:.4f}, VQ Loss: {train_vq_loss:.4f}")
-        print(f"  Val   - Recon Loss: {val_recon_loss:.4f}, VQ Loss: {val_vq_loss:.4f}")
+        print(f"  Train - Recon Loss: {train_recon_loss:.4f}, VQ Loss: {train_vq_loss:.4f}, Total: {train_total_loss:.4f}")
+        print(f"  Val   - Recon Loss: {val_recon_loss:.4f}, VQ Loss: {val_vq_loss:.4f}, Total: {val_total_loss:.4f}")
         
         # Salva melhor modelo
-        if val_recon_loss + val_vq_loss < best_val_loss:
-            best_val_loss = val_recon_loss + val_vq_loss
+        if val_total_loss < best_val_loss:
+            best_val_loss = val_total_loss
+            history['best_epoch'] = epoch + 1
+            history['best_val_loss'] = best_val_loss
             checkpoint_path = os.path.join(save_dir, 'best_vq_tokenizer.pt')
             torch.save({
                 'epoch': epoch,
@@ -124,14 +179,57 @@ def train_vq_tokenizer(
                 'train_vq_loss': train_vq_loss,
                 'val_recon_loss': val_recon_loss,
                 'val_vq_loss': val_vq_loss,
+                'best_val_loss': best_val_loss,
                 'model_config': {
                     'n_mels': model.n_mels,
                     'patch_size': model.patch_size,
                     'embedding_dim': model.embedding_dim,
-                    'num_embeddings': model.num_embeddings
+                    'num_embeddings': model.num_embeddings,
+                    'hidden_dim': model.hidden_dim
                 }
             }, checkpoint_path)
             print(f"  ✓ Modelo salvo em {checkpoint_path}")
+        
+        # Salvar histórico periodicamente (a cada 10 épocas)
+        if (epoch + 1) % 10 == 0 or (epoch + 1) == num_epochs:
+            history_path = os.path.join(save_dir, 'training_history.json')
+            with open(history_path, 'w') as f:
+                json.dump(history, f, indent=2)
+    
+    # Finalizar informações de treino
+    end_time = time.time()
+    training_time = end_time - start_time
+    
+    training_info['end_time'] = datetime.now().isoformat()
+    training_info['total_time_seconds'] = training_time
+    training_info['total_time_formatted'] = f"{training_time//3600:.0f}h {(training_time%3600)//60:.0f}min {training_time%60:.0f}s"
+    training_info['final_train_loss'] = history['train_total_loss'][-1]
+    training_info['final_val_loss'] = history['val_total_loss'][-1]
+    training_info['best_val_loss'] = history['best_val_loss']
+    training_info['best_epoch'] = history['best_epoch']
+    
+    # Salvar informações
+    info_path = os.path.join(save_dir, 'training_info.json')
+    with open(info_path, 'w') as f:
+        json.dump(training_info, f, indent=2)
+    
+    # Salvar histórico final
+    history_path = os.path.join(save_dir, 'training_history.json')
+    with open(history_path, 'w') as f:
+        json.dump(history, f, indent=2)
+
+    csv_path = os.path.join(save_dir, 'training_metrics.csv')
+    with open(csv_path, 'w') as f:
+        f.write('epoch,train_recon_loss,train_vq_loss,train_total_loss,val_recon_loss,val_vq_loss,val_total_loss,learning_rate\n')
+        for i in range(len(history['epochs'])):
+            f.write(f"{history['epochs'][i]},{history['train_recon_loss'][i]:.6f},{history['train_vq_loss'][i]:.6f},"
+                   f"{history['train_total_loss'][i]:.6f},{history['val_recon_loss'][i]:.6f},{history['val_vq_loss'][i]:.6f},"
+                   f"{history['val_total_loss'][i]:.6f},{history['learning_rates'][i]:.6f}\n")
+    
+    print()
+    print(f"Tempo total: {training_info['total_time_formatted']}")
+    print(f"Melhor época: {history['best_epoch']}")
+    print(f"Melhor val loss: {history['best_val_loss']:.4f}")
     
     return model
 
