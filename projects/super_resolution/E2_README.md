@@ -9,7 +9,6 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 ### Deliverables
 The presentation for the E2 delivery can be found here * ADD LINK
 
-> Include name, RA, and specialization focus of each group member.  
 > |Name  | RA | Specialization|
 > |--|--|--|
 > | Brendon Erick Euzébio Rus Peres  | 256130  | Computer Engineering|
