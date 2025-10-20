@@ -7,13 +7,8 @@ from tqdm import tqdm
 from tokenizer import SpectrogramPatchTokenizer, SpectrogramVQTokenizer
 
 
-def apply_vq_tokenizer(
-    model_path: str,
-    spectrogram_dir: str,
-    output_dir: str,
-    patch_size: int = 16,
-    device: str = 'cpu'
-):
+def apply_vq_tokenizer(model_path: str, spectrogram_dir: str, output_dir: str, patch_size: int = 16, device: str = 'cpu'):
+    
     # Carrega checkpoint do modelo
     print(f"Carregando modelo de {model_path}...")
     checkpoint = torch.load(model_path, map_location=device)
@@ -24,7 +19,8 @@ def apply_vq_tokenizer(
         n_mels=model_config['n_mels'],
         patch_size=model_config['patch_size'],
         embedding_dim=model_config['embedding_dim'],
-        num_embeddings=model_config['num_embeddings']
+        num_embeddings=model_config['num_embeddings'],
+        hidden_dim=model_config.get('hidden_dim', 256)
     )
     
     model.load_state_dict(checkpoint['model_state_dict'])
