@@ -44,3 +44,4 @@ opencv-python
 
 # interface
 gradio
+lpips

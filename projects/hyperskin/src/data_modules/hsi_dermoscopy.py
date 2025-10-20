@@ -48,12 +48,15 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         global_min: float | list[float] = None,
         infinite_train: bool = False,
         sample_size: Optional[int] = None,
+        range_mode: Optional[str] = None,
+
     ):
         super().__init__()
         self.save_hyperparameters()
 
         if isinstance(task, str):
             self.hparams.task = HSIDermoscopyTask[task]
+        print(self.hparams)
 
         self.transforms_train = None
         self.transforms_test = None
@@ -67,6 +70,13 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             if "test" in transforms:
                 self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
 
+        if range_mode in self.hparams: 
+            self.range_mode = range_mode
+        elif self.hparams.task != HSIDermoscopyTask.GENERATION: 
+            self.range_mode = range_mode
+        else: 
+            self.range_mode = '0_1'
+
         # if global_max and global_min are provided, add NormalizeByMinMax to transforms
         from src.transforms import NormalizeByMinMax
 
@@ -75,14 +85,14 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
                 transform = NormalizeByMinMax(
                     mins=global_min,
                     maxs=global_max,
-                    range_mode="0_1" if self.hparams.task != HSIDermoscopyTask.GENERATION else "-1_1",
+                    range_mode=self.range_mode,
                     clip=True,
                 )
             elif isinstance(global_max, (int, float)) and isinstance(global_min, (int, float)):
                 transform = NormalizeByMinMax(
                     mins=[global_min] * 16,
                     maxs=[global_max] * 16,
-                    range_mode="0_1" if self.hparams.task != HSIDermoscopyTask.GENERATION else "-1_1",
+                    range_mode = self.range_mode,
                     clip=True,
                 )
             else:
