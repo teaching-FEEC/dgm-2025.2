@@ -10,8 +10,8 @@ import wandb
 
 pyrootutils.setup_root(__file__, project_root_env_var=True, dotenv=False, pythonpath=True, cwd=True)
 
-WANDB_PROJECT = "mnist"
-MODEL_CHECKPOINT_PATH = os.path.join("logs", "mnist")
+WANDB_PROJECT = "hypersynth"
+MODEL_CHECKPOINT_PATH = os.path.join("logs", "hypersynth")
 LOG_PATH = os.path.join("logs", "wandb")
 WHITE_LIST = [
     "<RUN_ID>",

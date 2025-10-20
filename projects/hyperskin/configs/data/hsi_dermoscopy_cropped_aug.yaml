@@ -10,7 +10,7 @@ data:
     data_dir: data/hsi_dermoscopy_cropped
     google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
     balanced_sampling: False
-    synthetic_data_dir: data/hsi_dermoscopy_croppedv2_synth_fsgan
+    # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_synth_fsgan
     
     transforms:
       train:

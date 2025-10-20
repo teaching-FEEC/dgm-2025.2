@@ -3,7 +3,7 @@ data:
   init_args:
     task: CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI
     train_val_test_split: [0.7, 0.15, 0.15]
-    image_size: 224
+    image_size: 256
     batch_size: 8
     num_workers: 8
     pin_memory: True

@@ -1,0 +1,47 @@
+model:
+  class_path: modules.VAE
+  init_args:
+    img_channels: 16
+    img_size: 256
+    latent_dim: 64
+    lr: 0.002
+    betas: [0.5, 0.999]
+    weight_decay: 1e-5
+    kld_weight: 1e-2
+    metrics: [ssim, psnr, sam]
+
+trainer:
+  log_every_n_steps: 10
+  max_epochs: 1000
+
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      tags: [hsi, vae]
+      log_model: false
+
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-val_loss={val_loss:.4f}
+        monitor: val_loss          # <-- VAE key
+        verbose: true
+        save_last: true
+        mode: min
+        auto_insert_metric_name: false
+
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: val_loss          # <-- VAE key
+        min_delta: 0.0001
+        patience: 15
+        verbose: true
+        mode: min
+        strict: true
+
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: epoch

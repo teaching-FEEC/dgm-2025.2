@@ -43,7 +43,9 @@ class HSIDermoscopyDataset(Dataset):
         self,
         task: HSIDermoscopyTask,
         data_dir: str = "data/hsi_dermoscopy",
-        transform: Optional[A.Compose] = None
+        transform: Optional[A.Compose] = None,
+        force_create_df: bool = False,
+        save_labels_df: bool = True,
     ):
         self.transform = transform
         self.data_dir = data_dir
@@ -54,11 +56,13 @@ class HSIDermoscopyDataset(Dataset):
         self.dir_path = Path(self.data_dir)
         self.labels_df_path = self.dir_path / "metadata.csv"
 
-        if self.labels_df_path.exists():
+        if self.labels_df_path.exists() and not force_create_df:
             self.labels_df = pd.read_csv(self.labels_df_path)
         else:
             self.labels_df = self.create_df()
-            self.labels_df.to_csv(self.labels_df_path, index=False)
+
+            if save_labels_df:
+                self.labels_df.to_csv(self.labels_df_path, index=False)
 
         self.setup_labels_df()
 
