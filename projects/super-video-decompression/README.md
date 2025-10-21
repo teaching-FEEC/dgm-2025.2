@@ -18,6 +18,9 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 [Link to slideshow E1](https://docs.google.com/presentation/d/1TISrxtNkQHBbZlzTeAIGRFAGPHKGeUeE0Cg3LDZzKp4/edit?usp=sharing)
 
+[Link to slideshow E2](https://docs.google.com/presentation/d/1ml3qdwYOR1TSd1Hl9HbC9HwfaJqkPAOex2bFLj-FGyg/edit?usp=sharing)
+
+
 ## Abstract
 This project addresses Super Video Decompression, aiming to restore perceptual quality in lossy compressed video frames and enhance resolution. The work defined three core tasks: 1x decompression, 2x super-resolution, and 1x-to-2x decompression adequacy. We trained three model sizes: Super, Mega, and Ultra, all utilizing the compact architecture chosen for real-time feasibility and simplification for shaders. The methodology employed a custom dataset of 78:37 minutes of animation, significantly reduced via deduplication using average hashing and Hamming distance. Training incorporated specialized loss functions, including Canny Edge Loss, Patch Variance Loss, and Face Aware Loss, to optimize detail recovery.
 
