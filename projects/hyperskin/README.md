@@ -12,19 +12,17 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 | Ana Clara Caznok Silveira  | 231745  | Computer Engineering|
 | Aline Yoshida Machado | 265732 | Physics Engineering|
 
-## Abstract
-
-> Summary of the objective, methodology **and results** obtained (in submission E2 it is possible to report partial results). Suggested maximum of 100 words. 
-
-## Project Summary Description
+## Abstract / Project Description
 Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. Thanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral tumor datasets are scarce, which often leads melanoma classification models to overfit or perform poorly in subsampled classes. Therefore, the main goal of this project is to construct a generative ai model that creates a synthetic hyperspectral dermoscopy dataset. More specifically, we hope that a classifier trained with both synthetic and real hyperspectral images, outperform a classifier trained with only real images. 
+
+To test this hypothesis, we trained generative models—including SHSGAN, DCGAN, FastGAN, and VAE—to produce realistic hyperspectral melanoma images and evaluated their quality using spectral and perceptual metrics. Among them, FastGAN achieved the best balance between spectral accuracy and structural realism, generating synthetic lesions that closely resembled real samples. These synthetic images were then integrated into the training of melanoma classifiers based on DenseNet and ResNet architectures. The classifiers trained with both real and synthetic data outperformed those trained solely on real data, achieving higher validation accuracy (0.84 vs. 0.79) and F1-score (0.89 vs. 0.85), along with perfect recall for melanoma detection.
 
 ### Main goal
 Therefore, the main goal of this project is to construct a generative ai model that learns the distribution of real hyperspectral images and through them is able to create a synthetic hyperspectral melanoma dataset.
 Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma. 
 
 #### Main Hypothesis 
-A classifier trained with synthetic AND real data will have better results than if only trained in real data. Specially looking at subsampled classes 
+A classifier trained with synthetic AND real data will have better results than if only trained in real data
 
 ### Presentation
 #### Slides
@@ -81,8 +79,7 @@ The project will be developed using Python, with the following libraries:
 - **Unsupervised Disentanglement:** A direct benefit of the SLE module is that the generator automatically learns to disentangle style and content, enabling style-mixing applications similar to StyleGAN without the added complexity.
 
 #### Autoencoder
-- The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation.
-- A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
+- The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation. A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
 - VAEs are especially adept at modeling complex, high-dimensional data and continuous latent spaces, making them extremely useful for tasks like generating diverse sets of similar images.
 - Palsson et al. [2] used a VAE paired with a GAN framework to generate high-resolution synthetic hyperspectral images.
 - Liu et al. [3] proposed a model inspired autoencoder (MIAE) to fuse low-resolution HSI with high-resolution RGB images to generate high-resolution HSI.
@@ -93,7 +90,7 @@ The project will be developed using Python, with the following libraries:
 *Aline TODO*
 We would like for the generated images to be: clear, realistic and useful. 
 - Image Clarity/Quality : Variance, Spatial and Spectral Entropy, SNR
-- Image realism : Spectral Angle Mapper for average melanoma spectral signature , SSIM with real images
+- Image realism : Spectral Angle Mapper for average melanoma spectral signature , SSIM with real images, adapted FID 
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
 
 ### Dataset Description
@@ -176,6 +173,8 @@ Overall, the experiment demonstrates that FastGAN is a viable architecture for h
 #### VAE Autoencoder 
 
 Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 64. Loss function was set to have a term with a KL-divergence regularizer weighted by kld_weight = 1×10⁻², encouraging smooth, semantically meaningful latents while preserving spectral fidelity. Overall the results look like melanoma images but lack the details present in a realistic hyperspectral image. Spectral similarity was also achieved. 
+![vaeimages](images/vae-results.png)
+![vae_spectra](images/vae_spectra.png)
 
 ### Classifier Training with Synthetic Data
 The objective of this experiment was to verify whether training a hyperspectral dermoscopy skin lesion classifier with additional synthetic melanoma data, generated using the FastGAN architecture, could improve performance in distinguishing melanoma from dysplastic nevi. The classifier was trained on the cropped hyperspectral images, the only difference between the two experiments being that the second training included synthetic melanoma samples to balance the dataset, ensuring that the number of melanoma and dysplastic nevi instances was equal.  
