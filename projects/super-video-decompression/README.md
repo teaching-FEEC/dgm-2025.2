@@ -41,25 +41,38 @@ To achieve this goal, the project was structured to solve three specific technic
 The methodology proposed for the Super Video Decompression project encompasses architectural selection, rigorous dataset preparation, specialized loss function utilization, and a comprehensive evaluation plan designed to ensure model robustness and real-time feasibility.
 
 ### Model Tasks and Architecture Justification
-The project necessitated the training of specific models tailored to three distinct problem tasks:
+The project required the training of specific models tailored to three distinct problem tasks:
 
 1. Decompression (1x): Input consists of compressed frames (H.264/AVC), output is the restored image at 1x resolution.
 2. Super Resolution (2x): Input consists of frames reduced in size (downscaled but without compression artifacts), output is the frame at 2x resolution.
 3. Decompression Adequacy for 2X (ad2x): Input consists of frames that have been "decompressed" at 1x resolution, output is the frame upscaled to 2x resolution.
+
 ### Architectural Design
 
-The compact architecture was selected as the foundational network design. This choice was justified by its ability to achieve real-time feasibility during operation and its structural simplicity, which facilitates the crucial step of converting the final model into shaders for optimized deployment.
+The compact architecture (VGG style rectangular convolutionak net) was selected as the foundational network architecture. This choice was justified by the combination of its variations of achieving real-time feasibility during operation and its structural simplicity, which facilitates the crucial step of converting the final model into shaders for optimized use in production.
 
-For each of the three tasks, three distinct model sizes were trained: Super, Mega, and Ultra. This expanded division was necessary because the default smallest size, Super, was found to be too rigid and possess limited learning capacity. Consequently, the Mega model was introduced, defined as having precisely double the parameter count of the Super model while maintaining approximately one-third the parameter count of the Ultra model.
+For each of the three tasks, three distinct model sizes were trained: Super(47k parameters), Mega(93k parameters), and Ultra(280k parameters). 
+
+The default smallest size, Super, was found to be too rigid and possess limited learning capacity. For that reason we created the custom sized Mega model, defined as having around double the parameter count of the Super model while maintaining approximately one-third the parameter count of the Ultra model.
+Still, all model variations may be useful, when taking account all possible devices that could take advantage of this project.
+For production deployment, typical improvement pipeline would have the following formats:
+- Ultra (1x) ->  Ultra  (ad2x) ->   Super  (2x)   (for powerful machines)
+- Ultra (1x) ->  Mega  (ad2x)  -> Mega(2x) (for powerful machines)
+- Ultra (1x) ->  Super (ad2x)  -> Super (2x)  (for intermediary machines)
+- Mega (1x) ->  Mega (ad2x)  ->  Mega (2x) (for intermediary machines)
+- Super (1x) ->  Super (ad2x) ->  Super (2x) (for edge devices, mobile or weak notebooks)
+
 
 ### Training Regimen and Loss Functions
-The training methodology involved exploring advanced architectures. The network utilized convolutional sequential layers to maintain compatibility with varying input sizes.
 
-Specialized loss functions were critical for optimizing detail recovery and artifact suppression:
+Starting from a pretrain, at first model training was not improving the validation metrics. Compressed images are mathematically very similar to the Original ones, so we needed a way to create a Loss that was more sensitive to the issues created by compression. 
 
-1. Canny Edge Loss: This function measures the overlap of edges using Dice Loss (0.25%) and applies L1 (Charbonier Loss) exclusively in the regions identified as edges by a Differentiable Canny Edge Detector.
-2. Patch Variance Loss: This function applies Mean Squared Error (MSE), scaled (1 for compressed image, 0 for original image), weighted by the formula 1−variance over 20-pixel patches. This mechanism effectively directs the loss function's attention to areas with high variation.
-3. Face Aware Loss (FAL): This loss combines SSIM, Charbonier, and MSE metrics, calculated strictly within the regions identified as faces by an initial face detector. This attention mechanism requires the creation of specialized batches containing only facial patches.
+
+We created four novel Loss functions to guide the model into learning, they were critical for optimizing detail recovery and artifact suppression:
+
+1. Canny Edge Loss: This function measures the overlap of edges using Dice Loss (0.25%) and applies L1 (Charbonier Loss, 0.75%) exclusively in the regions identified as edges by a Differentiable Canny Edge Detector.
+2. Patch Variance Loss: This function applies Mean Squared Error (MSE), scaled (1 for compressed image, 0 for original image), weighted by color variance over 20-pixel patches. This mechanism effectively directs the loss function's attention to areas with high detail and object movement.
+3. Face Aware Loss: This loss combines SSIM, Charbonier, and MSE losses, calculated strictly within the regions identified as faces by an initial face detector. This attention mechanism requires the creation of specialized batches containing only facial patches and pre computing face bounding boxes for the whole dataset, it required a huge rewrite of the training framework.
 4. Combined Patch Variance: A combination of SSIM, Charbonier, and MSE is measured, employing the same attention mechanism leveraged in the Patch Variance Loss.
 
 ### Evaluation Methodology
@@ -75,10 +88,14 @@ Perceptual Metric:
     
   DISTS (Deep Image Structure and Texture Similarity): Used to provide a measure of perceptual quality based on deep feature representations.
 
-The models will be benchmarked to confirm their real-time feasibility, a key project requirement. While preliminary performance estimations can be derived from existing compact model benchmarks (e.g.,), project-specific benchmarking remains an eventual necessity [4, 13:55]. A specific test will be conducted to determine if the ad2x model exhibits generalized superiority, allowing it to be used in place of the dedicated 2x model in production environments.
+The model combinations will be benchmarked to confirm their real-time feasibility.
+While preliminary performance estimations can be derived from existing compact model benchmarks (here: https://github.com/the-database/mpv-upscale-2x_animejanai/wiki/Benchmarks#running-benchmarks), project-specific benchmarking remains an eventual necessity. 
+
+A specific test will be conducted to determine if the ad2x model exhibits generalized superiority, allowing it to be used in place of the dedicated 2x model in production environments.
 
 
 ## Bibliographic References
+
 BARAKA MAISELI; ABDALLA, A. T. Seven decades of image super-resolution: achievements, challenges, and opportunities. EURASIP Journal on Advances in Signal Processing, v. 2024, n. 1, 18 jul. 2024.
 
 CHEN, Z. et al. NTIRE 2025 Challenge on Image Super-Resolution (x4): Methods and Results. Disponível em: <https://arxiv.org/abs/2504.14582>. Acesso em: 16 set. 2025.
