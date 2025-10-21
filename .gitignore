@@ -1,8 +1,9 @@
-./projects/super-video-decompression/src/__pycache__/*
-.venv
-*.mp4
-*.png
-*.webp
-*.pth
-*/tb_logger/**
-*.onnx
+# Ignore files only inside ./projects/super-video-decompression
+/projects/super-video-decompression/src/**/__pycache__/
+/projects/super-video-decompression/**/.venv
+/projects/super-video-decompression/**/*.mp4
+/projects/super-video-decompression/**/*.png
+/projects/super-video-decompression/**/*.webp
+/projects/super-video-decompression/**/*.pth
+/projects/super-video-decompression/**/tb_logger/**
+/projects/super-video-decompression/**/*.onnx
