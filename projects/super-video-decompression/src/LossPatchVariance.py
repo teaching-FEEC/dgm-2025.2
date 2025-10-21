@@ -32,7 +32,7 @@ def patch_variance_loss(pred, target, patch_size=20, alpha=430):
     weights = 1.0 + var_norm
     loss = (weights * patch_mse).mean()
 
-    '''
+    
     # Create a tensor filled with the variance values for each patch
     var_expanded = torch.repeat_interleave(
         target_var.unsqueeze(1), patch_size * patch_size, dim=1
@@ -42,9 +42,9 @@ def patch_variance_loss(pred, target, patch_size=20, alpha=430):
     variance_mask = fold(var_expanded) / (patch_size * patch_size)
     # Normalize to [0,1] for visualization
     variance_mask = (variance_mask - variance_mask.min()) / (variance_mask.max() - variance_mask.min() + 1e-8)
-    '''
+    
 
-    return loss #, variance_mask
+    return loss , variance_mask
 
 
 import torch
@@ -84,16 +84,16 @@ def test_patch_variance_loss():
     #plt.show()
     #plt.imshow(img2.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
     #plt.show()
-    loss = patch_variance_loss(img1, img2, patch_size=20, alpha=1) #, mask
+    loss, mask = patch_variance_loss(img1, img2, patch_size=20, alpha=1) #, mask
     print("Final Patch Variance Loss:",loss)
-    '''
+    
     # Visualize (single image)
     import matplotlib.pyplot as plt
     plt.imshow(mask[0,0].detach().cpu(), cmap='magma')
     plt.colorbar()
     plt.title("Variance Mask")
     plt.show()
-    '''
+    
 
    
 test_patch_variance_loss()

@@ -1,9 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from neosr.archs.arch_util import net_opt
+from neosr.utils.registry import ARCH_REGISTRY
 
+upscale, __ = net_opt()
+
+
+@ARCH_REGISTRY.register()
 class baseline_arch(nn.Module):
-    def __init__(self, upscale=1):
+    def __init__(self, upscale=upscale):
         self.upscale = upscale
         super().__init__()
 
