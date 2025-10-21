@@ -10,7 +10,7 @@ FORCE_MAG = 2.0
 FORCE_STEPS = 100
 NUM_TRANSITIONS = 100000
 SETTLE_TIME = 5.0
-USE_VIEWER = False           # set True if you want to watch
+USE_VIEWER = True           # set True if you want to watch
 
 def get_link_ids(model, prefix="link_"):
     ids, names = [], []
@@ -35,7 +35,7 @@ def get_link_ids(model, prefix="link_"):
     return np.array([b for _, b, _ in cand], dtype=int), [nm for _, _, nm in cand]
 
 def sample_force(mag):
-    axis = np.zeros(3); axis[np.random.randint(0, 3)] = 1.0
+    axis = np.zeros(3); axis[np.random.randint(0, 3)] = np.random.uniform(0.5, 2.0)
     if np.random.rand() < 0.5: axis = -axis
     return mag * axis
 
@@ -76,9 +76,9 @@ def main():
 
                 for _ in range(FORCE_STEPS):
                     d.xfrc_applied[bid, :3] = fvec
-                    step(); viewer.sync()
+                    step(); viewer.sync(); 
                 d.xfrc_applied[bid, :] = 0.0
-
+                time.sleep(0.5) 
                 s_after = np.array(d.xpos[link_ids, :], dtype=np.float64)
                 offset = s_after[li] - s_before[li]
 

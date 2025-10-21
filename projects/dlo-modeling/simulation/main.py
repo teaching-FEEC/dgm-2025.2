@@ -12,10 +12,10 @@ XML_PATH = "rope_chain.xml"
 MIN_FORCE_MAG = 0.1  # Minimum force magnitude
 MAX_FORCE_MAG = 3.0  # Maximum force magnitude
 FORCE_STEPS = 200
-NUM_TRANSITIONS = 300  # Total number of transitions to collect (across all workers)
+NUM_TRANSITIONS = 10000  # Total number of transitions to collect (across all workers)
 NUM_ROLLOUTS = 5       # Number of parallel workers/rollouts
 SETTLE_TIME = 5.0
-SAVE_INTERVAL = 10    # <-- NEU: Print progress every X steps (per worker)
+SAVE_INTERVAL = 10   # <-- NEU: Print progress every X steps (per worker)
 USE_VIEWER = False       # MUST be False for multiprocessing
 
 # --- Dateinamen ---
