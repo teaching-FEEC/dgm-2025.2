@@ -1,5 +1,5 @@
-# `<Super Descompressão de Vídeo>`
-# `<Super Video Decompression>`
+# `Super Descompressão de Vídeo`
+# `Super Video Decompression`
 
 ## Presentation
 
