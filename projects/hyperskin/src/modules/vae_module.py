@@ -72,7 +72,7 @@ class VAE(pl.LightningModule):
         kld_weight: float = 1e-2,                        # KLD coefficient
 
         # ---- metrics ----
-        metrics: Tuple[str, ...] = ("ssim", "psnr", "sam"),  # which SynthMetrics to compute
+        metrics: Tuple[str, ...] = ("ssim", "psnr", "sam", 'fid'),  # which SynthMetrics to compute
 
         # ---- architecture ----
         block: str = "conv",                              # block type in Generic* modules
