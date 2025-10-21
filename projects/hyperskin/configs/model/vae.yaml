@@ -37,7 +37,7 @@ trainer:
       init_args:
         monitor: val_loss          # <-- VAE key
         min_delta: 0.00001
-        patience: 30
+        patience: 50
         verbose: true
         mode: min
         strict: true
