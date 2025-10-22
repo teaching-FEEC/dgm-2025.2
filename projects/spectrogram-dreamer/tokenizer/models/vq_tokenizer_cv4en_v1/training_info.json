@@ -1,0 +1,25 @@
+{
+  "start_time": "2025-10-19T19:29:51.524081",
+  "model_config": {
+    "n_mels": 80,
+    "patch_size": 16,
+    "embedding_dim": 128,
+    "num_embeddings": 1024,
+    "hidden_dim": 512
+  },
+  "training_config": {
+    "num_epochs": 150,
+    "learning_rate": 0.001,
+    "batch_size": 512,
+    "train_samples": 10831925,
+    "val_samples": 1355684,
+    "device": "cuda"
+  },
+  "end_time": "2025-10-19T21:03:48.279597",
+  "total_time_seconds": 5636.755496740341,
+  "total_time_formatted": "1h 33min 57s",
+  "final_train_loss": 0.14095347026605914,
+  "final_val_loss": 0.14129643656631363,
+  "best_val_loss": 0.1292053969827371,
+  "best_epoch": 8
+}
