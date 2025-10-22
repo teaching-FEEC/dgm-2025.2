@@ -81,26 +81,18 @@ The project will be developed using Python, with the following libraries:
 
 
 ### Evaluating synthesis results
-
-
-
 We would like for the generated images to be: clear, realistic and useful. 
 - Image Clarity/Quality : Peak Signal-to-Noise Ratio (PSNR)
 - Image realism : Spectral Angle Mapper (SAM) for average melanoma spectral signature , SSIM with real images, adapted FID 
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
-
 ---
 Here are the following explanations for the most used metrics
 ####  Structural Similarity Index Measure (SSIM)
-
 Measures the structural similarity between two images, focusing on luminance, contrast, and structural patterns.
-
 **Equation:**
-
 $$
 SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
 $$
-
 where:
 - $\mu_x, \mu_y$ are the means of images $x$ and $y$
 - $\sigma_x^2, \sigma_y^2$ are their variances
@@ -110,38 +102,26 @@ where:
 - **SSIM ≈ 1** → high structural similarity  
 - **SSIM ≈ 0** → weak similarity  
 
-
 #### Peak Signal-to-Noise Ratio (PSNR)
-
 Quantifies image reconstruction quality in terms of pixel-wise fidelity, how much noise or distortion is present compared to a reference image.
-
 **Equation:**
-
 $$
 PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right)
 $$
-
 with
-
 $$
 MSE = \frac{1}{N}\sum_{i=1}^{N}(x_i - y_i)^2
 $$
-
 where $L$ is the maximum possible pixel value (e.g., 1.0 or 255).
-
-
 - Higher PSNR → better image quality
 - Typical values:
   - > 40 dB → excellent
   - 30–40 dB → good
   - < 30 dB → degraded or noisy
-
 ---
-
 #### Fréchet Inception Distance (FID)
 Measures the distributional distance between real and generated image features extracted from a deep network (Inception-v3).  
 It evaluates how close the overall statistics of generated images are to the real ones.
-
 In our context, we must use an adapted FID, once the pre trained weights are fit for a 3-channel RGB input. Since we have a 16 channel image, it is not possible to perform the inference of the model. Therefore, we used the Inception V3 model with the excpetion of the first layer. This layer, we adapted to a 16-channel input by replicating the kernel weights untill it reached the desired channel.
 
 **Equation:**
@@ -152,26 +132,18 @@ $$
 where:
 - $\mu_r, \Sigma_r$: mean and covariance of features from **real images**
 - $\mu_g, \Sigma_g$: mean and covariance of features from **generated images**
-
 - Lower FID → better quality and diversity
 
-
-
 #### Spectral Angle Mapper (SAM)
-
 **Purpose:**  
 Used for hyperspectral images, SAM measures the spectral similarity between two spectra (one per pixel) by computing the angle between their spectral vectors.
-
 **Equation:**
 $$
 SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)
 $$
-
 where $x$ and $y$ are spectral vectors of a pixel in the reference and generated images.
-
 - Units: radians or degrees**
 - **Lower SAM → higher spectral similarity
-
 
 #### Summary Table
 
@@ -181,9 +153,7 @@ where $x$ and $y$ are spectral vectors of a pixel in the reference and generated
 | **PSNR** | Spatial | [0, ∞) dB | ↑ | Pixel-wise fidelity |
 | **FID** | Feature / Perceptual | [0, ∞) | ↓ | Realism & diversity |
 | **SAM** | Spectral | [0°, ∞°) | ↓ | Spectral shape similarity |
-
 ---
-
 
 ### Dataset Description
 | Dataset | Web Address | Descriptive Summary |
@@ -204,10 +174,8 @@ Our methodology was designed to test whether the inclusion of synthetic hyperspe
 
 Following image generation, two classification models are trained to distinguish malignant from benign tumors. The first classifier is trained only with real hyperspectral images, while the second combines real and synthetic images in its training set. For both cases, two deep convolutional architectures, DenseNet and ResNet, are employed, each trained under two conditions: using pre-trained RGB weights or from scratch directly on hyperspectral data. The performance of each classifier is assessed using classification metrics such as F1-score, Accuracy, and SpecAtSens (Specificity at Sensitivity).
 
-
 ## Schedule
 ![Project Schedule](images/schedule.png)
-
 
 ## Experiments, Results, and Discussion of Results
 > In each topic describe the experiments carried out, the results obtained, and a brief discussion of the results.
