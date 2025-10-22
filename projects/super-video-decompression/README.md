@@ -165,6 +165,8 @@ During the development of this project we created 5 novel loss functions with at
 
 For the feasibility of the shader version of our model, we used the compact network for all three models, however we discussed using Sebica and Spanplus models for the first model of our improving pipeline (the 1X time decompression model), these models have attention mechanisms that could help improve the 1X model even more, since the 2X models receive as input the output of the 1X model it is of utter importance that the 1X is the best model (and probably the heaviest computationally), these models with attention may prove to be a better 1X alternative, at the cost of not being easily converted into a shader, this may be experimented in a future work.
 
+We also dabbled around the idea of using the previous frame as a guide to the following frame, during training and inference, the previous frame would be converted into grayscale and fed as the fourth channel of the current frame image, the model would then have to learn to use that extra channel to make better images in the end. Since we were using a somewhat rigid training framework, we dropped this idea, but in a more flexible setting it could be experimented with, it is also harder to implent in inference mode(in a video player for example).
+
 
 
 ## Bibliographic References
