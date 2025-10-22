@@ -255,9 +255,6 @@ cython_debug/
 
 checkpoints/
 
-
-!images/*
-
 *.part
 *.png
 
@@ -267,3 +264,4 @@ checkpoints/
 export/
 wandb
 *.csv
+!images/*.png
