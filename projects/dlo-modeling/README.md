@@ -26,13 +26,15 @@ Classical methods fail to **quantify this uncertainty**, opting for actions that
 
 ## 2.Objectives
 
-Develop a **dynamics model** capable of predicting the future state and **quantifying the uncertainty** of a Deformable Linear Object (**DLO**), given its current configuration and an applied robotic action.
+Develop a **dynamics model** capable of predicting the future state and **quantifying the uncertainty** of a Deformable Linear Object (**DLO**), given its current configuration and an applied action.
 
 ## 3. Methodology
 
 ### 3.1 Overview
 
-The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation.
+The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow is roughly described in the following picture. 
+
+![image](workflow.png)
 
 ### 3.2 Dataset Generation
 
