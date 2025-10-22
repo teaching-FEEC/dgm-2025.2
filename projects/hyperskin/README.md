@@ -26,7 +26,7 @@ A classifier trained with synthetic AND real data will have better results than 
 
 ### Presentation
 #### Slides
-https://docs.google.com/presentation/d/1lx3-yT1-Smwg8uxjNo1hsLG3ESJFPZldXnlBdIy1wgo/edit?usp=sharing
+https://docs.google.com/presentation/d/16PthBsxWUrnjjb5saw3rDCTorvTyX7CcnbJKjngEmF8/edit?usp=sharing
 
 ### Dataset
 - Github link: https://github.com/heugyy/HSIDermoscopy
