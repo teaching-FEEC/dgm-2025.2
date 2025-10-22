@@ -7,7 +7,7 @@ This project originated in the context of the graduate course *IA376N - Generati
 offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).
 
 ### Deliverables
-The presentation for the E2 delivery can be found here * ADD LINK
+The presentation for the E2 delivery can be found here [Presentation E2 Google Slides](https://docs.google.com/presentation/d/1zLd4ip43czBegF7HHgJYoS5qRbJ5Y2kQ/edit?slide=id.p1)
 
 > |Name  | RA | Specialization|
 > |--|--|--|
