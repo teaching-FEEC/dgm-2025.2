@@ -146,6 +146,12 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
     - Foi feito o split do dataset em 80% para treino, 10% validação e 10% teste.
     - A formatação realizada para espectrogramas log-mel (n_mels=80), tokenização VQ-VAE (codebook=1024).
 
+### Workflow (parcial E2)
+
+![Diagrama do workflow](assets/e2.drawio.png)
+
+Figura: Diagrama resumido do fluxo de pré-processamento, tokenização (VQ-VAE), treino do modelo de mundo (Encoder + RSSM + Decoder).
+
 ## Experiments, Results, and Discussion (parcial: E2)
 
 ### Tokenizador VQ-VAE.
@@ -218,8 +224,10 @@ Este projeto é baseado em duas referências principais:
 
 ## Links para a Apresentação
 - E1
-    - Link para o [vídeo da apresentação](https://drive.google.com/file/d/1IFhNwxeS_8Gce3WTqXLOq8UJDLKJB7QQ/view?usp=sharing)
-    - Link para os [slides da apresentação](https://www.canva.com/design/DAGzF_vtvEE/6c1_5Sw-mUuLSqV6HMjP9Q/edit?utm_content=DAGzF_vtvEE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
+    - Link para o [vídeo da apresentação](https://drive.google.com/file/d/1IFhNwxeS_8Gce3WTqXLOq8UJDLKJB7QQ/view?usp=sharing).
+    - Link para os [slides da apresentação](https://www.canva.com/design/DAGzF_vtvEE/6c1_5Sw-mUuLSqV6HMjP9Q/edit?utm_content=DAGzF_vtvEE&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton).
+- E2
+    - Link para o [drive](https://drive.google.com/drive/folders/1WRHc6uAdlA1_P8DQIelyknfx_SQ6PT8U?usp=sharing).
 
 ## Referências:
 HA, David; SCHMIDHUBER, Jürgen. World Models. arXiv:1803.10122, 2018.
