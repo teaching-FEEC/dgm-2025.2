@@ -1,0 +1,75 @@
+# MANIFEST.in - Include additional files in the package distribution
+
+# Include documentation files
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include setup.py
+
+# Include configuration files
+include *.cfg
+include *.ini
+include *.yaml
+include *.yml
+include *.json
+
+# Include validation package data
+recursive-include validation *.py
+recursive-include validation *.json
+recursive-include validation *.yaml
+recursive-include validation *.yml
+
+# Include data files
+recursive-include validation/data *
+recursive-include validation/notebooks *.py
+recursive-include validation/notebooks *.ipynb
+recursive-include validation/notebooks *.md
+
+# Include tests
+recursive-include tests *.py
+
+# Include examples and documentation
+recursive-include examples *.py
+recursive-include examples *.md
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+
+# Exclude compiled files and caches
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.dylib
+global-exclude *.dll
+
+# Exclude development and build files
+exclude .gitignore
+exclude .gitattributes
+exclude .pre-commit-config.yaml
+exclude tox.ini
+exclude Makefile
+recursive-exclude * .git*
+recursive-exclude * .DS_Store
+recursive-exclude * .pytest_cache
+recursive-exclude * .mypy_cache
+recursive-exclude * .coverage
+recursive-exclude * htmlcov
+recursive-exclude * build
+recursive-exclude * dist
+recursive-exclude * *.egg-info
+
+# Exclude IDE and editor files
+recursive-exclude * .vscode
+recursive-exclude * .idea
+recursive-exclude * *.swp
+recursive-exclude * *.swo
+recursive-exclude * *~
+
+# Exclude temporary files
+recursive-exclude * tmp
+recursive-exclude * temp
+recursive-exclude * *.tmp
+recursive-exclude * *.temp

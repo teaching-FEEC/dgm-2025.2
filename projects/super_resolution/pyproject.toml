@@ -1,0 +1,201 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "super-resolution-validation"
+version = "1.0.0"
+description = "Comprehensive validation framework for super resolution models using PSNR, LPIPS, and SSIM metrics"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Super Resolution Team", email = "team@superres.ai"}
+]
+maintainers = [
+    {name = "Super Resolution Team", email = "team@superres.ai"}
+]
+keywords = [
+    "super-resolution",
+    "image-processing", 
+    "computer-vision",
+    "deep-learning",
+    "validation",
+    "metrics",
+    "psnr",
+    "lpips", 
+    "ssim"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+requires-python = ">=3.8"
+dependencies = [
+    # Core image processing and computer vision
+    "opencv-python>=4.5.0",
+    "scikit-image>=0.18.0",
+    "Pillow>=8.0.0",
+    
+    # Numerical computing and data handling
+    "numpy>=1.20.0",
+    "pandas>=1.3.0",
+    
+    # Deep learning framework for LPIPS
+    "torch>=1.9.0",
+    "torchvision>=0.10.0",
+    "lpips>=0.1.4",
+    
+    # Progress bars and utilities
+    "tqdm>=4.60.0",
+    
+    # Visualization (for analysis notebooks)
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0"
+]
+
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.0.0",
+    "black>=21.0.0",
+    "flake8>=3.9.0",
+    "isort>=5.0.0",
+    "mypy>=0.910"
+]
+
+# GPU acceleration dependencies
+gpu = [
+    "torch>=1.9.0+cu118",
+    "torchvision>=0.10.0+cu118"
+]
+
+# Jupyter notebook dependencies
+notebook = [
+    "jupyter>=1.0.0",
+    "jupyterlab>=3.0.0",
+    "ipywidgets>=7.6.0"
+]
+
+# Complete development environment
+all = [
+    "super-resolution-validation[dev,gpu,notebook]"
+]
+
+[project.urls]
+Homepage = "https://github.com/superres-team/super-resolution-validation"
+Documentation = "https://super-resolution-validation.readthedocs.io"
+Repository = "https://github.com/superres-team/super-resolution-validation.git"
+"Bug Tracker" = "https://github.com/superres-team/super-resolution-validation/issues"
+Changelog = "https://github.com/superres-team/super-resolution-validation/blob/main/CHANGELOG.md"
+
+[project.scripts]
+# Command-line interfaces
+sr-validate = "validation.main_validation:main"
+sr-downsample = "validation.image_downsampler:main"
+sr-analyze = "validation.notebooks.validation_analysis_simple:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["validation*"]
+exclude = ["tests*", "docs*", "examples*"]
+
+[tool.setuptools.package-data]
+validation = ["*.json", "*.yaml", "*.yml"]
+
+# Black code formatting
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort import sorting
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["validation"]
+
+# pytest configuration
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["validation"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod"
+]
+
+# MyPy type checking
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "lpips.*",
+    "skimage.*",
+    "seaborn.*"
+]
+ignore_missing_imports = true

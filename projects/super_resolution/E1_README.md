@@ -41,11 +41,11 @@ For this first stage, the proposed methodology is as follows:
 
 ### **Datasets**:
 
-| Dataset | Type | Description | Usage |
-|---------|------|-------------|-------|
-| **DIV2K** | Training/Validation | 2K resolution diverse images | Primary training data |
-| **Flickr2K** | Training | High-quality photos from Flickr | Additional training data |
-| **Set5/Set14** | Evaluation | Standard benchmark sets | Performance evaluation |
+| Dataset | Type | Description | Usage | LINK |
+|---------|------|-------------|-------|-------|
+| **DIV2K** | Training/Validation | 2K resolution diverse images | Primary training data | Not yet here
+| **Flickr2K** | Training | High-quality photos from Flickr | Additional training data | [Flickr2K](https://www.kaggle.com/datasets/daehoyang/flickr2k?resource=download)
+| **Set5/Set14** | Evaluation | Standard benchmark sets | Performance evaluation | Not yet here
 
   - The project intends to use standard super-resolution datasets such as **DIV2K**, **Flickr2K**, and possibly **Set5/Set14** for evaluation.  
   - These datasets were chosen because they are widely adopted benchmarks in super-resolution tasks, providing a reliable basis for comparison with the literature.  
@@ -68,7 +68,8 @@ For this first stage, the proposed methodology is as follows:
 ### **Tools**:  
   - **PyTorch** for model development and training.  
   - **Weights & Biases** or TensorBoard for experiment tracking.  
-  - Google Colab or local GPU cluster for computational resources.  
+  - Google Colab or local GPU cluster for computational resources.
+  - **Custom Validation Framework** for comprehensive model evaluation (PSNR, LPIPS, SSIM).  
 
 ### **Expected Results**:  
   - **Quantitative Improvements**: Significant gains over bicubic interpolation baselines

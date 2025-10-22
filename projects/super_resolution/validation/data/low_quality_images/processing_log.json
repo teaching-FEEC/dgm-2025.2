@@ -1,0 +1,487 @@
+{
+  "processed_files": [
+    {
+      "filename": "000004.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000004.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000004.png",
+      "original_size": [
+        1200,
+        1608
+      ],
+      "downsampled_size": [
+        300,
+        402
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000003.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000003.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000003.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000001.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000001.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000001.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000002.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000002.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000002.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000005.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000005.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000005.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000006.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000006.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000006.png",
+      "original_size": [
+        2040,
+        1524
+      ],
+      "downsampled_size": [
+        510,
+        381
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000007.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000007.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000007.png",
+      "original_size": [
+        1344,
+        2040
+      ],
+      "downsampled_size": [
+        336,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000008.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000008.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000008.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000009.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000009.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000009.png",
+      "original_size": [
+        2040,
+        1524
+      ],
+      "downsampled_size": [
+        510,
+        381
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000010.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000010.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000010.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000011.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000011.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000011.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000012.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000012.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000012.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000013.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000013.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000013.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000014.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000014.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000014.png",
+      "original_size": [
+        2028,
+        1428
+      ],
+      "downsampled_size": [
+        507,
+        357
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000001.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000001.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000001.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000015.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000015.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000015.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000004.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000004.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000004.png",
+      "original_size": [
+        1200,
+        1608
+      ],
+      "downsampled_size": [
+        300,
+        402
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000002.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000002.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000002.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000003.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000003.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000003.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000005.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000005.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000005.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000006.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000006.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000006.png",
+      "original_size": [
+        2040,
+        1524
+      ],
+      "downsampled_size": [
+        510,
+        381
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000007.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000007.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000007.png",
+      "original_size": [
+        1344,
+        2040
+      ],
+      "downsampled_size": [
+        336,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000009.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000009.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000009.png",
+      "original_size": [
+        2040,
+        1524
+      ],
+      "downsampled_size": [
+        510,
+        381
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000008.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000008.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000008.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000010.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000010.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000010.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000012.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000012.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000012.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000011.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000011.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000011.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000013.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000013.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000013.png",
+      "original_size": [
+        1524,
+        2040
+      ],
+      "downsampled_size": [
+        381,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000014.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000014.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000014.png",
+      "original_size": [
+        2028,
+        1428
+      ],
+      "downsampled_size": [
+        507,
+        357
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    },
+    {
+      "filename": "000015.png",
+      "input_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\high_quality_images\\000015.png",
+      "output_path": "D:\\Mestrado\\IAGenerativa\\dgm-2025.2-g4\\projects\\super_resolution\\validation\\data\\low_quality_images\\000015.png",
+      "original_size": [
+        1356,
+        2040
+      ],
+      "downsampled_size": [
+        339,
+        510
+      ],
+      "scale_factor": 4,
+      "method": "bicubic",
+      "quality_degradation": true
+    }
+  ],
+  "failed_files": [],
+  "total_processed": 30,
+  "total_failed": 0
+}
