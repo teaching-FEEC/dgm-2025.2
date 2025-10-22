@@ -29,7 +29,7 @@ This project will be developed in Python, using TensorFlow with the Keras API fo
 | Stage | Duration	| Description
 |:---:|:---:|:---:|
 | Literature review and data processing | 1-2 weeks (starting on September 17) | Theoretical deep dive into GANs for time series, consolidation, and final processing of datasets for feature creation.|
-| Training of models (c-GANs and VAE-LSTM) | 3-4 weeks (starting on September 30) | Construction and training of generative models (generator and discriminator), testing with data samples, verification of metrics and output data quality. |
+| Training of models | 3-4 weeks (starting on September 30) | Construction and training of generative models (generator and discriminator), testing with data samples, verification of metrics and output data quality. |
 | Analysis and validation of final results, conclusions, and suggestions for improvement | 2-3 weeks (starting October 22) | Execution of evaluation tests (qualitative and quantitative) and comparison between trained models. |
 | Writing of the final article/report | 1-2 weeks (starting November 14) | Organization of data in the final document on GitHub. |
 
