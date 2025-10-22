@@ -48,7 +48,7 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         global_min: float | list[float] = None,
         infinite_train: bool = False,
         sample_size: Optional[int] = None,
-        range_mode: Optional[str] = None,
+        range_mode: Optional[str] = "0_1",
 
     ):
         super().__init__()
@@ -70,9 +70,9 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
             if "test" in transforms:
                 self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
 
-        if range_mode in self.hparams: 
+        if range_mode in self.hparams:
             self.range_mode = range_mode
-        elif self.hparams.task != HSIDermoscopyTask.GENERATION: 
+        elif self.hparams.task != HSIDermoscopyTask.GENERATION:
             self.range_mode = range_mode
         else: 
             self.range_mode = '0_1'
