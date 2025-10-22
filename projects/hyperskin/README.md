@@ -251,39 +251,49 @@ Additionally, each channel of the hyperspectral images is normalized using min-m
 ### Generative Model Training
 
 #### SHS GAN
-The SHS GAN experiment was used to synthesize 64x64 melanoma hyperspectral images at first. The main idea was to understand what was implemented in the reference article, which had lots of methods to deal with hyperspectral data. 
+The SHS-GAN experiment was initially used to synthesize 64×64 hyperspectral images of melanoma. The main goal was to reproduce and understand the implementation described in the reference paper, which proposed several techniques for handling hyperspectral data.
 
-At first we used a simple DCGAN. The Generator is composed of a sequence of transposed convolutional blocks that progressively upsample a latent vector into an image. Each block includes a ConvTranspose2d, followed by BatchNorm2d and ReLU activations, except for the last layer, which uses a Tanh activation. The architecture adapts to different image sizes (28×28, 64×64, 256×256) by varying depth and number of filters, and all weights are initialized with a normal distribution for stable training.
-The Discriminator mirrors this structure with standard convolutional layers that downsample the image. Each block uses Conv2d, optional BatchNorm2d, and LeakyReLU activations, with the last layer outputting a single scalar without activation.
+We began with a baseline DCGAN.  
+The Generator consists of a sequence of transposed convolutional blocks that progressively upsample a latent vector into an image. Each block includes a `ConvTranspose2d`, followed by `BatchNorm2d` and `ReLU` activations, except for the final layer, which uses a `Tanh` activation. The architecture adapts to different image sizes (28×28, 64×64, 256×256) by adjusting the depth and number of filters. All weights are initialized with a normal distribution to ensure stable training.  
+The Discriminator mirrors this structure using standard convolutional layers for downsampling. Each block includes `Conv2d`, optional `BatchNorm2d`, and `LeakyReLU` activations, with the last layer outputting a single scalar (without activation).
 
-We add progressively characteristics of SHS GAN and evaluate the main differences it caused on the image, adapting to our context. For the first experiment we evaluated the implementations done on the Discriminator. The first one is replacing the 2D Convolution filter with a 3D convolution. Since we are dealing with an additional spectral channel, convolving in a third dimension might capture spectral relations that a 2D convolution does not.
+Next, we progressively introduced the main components of SHS-GAN and evaluated their impact on image synthesis, adapting each modification to our context.  
 
-The second experiment was replacing the Batch Normalization with the Spectral Normalization, which is a regularization technique introduced to stabilize the training of GANs. It works by constraining the spectral norm, considered the largest singular value of each layer’s weight matrix to 1, effectively controlling the Lipschitz constant of the network.
+In the first experiment, we replaced the 2D convolutional filters in the discriminator with 3D convolutions. Since hyperspectral data includes an additional spectral dimension, convolving in three dimensions allows the network to capture spectral correlations that 2D convolutions cannot.
 
-The third experiments was adding the the spectral-frequency arm, which receives the same HS cube after applying a Fast Fourier Transform along the spectral dimension and combined with the spatial arm, containing simple convolutions.
+In the second experiment, we replaced **Batch Normalization** with **Spectral Normalization**, a regularization method that stabilizes GAN training. It constrains the spectral norm (the largest singular value of each layer’s weight matrix) to 1, thereby controlling the Lipschitz constant of the network and improving stability.
 
-The first observation was that the training was very sensitive to several hyperparameters, and there were a few selections that resulted in pure noise, while the others generated more accurate representations. The first hyperparameter that changed the course of the generation was the batch size. Considering our dataset consisted of approximately 70 images of melanoma, batches of 1,2 and 4 were able to create synthetic data. On the contrary to batch size 16 and higher, which resulted in pure noise.
+In the third experiment, we added a spectral-frequency arm, which processes the same hyperspectral cube after applying a Fast Fourier Transform (FFT) along the spectral dimension. The resulting spectral-frequency representation is then combined with the spatial arm (which contains standard convolutions), as proposed in the reference model.
 
-The training was performed using a WGAN, which meant that we used gradient_penalty and n_critic as hyperparemeters. The gradient penalty term is added to the discriminator loss to enforce the Lipschitz continuity constraint, which stabilizes training by preventing the critic from having excessively steep gradients. This helps the model produce smoother and more realistic distributions, avoiding mode collapse and improving convergence. The n_critic parameter defines how many times the critic is updated for each generator update—usually greater than one—so that the critic can better approximate the Wasserstein distance before the generator is adjusted. For our experiments we used gradient penalty equal to 10, and n_critic was 2.
+During training, we observed that the model was highly sensitive to hyperparameters, and only a narrow set of configurations produced realistic results. Some combinations generated pure noise, while others yielded better synthetic images.  
+The batch size had a strong influence: given our dataset of approximately 70 melanoma images, small batch sizes (1, 2, or 4) produced plausible results, while larger batch sizes (≥16) led to unstable outputs and noise.
 
-A very important hyperparameter was the learning rate. We used a learning rate in the order of 1e-5. Higher learning rates distabilized the trainig so for each epoch the images changed drastically, and extremely low learning rates generated noise even after several epochs.
+The training followed the WGAN formulation, using two key hyperparameters: `gradient_penalty` and `n_critic`.  
+The gradient penalty enforces the Lipschitz continuity constraint on the discriminator, preventing it from developing excessively steep gradients. This results in smoother and more realistic training dynamics, reducing mode collapse and improving convergence.  
+The `n_critic` parameter defines how many times the critic is updated per generator update—commonly greater than one—to ensure the critic accurately estimates the Wasserstein distance before each generator step.  
+In our setup, we used a gradient penalty of 10 and n_critic = 2.
 
-Regarding our experiments, we concluded that using 3D convolutional layers in the discriminator of gan is helpful to synthesize spectral characteristics, given that the spectral pattern of this version is more similar than using 2d conv layers.
+Another crucial hyperparameter was the learning rate, set to approximately **1×10⁻⁵**.  
+Higher learning rates destabilized training, causing the generated images to fluctuate drastically across epochs, while extremely low rates resulted in persistent noise even after many epochs.
+
+Overall, our experiments indicate that incorporating 3D convolutional layers in the discriminator improves the synthesis of spectral characteristics, as shown in the comparison below. The spectral profiles generated using 3D convolutions are more consistent with the real data than those obtained with 2D convolutions.
 
 ![Comparison Spectral Axis between 3D and 2D conv](images/3d_2d_spectral_comparison.png)
 
- However spectral normalization and the introduction of an FFT component on the discriminator did not improve the results. It might require some optimization process considering the hyperparemeters are very sensitive to training, however what we believe is that our reference[6] uses data with 29 channels, which is far above what we have and perhaps these additional characteristics to enphazise spectral relations might not cause significant change in our context.
+However, spectral normalization and the addition of the FFT arm did not lead to noticeable improvements.  
+While further optimization might help, we believe this outcome is related to the limited spectral depth of our dataset (only a few channels), in contrast to the reference [6], which used data with 29 spectral bands.  
+In our case, additional mechanisms designed to enhance spectral relationships may not have a significant impact given the lower spectral resolution.
 
- ![Metrics for SHS-GAN](images/SHS-GAN-metric.png)
+![Metrics for SHS-GAN](images/SHS-GAN-metric.png)
 
+We expect the quality of synthetic hyperspectral images to improve with future generator optimizations.  
+Our next step is to use RGB images as inputs to the generator instead of random noise and include a reconstruction loss between the generated and real RGB representations.  
+This approach encourages the generator to learn meaningful spatial and color relationships, using them to reconstruct high-quality hyperspectral data.
 
-However, we believe that with the introduction of the optimizations made in the generator in the next steps of the project, the quality of the synthetich HSI data will improve. The main idea is to use RGB images as input to the generator instead of noise, and during the training we calculate a reconstruction Loss of HSI->RGB and add in the cost function. This way the generator learns spatial and color information and use to reconstruct HSI images.
- ![Exp1](images/2d-conv-plot.png)
- ![Exp2](images/3d-convolution-plot.png)
-![Exp3](images/3d-conv-sn.png)
+![Exp1](images/2d-conv-plot.png)  
+![Exp2](images/3d-convolution-plot.png)  
+![Exp3](images/3d-conv-sn.png)  
 ![Exp4](images/3D-conv-sn-fft.png)
-
-
 #### FastGAN
 The FastGAN experiment was conducted to generate synthetic hyperspectral images of melanoma lesions using a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 256, following the original FastGAN training procedure that includes manual optimization, exponential moving average updates, and perceptual consistency losses. The goal was to evaluate how well the generator could reproduce realistic skin lesion patterns and retain spectral properties similar to real melanoma samples.  
 
