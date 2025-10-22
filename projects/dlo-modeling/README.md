@@ -52,14 +52,13 @@ Three model architectures were evaluated to learn the rope dynamics:
 
 #### (a) BiLSTM
 
-- Based on the model proposed by Yan et al. (2019) [3], which demonstrated strong results for state estimation in DLO manipulation.  
+- Based on the model proposed by Yan et al. (2019) [2], which demonstrated strong results for state estimation in DLO manipulation.  
 - The **Bidirectional LSTM** captures both forward and backward dependencies between rope links, essential since each link’s motion depends on its neighbors on both sides.  
 - **Residual connections** were added to allow the model to predict position deltas, improving stability and convergence.
 
 #### (b) Transformer + BiLSTM Hybrid
 
 - Combines a **Transformer encoder-decoder** (Vaswani et al., 2017) [3] to model global dependencies between rope segments with a **BiLSTM** to capture local directional dynamics.  
-- This hybrid model draws inspiration from Viswanath et al. (2023) [4], which used learned representations of 1D objects for manipulation and inspection tasks.
 
 #### (c) Variational Autoencoder (VAE)
 
@@ -142,7 +141,7 @@ Although the differences between models are small, several tendencies emerged:
 - **VAE predictions** show higher variability, representing uncertainty but at reduced positional accuracy.
 
 The experiments highlight that **performance is currently constrained by data diversity**, not architectural sophistication. Future iterations will include over one million samples with varied physical parameters (friction, stiffness, action complexity, and bimanual manipulation).  
-Additionally, **latent world models (e.g., Dreamer [3])** will be explored to capture multimodal dynamics and uncertainty.
+Additionally, **latent world models (e.g., Dreamer [4])** will be explored to capture multimodal dynamics and uncertainty.
 
 ## 6. Conclusion
 
@@ -154,20 +153,22 @@ The experiments demonstrated the feasibility of learning rope dynamics from simu
 
 - **Dataset Expansion:** generate over one million samples with varied physical parameters.  
 - **Action Complexity:** include multi-step and bimanual manipulations.  
-- **Model Enhancement:** explore **latent world models (e.g., Dreamer[3])** and **spatial transformers**.  
+- **Model Enhancement:** explore **latent world models (e.g., Dreamer[4])** and **spatial transformers**.  
 - **Evaluation and Planning:** introduce probabilistic metrics such as **Average Displacement Error (ADE)** and **Dice Coefficient**.
 
 Ultimately, the goal is to obtain a dynamics model that not only predicts the next state of the rope accurately but also **quantifies uncertainty**, enabling **risk-aware planning** for autonomous DLO manipulation tasks.
 
 ## 7. Bibliographic References
 
-[1] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control: Learning Behaviors by Latent Imagination,” *Proc. ICLR 2020*, 2020. [Online]. Available: https://arxiv.org/abs/1912.01603
+[1] D. Ha and J. Schmidhuber, “World Models,” *CoRR*, vol. abs/1803.10122, 2018. [Online]. Available: https://arxiv.org/abs/1803.10122  
 
 [2] Yan, Mengyuan, et al. “Self-Supervised Learning of State Estimation for Manipulating Deformable Linear Objects.” ArXiv.org, 2019. [Online]  Available: arxiv.org/abs/1911.06283.
 
 [3] Vaswani, A., Shazeer, N., Parmar, N., et al. (2017). Attention is all you need. Advances in neural information processing systems, 30. NIPS papers. You can also cite it via its arXiv number: Vaswani, A., et al. (2017). Attention Is All You Need. arXiv preprint arXiv:1706.03762.  [Online] Available https://arxiv.org/abs/1706.03762. 
 
-[4] D. Ha and J. Schmidhuber, “World Models,” *CoRR*, vol. abs/1803.10122, 2018. [Online]. Available: https://arxiv.org/abs/1803.10122  
+[4] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control: Learning Behaviors by Latent Imagination,” *Proc. ICLR 2020*, 2020. [Online]. Available: https://arxiv.org/abs/1912.01603
+
+
 
 # Presentation Link
 
