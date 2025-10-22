@@ -241,16 +241,29 @@ After the augmentations are applied, the images undergo a final transformation t
 Additionally, each channel of the hyperspectral images is normalized using min-max normalization based on pre-calculated global minimum and maximum values for each channel across the entire dataset. This normalization ensures that the pixel values for each channel are scaled to a consistent range, typically between 0 and 1, which is crucial for stable and efficient training of the neural network models.
 
 ### Classifier Training
+The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Thirteen experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
+
+1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.7619)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.37**, showing that the model performed best when trained without balancing.
+2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7241**, with an **accuracy of 0.700** and **Spec@Sens of 0.34**, indicating that reweighting did not generalize well to minority melanoma cases.
+3. Applied **Batch Regularization**, reaching an F1-score of **0.6923**, **accuracy of 0.750**, and **Spec@Sens of 0.36**. Although this slightly stabilized training, it did not improve the class balance.
+4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7407**, **accuracy of 0.675**, and **Spec@Sens of 0.35**. The combined method recovered some performance but still lagged behind the baseline.
+
+| Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
+|:--|:--:|:--:|:--:|:--:|:--:|:--|
+| 1 | DenseNet201 | None | **0.7619** | 0.725 | **0.37** | Baseline; best overall F1 and balanced performance |
+| 2 | DenseNet201 | Focal Loss | 0.7241 | 0.700 | 0.34 | Reweighting reduced sensitivity balance |
+| 3 | DenseNet201 | Batch Regularization | 0.6923 | **0.750** | 0.36 | Stable but lower overall F1 |
+| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7407 | 0.675 | 0.35 | Slight recovery, still below baseline |
+
+The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques. These findings indicate that synthetic data generation is a more promising path forward. The next experimental stage investigates whether GAN- or VAE-based synthetic hyperspectral images can enrich the training set and outperform conventional balancing strategies, particularly for minority melanoma detection.
 
 ### Generative Model Training
 
 #### SHS GAN
 The SHS-GAN experiment was initially used to synthesize 64×64 hyperspectral images of melanoma. The main goal was to reproduce and understand the implementation described in the reference paper, which proposed several techniques for handling hyperspectral data.
-
 We began with a baseline DCGAN.  
 The Generator consists of a sequence of transposed convolutional blocks that progressively upsample a latent vector into an image. Each block includes a `ConvTranspose2d`, followed by `BatchNorm2d` and `ReLU` activations, except for the final layer, which uses a `Tanh` activation. The architecture adapts to different image sizes (28×28, 64×64, 256×256) by adjusting the depth and number of filters. All weights are initialized with a normal distribution to ensure stable training.  
 The Discriminator mirrors this structure using standard convolutional layers for downsampling. Each block includes `Conv2d`, optional `BatchNorm2d`, and `LeakyReLU` activations, with the last layer outputting a single scalar (without activation).
-
 Next, we progressively introduced the main components of SHS-GAN and evaluated their impact on image synthesis, adapting each modification to our context.  
 
 In the first experiment, we replaced the 2D convolutional filters in the discriminator with 3D convolutions. Since hyperspectral data includes an additional spectral dimension, convolving in three dimensions allows the network to capture spectral correlations that 2D convolutions cannot.
@@ -265,9 +278,7 @@ The batch size had a strong influence: given our dataset of approximately 70 mel
 The training followed the WGAN formulation, using two key hyperparameters: `gradient_penalty` and `n_critic`.  
 The gradient penalty enforces the Lipschitz continuity constraint on the discriminator, preventing it from developing excessively steep gradients. This results in smoother and more realistic training dynamics, reducing mode collapse and improving convergence.  
 The `n_critic` parameter defines how many times the critic is updated per generator update—commonly greater than one—to ensure the critic accurately estimates the Wasserstein distance before each generator step.  
-In our setup, we used a gradient penalty of 10 and n_critic = 2.
-
-Another crucial hyperparameter was the learning rate, set to approximately **1×10⁻⁵**.  
+In our setup, we used a gradient penalty of 10 and n_critic = 2. Another crucial hyperparameter was the learning rate, set to approximately **1×10⁻⁵**.  
 Higher learning rates destabilized training, causing the generated images to fluctuate drastically across epochs, while extremely low rates resulted in persistent noise even after many epochs.
 
 Overall, our experiments indicate that incorporating 3D convolutional layers in the discriminator improves the synthesis of spectral characteristics, as shown in the comparison below. The spectral profiles generated using 3D convolutions are more consistent with the real data than those obtained with 2D convolutions.
