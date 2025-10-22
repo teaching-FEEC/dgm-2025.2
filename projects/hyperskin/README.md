@@ -55,7 +55,7 @@ The project will be developed using Python, with the following libraries:
 
 ### Generative Models
 
-#### SHS GAN [6]
+#### SHS GAN [5]
 
 - The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
 
@@ -87,11 +87,109 @@ The project will be developed using Python, with the following libraries:
 
 
 ### Evaluating synthesis results
-*Aline TODO*
+
+
+
 We would like for the generated images to be: clear, realistic and useful. 
-- Image Clarity/Quality : Variance, Spatial and Spectral Entropy, SNR
-- Image realism : Spectral Angle Mapper for average melanoma spectral signature , SSIM with real images, adapted FID 
+- Image Clarity/Quality : Peak Signal-to-Noise Ratio (PSNR)
+- Image realism : Spectral Angle Mapper (SAM) for average melanoma spectral signature , SSIM with real images, adapted FID 
 - Usability: Given a baseline classifier that classifies images into melanoma and not melanoma, first train the classifier with only real data then with real + synthetic data and see if F1 score improves. Then, train only on synthetic data and test on real data to see if classifier performs similarly 
+
+---
+Here are the following explanations for the most used metrics
+####  Structural Similarity Index Measure (SSIM)
+
+Measures the structural similarity between two images, focusing on luminance, contrast, and structural patterns.
+
+**Equation:**
+
+$$
+SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
+$$
+
+where:
+- $\mu_x, \mu_y$ are the means of images $x$ and $y$
+- $\sigma_x^2, \sigma_y^2$ are their variances
+- $\sigma_{xy}$ is their covariance
+- $C_1, C_2$ are small constants to avoid division by zero
+- Range: **[0, 1]**
+- **SSIM ≈ 1** → high structural similarity  
+- **SSIM ≈ 0** → weak similarity  
+
+
+#### Peak Signal-to-Noise Ratio (PSNR)
+
+Quantifies image reconstruction quality in terms of pixel-wise fidelity, how much noise or distortion is present compared to a reference image.
+
+**Equation:**
+
+$$
+PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right)
+$$
+
+with
+
+$$
+MSE = \frac{1}{N}\sum_{i=1}^{N}(x_i - y_i)^2
+$$
+
+where $L$ is the maximum possible pixel value (e.g., 1.0 or 255).
+
+
+- Higher PSNR → better image quality
+- Typical values:
+  - > 40 dB → excellent
+  - 30–40 dB → good
+  - < 30 dB → degraded or noisy
+
+---
+
+#### Fréchet Inception Distance (FID)
+Measures the distributional distance between real and generated image features extracted from a deep network (Inception-v3).  
+It evaluates how close the overall statistics of generated images are to the real ones.
+
+In our context, we must use an adapted FID, once the pre trained weights are fit for a 3-channel RGB input. Since we have a 16 channel image, it is not possible to perform the inference of the model. Therefore, we used the Inception V3 model with the excpetion of the first layer. This layer, we adapted to a 16-channel input by replicating the kernel weights untill it reached the desired channel.
+
+**Equation:**
+$$
+FID = \|\mu_r - \mu_g\|_2^2 + \text{Tr}\left(\Sigma_r + \Sigma_g - 2(\Sigma_r \Sigma_g)^{1/2}\right)
+$$
+
+where:
+- $\mu_r, \Sigma_r$: mean and covariance of features from **real images**
+- $\mu_g, \Sigma_g$: mean and covariance of features from **generated images**
+
+- Lower FID → better quality and diversity
+
+
+
+#### Spectral Angle Mapper (SAM)
+
+**Purpose:**  
+Used for hyperspectral images, SAM measures the spectral similarity between two spectra (one per pixel) by computing the angle between their spectral vectors.
+
+**Equation:**
+$$
+SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)
+$$
+
+where $x$ and $y$ are spectral vectors of a pixel in the reference and generated images.
+
+- Units: radians or degrees**
+- **Lower SAM → higher spectral similarity
+
+
+#### Summary Table
+
+| Metric | Domain | Range | Better When | Evaluates |
+|:-------|:--------|:-------|:--------------|:-------------|
+| **SSIM** | Spatial | [-1, 1] | ↑ | Structural similarity |
+| **PSNR** | Spatial | [0, ∞) dB | ↑ | Pixel-wise fidelity |
+| **FID** | Feature / Perceptual | [0, ∞) | ↓ | Realism & diversity |
+| **SAM** | Spectral | [0°, ∞°) | ↓ | Spectral shape similarity |
+
+---
+
 
 ### Dataset Description
 | Dataset | Web Address | Descriptive Summary |
@@ -164,7 +262,23 @@ The second experiment was replacing the Batch Normalization with the Spectral No
 
 The third experiments was adding the the spectral-frequency arm, which receives the same HS cube after applying a Fast Fourier Transform along the spectral dimension and combined with the spatial arm, containing simple convolutions.
 
-The first observation was that the training was very sensitive to several hyperparameters, and there were a few selections that resulted in pure noise, while the others generated more accurate representations. 
+The first observation was that the training was very sensitive to several hyperparameters, and there were a few selections that resulted in pure noise, while the others generated more accurate representations. The first hyperparameter that changed the course of the generation was the batch size. Considering our dataset consisted of approximately 70 images of melanoma, batches of 1,2 and 4 were able to create synthetic data. On the contrary to batch size 16 and higher, which resulted in pure noise.
+
+The training was performed using a WGAN, which meant that we used gradient_penalty and n_critic as hyperparemeters. The gradient penalty term is added to the discriminator loss to enforce the Lipschitz continuity constraint, which stabilizes training by preventing the critic from having excessively steep gradients. This helps the model produce smoother and more realistic distributions, avoiding mode collapse and improving convergence. The n_critic parameter defines how many times the critic is updated for each generator update—usually greater than one—so that the critic can better approximate the Wasserstein distance before the generator is adjusted. For our experiments we used gradient penalty equal to 10, and n_critic was 2.
+
+A very important hyperparameter was the learning rate. We used a learning rate in the order of 1e-5. Higher learning rates distabilized the trainig so for each epoch the images changed drastically, and extremely low learning rates generated noise even after several epochs.
+
+Regarding our experiments, we concluded that using 3D convolutional layers in the discriminator of gan is helpful to synthesize spectral characteristics, given that the spectral pattern of this version is more similar than using 2d conv layers.
+
+![Comparison Spectral Axis between 3D and 2D conv](images/3d_2d_spectral_comparison.png)
+
+ However spectral normalization and the introduction of an FFT component on the discriminator did not improve the results. It might require some optimization process considering the hyperparemeters are very sensitive to training, however what we believe is that our reference[6] uses data with 29 channels, which is far above what we have and perhaps these additional characteristics to enphazise spectral relations might not cause significant change in our context.
+
+ ![Metrics for SHS-GAN](images/SHS-GAN-metric.png)
+
+
+However, we believe that with the introduction of the optimizations made in the generator in the next steps of the project, the quality of the synthetich HSI data will improve. The main idea is to use RGB images as input to the generator instead of noise, and during the training we calculate a reconstruction Loss of HSI->RGB and add in the cost function. This way the generator learns spatial and color information and use to reconstruct HSI images.
+
 
 
 #### FastGAN
