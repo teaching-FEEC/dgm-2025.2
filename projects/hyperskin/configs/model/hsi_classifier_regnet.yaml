@@ -1,0 +1,83 @@
+model:
+  class_path: modules.HSIClassifierModule
+  init_args:
+    model_name: densenet201
+    num_classes: 2
+    pretrained: True
+    features_only: False
+    in_chans: 16
+    scriptable: True
+    min_sensitivity: 0.95
+    freeze_backbone: True
+    unfreeze_norm: True
+    # unfreeze_layers: 
+    #   - "features.denseblock4.denselayer25"
+    #   - "features.denseblock4.denselayer26"
+    #   - "features.denseblock4.denselayer27"
+    #   - "features.denseblock4.denselayer28"
+    #   - "features.denseblock4.denselayer29"
+    #   - "features.denseblock4.denselayer30"
+    #   - "features.denseblock4.denselayer31"
+    #   - "features.denseblock4.denselayer32"
+    #   - "features.norm5"
+    # custom_head:
+    #   - class_path: torch.nn.Dropout
+    #     init_args:
+    #       p: 0.3
+    #   - class_path: torch.nn.Linear
+    #     init_args:
+    #       in_features: 1920
+    #       out_features: 2
+    #       bias: True
+
+    criterion:
+      class_path: losses.FocalLoss
+      init_args: 
+        gamma: 2.0
+        alpha: 0.5
+
+trainer:
+  log_every_n_steps: 1
+  max_epochs: 400
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      # adding the run name manually will override the automatic naming
+      # name: densenet201_hsi_classifier
+      log_model: false
+      notes: "Write something interesting about this experiment here."
+
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: callbacks.FixedModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-val_spec@sens={val/spec@sens=0.95:.4f}
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        verbose: true
+        save_last: true
+        mode: max
+        auto_insert_metric_name: false
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        min_delta: 0.01
+        patience: 40
+        verbose: true
+        mode: max
+        strict: true
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+
+# https://pytorch.org/docs/stable/optim.html
+optimizer:
+  class_path: AdamW
+  init_args:
+    lr: 0.00001
+# https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+lr_scheduler:

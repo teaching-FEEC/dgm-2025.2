@@ -1,8 +1,47 @@
-torch
-torchvision
+# --------- python --------- #
+numpy
+matplotlib
 pandas
 scipy
-scikit-image
+ipykernel
+
+# --------- pytorch --------- #
+# torch
+# torchaudio
+# torchvision
+pytorch-lightning
+jsonargparse[signatures]
+torchmetrics
+segmentation-models-pytorch
+
+# --------- loggers --------- #
+# tensorboard
+wandb
+# neptune-client
+# mlflow
+# comet-ml
+
+# --------- custom --------- #
+
+# --------- misc --------- #
+tqdm
+rich
+pyrootutils
+python-dotenv
+debugpy
+umap-learn
+
+# --------- data --------- #
+albumentationsx
+timm
 scikit-learn
-matplotlib
-hatch
+omegaconf
+gdown
+
+# --------- image processing --------- #
+scikit-image
+opencv-python
+
+# interface
+gradio
+lpips

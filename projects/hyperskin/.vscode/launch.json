@@ -1,0 +1,117 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python Debugger: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug  Training (Fit)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "fit",
+        "-c",
+        "configs/data/hsi_dermoscopy_croppedv2.yaml",
+        // "configs/data/hsi_dermoscopy_seg.yaml",
+        "-c",
+        "configs/model/hsi_fastgan.yaml",
+        // "configs/model/hsi_wgan.yaml",
+        // "configs/model/hsi_seg.yaml",
+        // "--trainer.logger.name",
+        // "exp1"
+      ],
+      "justMyCode": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0" // run normally (no remote wait)
+      }
+    },
+    {
+      "name": "Debug  Predict",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "predict",
+        "-c",
+        "configs/data/hsi_dermoscopy_croppedv2.yaml",
+        // "configs/data/hsi_dermoscopy_seg.yaml",
+        "-c",
+        "configs/model/hsi_fastgan.yaml",
+        "--trainer.logger", "False",
+        // "configs/model/hsi_wgan.yaml",
+        // "configs/model/hsi_seg.yaml",
+        // "--trainer.logger.name",
+        // "exp1"
+      ],
+      "justMyCode": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0", // run normally (no remote wait)
+        "WANDB_MODE": "disabled"
+      }
+    },
+    {
+      "name": "Debug Fast Training (Fit)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "fit",
+        "-c",
+        // "configs/data/hsi_dermoscopy_aug.yaml",
+        "configs/data/hsi_dermoscopy_synth.yaml",
+        // "configs/data/hsi_dermoscopy_seg.yaml",
+        "-c",
+        // "configs/model/hsi_classifier_regnet.yaml",
+        "configs/model/hsi_gan.yaml",
+        "--trainer.fast_dev_run",
+        "true"
+      ],
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0" // run normally (no remote wait)
+      }
+    },
+    {
+      "name": "Debug Fast Validation",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/main.py",
+      "args": [
+        "validate",
+        "-c",
+        "logs/hypersynth/f3bkt9lp/config.yaml",
+        "--trainer.fast_dev_run",
+        "true",
+        "--ckpt_path",
+        "logs/hypersynth/f3bkt9lp/checkpoints/epoch=07-val_acc=0.2534.ckpt"
+      ],
+      "justMyCode": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DEBUG": "0" // run normally (no remote wait)
+      }
+    },
+    {
+      "name": "Attach to Debugpy (Remote/Cluster/Container)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${workspaceFolder}"
+        }
+      ]
+    }
+  ]
+}

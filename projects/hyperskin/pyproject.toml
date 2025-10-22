@@ -1,29 +1,19 @@
-```toml
-[build-system]
-requires = ["hatchling>=1.25", "hatch-requirements-txt>=0.4"]
-build-backend = "hatchling.build"
+# https://docs.astral.sh/ruff/configuration/
+[tool.ruff]
+line-length = 120
+select = [
+    "F",  # pyflakes
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "UP", # pyupgrade
+]
+ignore = ["F401"]
+extend-include = ["*.ipynb"]
 
-[project]
-name = "hyperskin"
-version = "0.1.0"
-description = "Hyperskin project package"
-readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
-keywords = ["generative-ai", "multimodal"]
-dynamic = ["dependencies"]
-
-# Pull dependencies from the root requirements.txt
-[tool.hatch.metadata.hooks.requirements]
-files = ["requirements.txt"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["hyperskin"]
-
-[tool.hatch.envs.default]
-python = "3.10"
-
-[tool.hatch.envs.default.scripts]
-run = "python -m hyperskin"
-```
+[tool.pyright]
+exclude = [
+    "**/__pycache__",
+    "data",
+    "logs"
+]
+typeCheckingMode = "off"

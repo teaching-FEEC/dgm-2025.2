@@ -1,0 +1,57 @@
+model:
+  class_path: modules.HSIClassifierModule
+  init_args:
+    model_name: densenet201
+    num_classes: 2
+    pretrained: True
+    features_only: False
+    in_chans: 16
+    scriptable: True
+    min_sensitivity: 0.95
+    freeze_backbone: True
+
+trainer:
+  log_every_n_steps: 1
+  max_epochs: 400
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      # adding the run name manually will override the automatic naming
+      # name: densenet201_hsi_classifier
+      log_model: false
+      notes: "Write something interesting about this experiment here."
+
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: callbacks.FixedModelCheckpoint
+      init_args:
+        filename: epoch={epoch:02d}-val_spec@sens={val/spec@sens=0.95:.4f}
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        verbose: true
+        save_last: true
+        mode: max
+        auto_insert_metric_name: false
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    - class_path: EarlyStopping
+      init_args:
+        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        min_delta: 0.005
+        patience: 100
+        verbose: true
+        mode: max
+        strict: true
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+
+# https://pytorch.org/docs/stable/optim.html
+optimizer:
+  class_path: AdamW
+  init_args:
+    lr: 0.0001
+# https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+lr_scheduler:
