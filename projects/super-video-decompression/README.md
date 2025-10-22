@@ -139,6 +139,23 @@ face aware dataset filtering(only images with faces left) ~3k images:
 
 28 compression decompressed with decompressModel to 10  (upscale 2X resolution with face aware loss)
 
+## Experiments, Results, and Discussion of Results
+
+| x1 (34 to 10)         | PSNR    | DISTS <Better | SSIM \* |
+| --------------------- | ------- | ------------- | ------- |
+| baseline (identity)   | 32,9054 | 1,1195        | 1,8710  |
+| pretrain super        | 32,2302 | 1,1113        | 1,8652  |
+| pretrain mega         | 32,1229 | 1,0999        | 1,8574  |
+| pretrain ultra        | 32,2294 | 1,1129        | 1,8599  |
+| super                 | 33,4368 | 1,0960        | 1,8802  |
+| mega                  | 33,5054 | 1,0939        | 1,8820  |
+| ultra                 | 33,5668 | 1,0908        | 1,8830  |
+
+First, note how the compressed frame has a PSNR and SSIM better than the pretrain models(which have already been pretrained for at least 500k iterations!), this shows how the problem we are trying to solve is hard, and how "close to the original image" the compressed one is, according to quantitative metrics.
+Throughout the literature, is is said that a PSNR from 30 to 34 is good, and 35 to 38 is excellent. However our compressed, perceptually terrible image already starts at 32 PSNR in these metrics, our best model outputs the PSNR is not too far from the baseline, but image quality is clearly improved. The culprit here is that most of the image is not relevant, since most of the image is a background, with low colour variation, and our metrics take into account that, most of the image. In reallity, perceptual quality lies in the few parts of the image that have moving objects, the part that captures human attention, these moving objects are where most of the compression artifacts arise, which is why we see the compressed images as ugly/bad and these global metrics pay little attention to these.
+
+Although it seems the quantitative values don't differ much, each 0.0001 in each metric makes a huge difference in perceptual quality in the generated image, because these improvements happen where it matters in the image. Here the ultra model is generating overall smoother (with less artifacts) frames. Image quality is easier measured with humans eyes, the mega variation here for example, seems to better reconstruct fine details in frames, than the ultra.
+
 ## Bibliographic References
 
 BARAKA MAISELI; ABDALLA, A. T. Seven decades of image super-resolution: achievements, challenges, and opportunities. EURASIP Journal on Advances in Signal Processing, v. 2024, n. 1, 18 jul. 2024.
