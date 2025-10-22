@@ -89,6 +89,8 @@ We would like for the generated images to be: clear, realistic and useful.
 Here are the following explanations for the most used metrics
 ####  Structural Similarity Index Measure (SSIM)
 Measures the structural similarity between two images, focusing on luminance, contrast, and structural patterns.
+
+
 **Equation:**
 $$
 SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
@@ -104,6 +106,8 @@ where:
 
 #### Peak Signal-to-Noise Ratio (PSNR)
 Quantifies image reconstruction quality in terms of pixel-wise fidelity, how much noise or distortion is present compared to a reference image.
+
+
 **Equation:**
 $$
 PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right)
@@ -118,7 +122,8 @@ where $L$ is the maximum possible pixel value (e.g., 1.0 or 255).
   - > 40 dB → excellent
   - 30–40 dB → good
   - < 30 dB → degraded or noisy
----
+
+
 #### Fréchet Inception Distance (FID)
 Measures the distributional distance between real and generated image features extracted from a deep network (Inception-v3).  
 It evaluates how close the overall statistics of generated images are to the real ones.
@@ -139,8 +144,9 @@ where:
 #### Spectral Angle Mapper (SAM)
 **Purpose:**  
 Used for hyperspectral images, SAM measures the spectral similarity between two spectra (one per pixel) by computing the angle between their spectral vectors.
-**Equation:**
 
+
+**Equation:**
 
 $$
 SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)
