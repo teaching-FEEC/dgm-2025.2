@@ -12,7 +12,7 @@ Este projeto teve origem no contexto do curso de pós-graduação IA376N - IA Ge
 | Isadora Minuzzi Vieira  | 290184  | Eng. Biomédica|
 | Raphael Carvalho da Silva e Silva  | 205125  | Eng. Computação |
 
-## Resumo (parcial)
+## Resumo (parcial E2)
 
 Este projeto propõe adaptar modelos de mundo (World Models) à tarefa de síntese de áudio por meio de “sonhos”, tendo como base a arquitetura DreamerV2, originalmente desenvolvida para aprendizado de políticas em ambientes como o Atari. A ideia central é que a mesma estrutura que permite ao Dreamer aprender e planejar em espaços latentes pode ser explorada para modelar a dinâmica temporal de sinais sonoros. A partir de espectrogramas de áudios, treinamos um VQ-VAE para discretizar os espectrogramas, em seguida, um modelo de mundo com RSSM com estados determinísticos e estocásticos discretos para capturar suas dependências temporais. Na Etapa 2 (E2), concluímos o pré-processamento, o treinamento do VQ-VAE e iniciamos o treinamento conjunto de encoder, RSSM e decoder com perdas de reconstrução e divergência KL. Resultados parciais mostram reconstruções consistentes e uso estável do codebook, evidenciando o potencial do paradigma de World Models para geração de áudio coerente a partir de representações latentes aprendidas, análogo ao modo como o Dreamer aprende dinâmicas visuais em jogos do Atari.
 
@@ -47,33 +47,94 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 - Normalizar e pré-processar os espectrogramas para que sejam compatíveis com a entrada do modelo VQ-VAE: 
     - **Conversão para escala log-mel**: Transformação para escala mel (que aproxima a percepção auditiva humana) e aplicação de logaritmo para comprimir a faixa dinâmica, tornando características sutis mais visíveis ao modelo.
-    - **Normalização de amplitude**: Aplicação de normalização z-score para garantir que os valores do espectrograma estejam em uma faixa adequada, evitando problemas de convergência durante o treinamento.
+    - **Normalização de amplitude**: Aplicação de normalização z-score para cada amostra individualmente, para garantir que os valores do espectrograma estejam em uma faixa adequada, evitando problemas de convergência durante o treinamento.
+
+- Divisão dos espectrogramas com proporções 80% treino / 10% validação / 10% teste, garantindo que não haja vazamento entre conjuntos.
 
 - Avaliação preliminar dos espectrogramas gerados:
-    **Visualização dos Espectrogramas gerados**: Plotagem de espectrogramas log-mel usando `matplotlib`.
+    - **Visualização dos Espectrogramas gerados**: Plotagem de espectrogramas log-mel usando `matplotlib`.
     - **Reconstrução do Áudio**: Aplicação da transformada inversa (Griffin-Lim) para converter espectrogramas de volta ao domínio temporal, permitindo avaliação perceptual da qualidade do pré-processamento. Verificação de que o áudio reconstruído mantém inteligibilidade e características do original.
 
-### 2. "Tokenização" do Espectrograma:
+### 2. Tokenização do Espectrograma:
 
-- Ao invés de tratar o espectrograma como uma imagem 2D, ele será dividido em janelas temporais fixas. Cada janela se tornará um "token" que representa um segmento do áudio.
+- Treinamento do VQ-VAE para tokenização dos espectrogramas utilizando as divisões de treino e validação:
 
-- Cada "token" será codificado em um vetor de alta dimensão (embedding) que será a entrada para o modelo de mundo.
+    - O VQ-VAE aprende um codebook discreto que mapeia regiões contínuas do espaço latente em índices discretos, permitindo representar espectrogramas como sequências de tokens.
+
+    - Esta abordagem é especialmente adequada pois: 
+        - Reduz a dimensionalidade dos dados mantendo informação perceptualmente relevante.
+        - Cria representações discretas compatíveis com modelos de sequência como o RSSM.
+
+    - A arquitetura consistirá de um encoder convolucional que comprime o espectrograma em vetores latentes, uma camada de quantização vetorial que mapeia esses vetores para o codebook discreto, e um decoder convolucional que reconstrói o espectrograma a partir dos códigos.
+
+    - Implementado utilizando `PyTorch` com funções de perda compostas por: reconstrução (MSE ou perceptual loss), commitment loss (para aproximar encoder ao codebook) e codebook loss (para atualizar os vetores do codebook).
+
+- Aplicação do modelo VQ-VAE treinado para tokenizar separadamente os conjuntos de treino, validação e teste.
+
+- Avaliação da qualidade da tokenização:
+    - **Qualidade de Reconstrução**: Cálculo de métricas quantitativas (MSE, PSNR, Correlação de Pearson) entre espectrogramas originais e reconstruídos.
+    - **Utilização do Codebook**: Análise da distribuição de uso dos códigos do codebook para verificar se há collapse (códigos não utilizados) ou se há diversidade adequada. Idealmente, todos os códigos devem ser utilizados com frequência razoável.
+
 
 ### 3. Arquitetura do Modelo de Mundo:
 
-- A arquitetura será baseada no Recurrent State Space Model (RSSM), que define estados latentes estocásticos e determinísticos.
+- Implementação da arquitetura baseada no Recurrent State Space Model (RSSM) para aprender dinâmicas temporais dos espectrogramas tokenizados:
+    - O RSSM combina estados latentes determinísticos (capturados por uma GRU/LSTM) e estocásticos (variáveis categóricas discretas) para modelar sequências com incerteza, análogo ao DreamerV2.
+    - Esta arquitetura é especialmente adequada pois:
+        - Permite capturar dependências temporais de longo prazo através do estado determinístico recorrente.
+        - Modela a estocasticidade inerente aos sinais de áudio através de estados discretos probabilísticos.
+        - Facilita o planejamento e imaginação de trajetórias futuras inteiramente no espaço latente.
 
-- O modelo de mundo será adaptado para processar a sequência de "tokens" de espectrograma. Ele consistirá em um codificador (encoder), um modelo de dinâmica latente (RSSM) e um decodificador (decoder). No entanto, o treinamento focará no objetivo de aprendizado contrastivo, eliminando a necessidade de reconstrução completa do espectrograma.
+- Definição dos componentes do modelo de mundo:
+    - **Encoder**: Rede neural que combina MLP e camadas convolucionais 1D, mapeando sequências de tokens do VQ-VAE para embeddings contínuos que alimentam o RSSM.
+    - **RSSM**: Núcleo do modelo de mundo composto por três sub-módulos interconectados:
+        - *Modelo de Representação*: Infere o estado estocástico atual $z_t$ combinando a observação atual com o estado determinístico $h_t$ via distribuições categóricas.
+        - *Modelo de Transição*: Prediz o próximo estado estocástico $\hat{z}_{t+1}$ usando apenas $h_t$, permitindo imaginação sem observações reais.
+        - *Modelo Dinâmico (GRU)*: Atualiza o estado determinístico $h_{t+1}$ a partir de $h_t$ e $z_t$, capturando memória temporal de longo prazo.
+    - **Decoder**: Reconstrói a distribuição sobre tokens a partir do estado latente $(h_t, z_t)$, permitindo calcular a verossimilhança das observações.
 
-- O codificador transformará as janelas do espectrograma em um estado latente discreto, composto por variáveis categóricas.
+- Treinamento conjunto do modelo de mundo utilizando sequências tokenizadas do conjunto de treino:
+    - **Função de Perda de Reconstrução**: Negative log-likelihood (NLL) ou cross-entropy entre tokens preditos e observados, medindo a capacidade do modelo de prever observações.
+    - **Divergência KL**: Regularização entre distribuições do modelo de representação e transição, incentivando o modelo de transição a prever estados consistentes sem depender de observações.
 
-- O RSSM será responsável por prever o próximo estado e recompensa (neste caso, a próxima janela de espectrograma) a partir do estado atual e de uma "ação" (pode ser um placeholder ou uma variável para representar a transição temporal).
+- Avaliação da capacidade preditiva do modelo de mundo (parcialmente implementado na E2):
+    - **Perda de Reconstrução**: Monitoramento da NLL no conjunto de validação para verificar se o modelo generaliza além do treino.
+    - **Qualidade de Imaginação**: Geração de sequências de tokens através de rollouts imaginados (usando apenas o modelo de transição) e avaliação da coerência via reconstrução de áudio.
+    - **Análise de Estados Latentes**: Visualização de trajetórias no espaço latente (t-SNE/UMAP) para verificar se estruturas temporais e fonéticas são capturadas de forma interpretável.
+    - **Divergência KL**: Análise do balanço entre KL e reconstrução para garantir que o modelo não collapse para priors triviais nem ignore estados latentes.
 
-### 4. Treinamento do Modelo:
+### 4. Aprendizado de Comportamento e Síntese (E3 - Planejado):
 
-- O modelo será treinado usando um objetivo de aprendizado contrastivo, que compara pares positivos (previsão e observação correspondente) e negativos (previsão e observações diferentes) para aprender uma representação robusta sem a necessidade de uma tarefa de reconstrução explícita.
+- Implementação do módulo de aprendizado por reforço (Actor-Critic) para completar a arquitetura DreamerV2:
+    - O ator (policy network) aprenderá a gerar "ações" (ou transições temporais) que produzam sequências de áudio coerentes e semanticamente significativas.
+    - O crítico (value network) estimará o valor esperado de estados latentes, permitindo ao ator otimizar para objetivos de longo prazo (ex: maximizar coerência temporal, diversidade fonética, ou fidelidade a condicionantes).
+    - Esta abordagem permite que o modelo não apenas preveja passivamente, mas planeje ativamente sequências de áudio desejáveis, explorando o espaço latente de forma direcionada.
+    - Implementação com algoritmos de policy gradient (PPO, A2C ou A3C) adaptados para o domínio contínuo de áudio.
 
-- O aprendizado será totalmente self-supervised, focado em aprender a dinâmica do mundo de áudio.
+
+- Treinamento do ator-crítico inteiramente no espaço latente (imagination):
+    - Geração de rollouts imaginados usando apenas o modelo de transição do RSSM, sem necessidade de interação com dados reais durante esta fase.
+    - Cálculo de retornos e vantagens a partir das estimativas do crítico para atualizar a política do ator.
+    - Treinamento alternado entre modelo de mundo (seção 3) e ator-crítico, com possibilidade de fine-tuning conjunto.
+
+- Síntese de áudio através de planejamento latente:
+    - **Geração Não-Condicionada**: Amostragem de estados iniciais do prior e rollout através do ator para produzir sequências de tokens, seguido de decodificação via VQ-VAE e reconstrução de áudio.
+    - **Geração Condicionada**: Uso de embeddings de condicionamento (texto, classe de som, emoção) para guiar o planejamento e gerar áudio alinhado a especificações.
+    - **Completude de Sequências**: Dada uma sequência parcial de áudio (ex: "ba-ta" → ?), o modelo imagina continuações plausíveis explorando o espaço latente.
+    - **Interpolação Latente**: Navegação suave entre diferentes estados acústicos para gerar transições morfológicas entre sons.
+
+- Implementação de objetivo contrastivo:
+    - Substituição ou complementação do objetivo de reconstrução por aprendizado contrastivo, comparando pares positivos (estados consecutivos reais) e negativos (estados não relacionados).
+    - Esta abordagem reduz a dependência de reconstrução pixel-a-pixel (ou token-a-token), focando em aprender representações que capturam relações temporais abstratas.
+    - Implementado utilizando losses como InfoNCE ou NT-Xent adaptadas para sequências temporais.
+
+- Avaliação do sistema completo de síntese de áudio:
+    - **Qualidade Perceptual**: Avaliação humana (MOS - Mean Opinion Score) ou métricas automáticas (PESQ, STOI, Fréchet Audio Distance) comparando áudios gerados com reais.
+    - **Coerência Temporal**: Análise de continuidade espectral e ausência de artefatos audíveis (cliques, descontinuidades).
+    - **Diversidade e Cobertura**: Verificação de que o modelo explora adequadamente o espaço acústico sem modo collapse, usando métricas como coverage e inception score adaptadas para áudio.
+    - **Alinhamento Condicional**: Quando aplicável, validação de que gerações condicionadas correspondem aos atributos especificados (precisão de classificação, correlação semântica).
+    - **Capacidade de Planejamento**: Testes de completude de sequências e interpolação, avaliando se o modelo "imagina" futuros plausíveis e semanticamente coerentes.
+
 
 ## Cronograma
 
@@ -81,11 +142,11 @@ Legenda: ▓ = duração da tarefa, ⭐ = entrega
 
 | Fase de Trabalho       | Atividades Principais                           | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
 |------------------------|-------------------------------------------------|---|---|---|---|---|---|---|---|---|----|----|
-| Preparação & Setup     | Setup do ambiente + revisão código              | ▓ |   |   |   |   |   |   |   |   |    |    |
-| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ▓ |   |   |   |   |   |   |   |    |    |
-| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ▓ | ▓ |   |   |   |   |   |   |    |    |
-| Modelo de Mundo        | Encoder + RSSM (ajuste usando DreamerV2)    |   |   | ▓ | ▓ |   |   |   |   |   |    |    |
-| Modelo de Mundo        | Integração do Decoder / avaliação básica        |   |   |   |   | ▓ |   |   |   |   |    |    |
+| Preparação & Setup     | Setup do ambiente + revisão código              | ✅ |   |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Conversão áudio → espectrograma + normalização  |   | ✅ |   |   |   |   |   |   |   |    |    |
+| Pré-processamento      | Tokenização (janelas → embeddings)              |   | ✅ | ✅ |   |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Encoder + RSSM (ajuste usando DreamerV2)    |   |   | ✅ | ✅ |   |   |   |   |   |    |    |
+| Modelo de Mundo        | Integração do Decoder / avaliação básica        |   |   |   |   | ✅ |   |   |   |   |    |    |
 | **Entrega Parcial**    | Status do projeto                               |   |   |   |   |   | ⭐ |   |   |   |    |    |
 | Treinamento            | Execução com DreamerV2 + ajustes leves      |   |   |   |   |   |   | ▓ | ▓ |   |    |    |
 | Avaliação & Ajustes    | Análise de métricas e resultados                |   |   |   |   |   |   |   | ▓ | ▓ |    |    |
