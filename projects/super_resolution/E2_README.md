@@ -74,8 +74,8 @@ Delivery | Week | Activity |
 |--------|------|----------|  
 E1       | 1–2  | Literature review, dataset preparation, and baseline setup (bicubic, ESRGAN). |  
 E2       | 3–4  | Initial implementation of the InvSR model. |  
-E2       | 5–6  | Model training and hyperparameter tuning. |  
-E2       | 7    | Intermediate evaluation and analysis of quantitative/qualitative results. |  
+E2       | 5–6  | Intermediate evaluation and analysis of quantitative/qualitative results. |  
+E3       | 7    | Model training and hyperparameter tuning. |  
 E3       | 8    | Refinements (integration of additional techniques, e.g., perceptual loss). |  
 E3       | 9    | Final experiments, result consolidation, and comparison with benchmarks. |  
 E3       | 10   | Report writing and final presentation preparation. |  
