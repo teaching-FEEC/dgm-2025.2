@@ -158,6 +158,15 @@ Throughout the literature, is is said that a PSNR from 30 to 34 is good, and 35 
 
 Although it seems the quantitative values don't differ much, each 0.0001 in each metric makes a huge difference in perceptual quality in the generated image, because these improvements happen where it matters in the image. Here the ultra model is generating overall smoother (with less artifacts) frames. Image quality is easier measured with humans eyes, the mega variation here for example, seems to better reconstruct fine details in frames, than the ultra.
 
+## Conclusion
+
+During the development of this project we created 5 novel loss functions with attention mechanisms, which 4 were beneficial for training models for the decompression and upscaling tasks. Our dataset made with creative commons blender foundation open movies, proved diverse enough for the models to learn without overfitting, after training our models improved in all 3 metrics, showing both good fidelity and perceptual quality, at the end of this project we have 3 variations of compact models for each of the 3 tasks, making it possible to run combinations in the most diverse hardware, from mobile phones to strong desktop computers. At E2 delivery we still have to convert our models to shaders, in order to make the usage of them easier and more performant and we still have to complete the quantitative evaluation of the 2X models.
+
+
+For the feasibility of the shader version of our model, we used the compact network for all three models, however we discussed using Sebica and Spanplus models for the first model of our improving pipeline (the 1X time decompression model), these models have attention mechanisms that could help improve the 1X model even more, since the 2X models receive as input the output of the 1X model it is of utter importance that the 1X is the best model (and probably the heaviest computationally), these models with attention may prove to be a better 1X alternative, at the cost of not being easily converted into a shader, this may be experimented in a future work.
+
+
+
 ## Bibliographic References
 
 BARAKA MAISELI; ABDALLA, A. T. Seven decades of image super-resolution: achievements, challenges, and opportunities. EURASIP Journal on Advances in Signal Processing, v. 2024, n. 1, 18 jul. 2024.
