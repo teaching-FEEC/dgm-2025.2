@@ -79,6 +79,7 @@ For production deployment, typical improvement pipeline would have the following
 
 Starting from a pretrain, at first model training was not improving the validation metrics. Compressed images are mathematically very similar to the Original ones, so we needed a way to create a Loss that was more sensitive to the issues created by compression. 
 
+Models were trained for around 150k Iterations, the best models according to PSNR, DISTS and SSIM metrics were chosen from the 150 models generated during training. Most best models were within 90k to 150k range of training. Some were finetuned for more 150k iterations.
 
 We created four novel Loss functions to guide the model into learning, they were critical for optimizing detail recovery and artifact suppression:
 
@@ -152,7 +153,8 @@ face aware dataset filtering(only images with faces left) ~3k images:
 | ultra                 | 33,5668 | 1,0908        | 1,8830  |
 
 First, note how the compressed frame has a PSNR and SSIM better than the pretrain models(which have already been pretrained for at least 500k iterations!), this shows how the problem we are trying to solve is hard, and how "close to the original image" the compressed one is, according to quantitative metrics.
-Throughout the literature, is is said that a PSNR from 30 to 34 is good, and 35 to 38 is excellent. However our compressed, perceptually terrible image already starts at 32 PSNR in these metrics, our best model outputs the PSNR is not too far from the baseline, but image quality is clearly improved. The culprit here is that most of the image is not relevant, since most of the image is a background, with low colour variation, and our metrics take into account that, most of the image. In reallity, perceptual quality lies in the few parts of the image that have moving objects, the part that captures human attention, these moving objects are where most of the compression artifacts arise, which is why we see the compressed images as ugly/bad and these global metrics pay little attention to these.
+PSNR is measured in logarithimic scale, so small variations mean big differences.
+Throughout the literature, is is said that a PSNR from 30 to 34 is good, and 35 to 38 is excellent. However our compressed, perceptually terrible image already starts at 32 PSNR in these metrics, our best model PSNR is only 0.6 PSNR from the baseline, but image quality is profoundly improved. The culprit here is that most of the image is not relevant, since most of the image is a background, with low colour variation, and our metrics take that global value into account. In reallity, perceptual quality lies in the few parts of the image that have moving objects, the part that captures human attention, these moving objects are where most of the compression artifacts arise, which is why we see the compressed images as ugly/bad and these global metrics pay little attention to these.
 
 Although it seems the quantitative values don't differ much, each 0.0001 in each metric makes a huge difference in perceptual quality in the generated image, because these improvements happen where it matters in the image. Here the ultra model is generating overall smoother (with less artifacts) frames. Image quality is easier measured with humans eyes, the mega variation here for example, seems to better reconstruct fine details in frames, than the ultra.
 
