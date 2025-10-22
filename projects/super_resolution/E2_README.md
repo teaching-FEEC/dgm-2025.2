@@ -41,7 +41,7 @@ For the development of this stage of the project, two implementation approaches 
 
 Initially, both platforms were configured and tested with the goal of analyzing the model’s performance under different execution conditions. 
 
-From this definition onward, all subsequent stages of training, validation, and performance analysis were carried out in VS Code. The main evaluation metrics — such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity) — were applied in this environment to assess the quality of the generated images and to compare the results with the high-resolution reference images.
+All subsequent stages of training, validation, and performance analysis were carried out in VS Code. The main evaluation metrics — such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity) — were applied in this environment to assess the quality of the generated images and to compare the results with the high-resolution reference images.
 
 ### Datasets and Evolution
  List the datasets used in the project.  
