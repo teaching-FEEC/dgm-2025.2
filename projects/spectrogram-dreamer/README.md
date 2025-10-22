@@ -85,7 +85,7 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
         - Modela a estocasticidade inerente aos sinais de áudio através de estados discretos probabilísticos.
         - Facilita o planejamento e imaginação de trajetórias futuras inteiramente no espaço latente.
 
-- Definição dos componentes do modelo de mundo:
+- Definição dos componentes do modelo de mundo, com base na implementação do repositório `pydreamer`:
     - **Encoder**: Rede neural que combina MLP e camadas convolucionais 1D, mapeando sequências de tokens do VQ-VAE para embeddings contínuos que alimentam o RSSM.
     - **RSSM**: Núcleo do modelo de mundo composto por três sub-módulos interconectados:
         - *Modelo de Representação*: Infere o estado estocástico atual $z_t$ combinando a observação atual com o estado determinístico $h_t$ via distribuições categóricas.
@@ -105,7 +105,7 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
 
 ### 4. Aprendizado de Comportamento e Síntese (E3 - Planejado):
 
-- Implementação do módulo de aprendizado por reforço (Actor-Critic) para completar a arquitetura DreamerV2:
+- Implementação do módulo de aprendizado por reforço (Actor-Critic) para completar a arquitetura DreamerV2, com base na implementação do repositório `pydreamer`:
     - O ator (policy network) aprenderá a gerar "ações" (ou transições temporais) que produzam sequências de áudio coerentes e semanticamente significativas.
     - O crítico (value network) estimará o valor esperado de estados latentes, permitindo ao ator otimizar para objetivos de longo prazo (ex: maximizar coerência temporal, diversidade fonética, ou fidelidade a condicionantes).
     - Esta abordagem permite que o modelo não apenas preveja passivamente, mas planeje ativamente sequências de áudio desejáveis, explorando o espaço latente de forma direcionada.
@@ -134,6 +134,44 @@ A metodologia para adaptar o Dreaming V2 para dados de áudio envolverá as segu
     - **Diversidade e Cobertura**: Verificação de que o modelo explora adequadamente o espaço acústico sem modo collapse, usando métricas como coverage e inception score adaptadas para áudio.
     - **Alinhamento Condicional**: Quando aplicável, validação de que gerações condicionadas correspondem aos atributos especificados (precisão de classificação, correlação semântica).
     - **Capacidade de Planejamento**: Testes de completude de sequências e interpolação, avaliando se o modelo "imagina" futuros plausíveis e semanticamente coerentes.
+
+### Datasets and Evolution
+
+|Dataset | Web Address | Descriptive Summary|
+|----- | ----- | -----|
+| Common Voice Dataset Version 4 | https://www.kaggle.com/datasets/vedant2022/common-voice-dataset-version-4 | Dataset de fala em inglês composto por gravações de áudio validadas por crowdsourcing. Utilizado para treinar modelos de reconhecimento de fala e síntese de voz. Contém aproximadamente 889 horas validadas, com metadados incluindo texto transcrito, idade, gênero e sotaque dos falantes. Ideal para aprendizado self-supervised de representações acústicas devido à diversidade fonética e variabilidade de locutores.|
+
+- Resumo do preparo do dataset
+    - Para o filtro de comprimento, foram mantidas sequências com tokens ≥ 20, resultando em 652h33min de áudio válidas.
+    - Foi feito o split do dataset em 80% para treino, 10% validação e 10% teste.
+    - A formatação realizada para espectrogramas log-mel (n_mels=80), tokenização VQ-VAE (codebook=1024).
+
+## Experiments, Results, and Discussion (parcial: E2)
+
+### Tokenizador VQ-VAE.
+
+- Treinamento por 10 épocas com batch_size=512 em GPU.
+- Saídas parciais: PNGs comparando espectrogramas reais vs. reconstruídos; erros de reconstrução em queda ao longo das épocas; tokens coerentes visualmente ao reverter para o domínio espectrográfico.
+- Achados preliminares: uso não-colapsado do codebook (observação qualitativa); próximos passos incluem medir perplexidade e entropia por código.
+
+### World Model (Encoder + RSSM + Decoder).
+
+- Treinamento conjunto iniciado com sequência de 20 passos; ações vazias (dinâmica intrínseca do sinal).
+Objetivo: minimizar KL (prior vs. posterior) e reconstrução sobre tokens.
+- Discussão: a KL mostrou-se essencial para estabilizar o prior e permitir imaginação (rollouts sem observação). Resultados quantitativos (CE/NLL por horizonte) serão apresentados na E3, bem como exemplos de completar uma sequência parcial (e.g:, “ba-ta”→“ta”).
+
+## Decisões & ajustes de trajetória.
+
+Manteremos a fase com reconstrução para consolidar métricas e depois testamos objetivo contrastivo (sem reconstrução) inspirado por literatura recente, para reduzir viés de pixel-matching e melhorar predição latente.
+
+## Conclusion
+Concluímos a etapa de pré-processamento, o treinamento do VQ-VAE e iniciamos o world model com RSSM discreto, obtendo reconstruções consistentes e dinâmica latente estável. 
+
+Próximos passos (E3):
+consolidar métricas (perplexidade/uso do codebook; NLL/CE por horizonte; distâncias espectrais),
+demonstrar rollouts e completação de sequências,
+testar objetivo contrastivo e comparar contra a abordagem com reconstrução,
+publicar scripts, configs e logs para plena reprodutibilidade.
 
 
 ## Cronograma
