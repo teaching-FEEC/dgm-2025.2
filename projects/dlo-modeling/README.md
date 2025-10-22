@@ -14,7 +14,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 ## Abstract
 
-This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **Transformer + BiLSTM**, and **VAE** were evaluated to predict the rope's future configuration. Initial results demonstrate the feasibility of learning, with **BiLSTM showing the lowest error**. The next phase will involve massive dataset expansion and the exploration of **Latent World Models** to better quantify the uncertainty of action outcomes.
+This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **Transformer + BiLSTM**, and **VAE** were evaluated to predict the rope's future configuration. Initial results demonstrate the feasibility of learning, with **BiLSTM showing the lowest error**. The next phase will involve massive dataset expansion and the exploration of **Latent World Models**[1] to better quantify the uncertainty of action outcomes.
 
 ---
 
@@ -58,12 +58,12 @@ Three model architectures were evaluated to learn the rope dynamics:
 
 #### (b) Transformer + BiLSTM Hybrid
 
-- Combines a **Transformer encoder-decoder** (Vaswani et al., 2017) to model global dependencies between rope segments with a **BiLSTM** to capture local directional dynamics.  
-- This hybrid model draws inspiration from Viswanath et al. (2023) [2], which used learned representations of 1D objects for manipulation and inspection tasks.
+- Combines a **Transformer encoder-decoder** (Vaswani et al., 2017) [3] to model global dependencies between rope segments with a **BiLSTM** to capture local directional dynamics.  
+- This hybrid model draws inspiration from Viswanath et al. (2023) [4], which used learned representations of 1D objects for manipulation and inspection tasks.
 
 #### (c) Variational Autoencoder (VAE)
 
-- Inspired by Ha and Schmidhuber (2018) [3] and Hafner et al. (2019) [4], **VAEs** were explored as a foundation for probabilistic world modeling.  
+- **VAEs** were explored as a foundation for probabilistic world modeling.  
 - The encoder maps state-action pairs to a latent distribution, allowing the decoder to predict a **probabilistic next state**, aligning with the goal of capturing uncertainty in rope dynamics.
 
 ### 3.4 Implementation and Tools
@@ -142,7 +142,7 @@ Although the differences between models are small, several tendencies emerged:
 - **VAE predictions** show higher variability, representing uncertainty but at reduced positional accuracy.
 
 The experiments highlight that **performance is currently constrained by data diversity**, not architectural sophistication. Future iterations will include over one million samples with varied physical parameters (friction, stiffness, action complexity, and bimanual manipulation).  
-Additionally, **latent world models (e.g., Dreamer)** will be explored to capture multimodal dynamics and uncertainty.
+Additionally, **latent world models (e.g., Dreamer [3])** will be explored to capture multimodal dynamics and uncertainty.
 
 ## 6. Conclusion
 
@@ -154,18 +154,21 @@ The experiments demonstrated the feasibility of learning rope dynamics from simu
 
 - **Dataset Expansion:** generate over one million samples with varied physical parameters.  
 - **Action Complexity:** include multi-step and bimanual manipulations.  
-- **Model Enhancement:** explore **latent world models (e.g., Dreamer)** and **spatial transformers**.  
+- **Model Enhancement:** explore **latent world models (e.g., Dreamer[3])** and **spatial transformers**.  
 - **Evaluation and Planning:** introduce probabilistic metrics such as **Average Displacement Error (ADE)** and **Dice Coefficient**.
 
 Ultimately, the goal is to obtain a dynamics model that not only predicts the next state of the rope accurately but also **quantifies uncertainty**, enabling **risk-aware planning** for autonomous DLO manipulation tasks.
 
 ## 7. Bibliographic References
 
-[1] D. Ha and J. Schmidhuber, “World Models,” *CoRR*, vol. abs/1803.10122, 2018. [Online]. Available: https://arxiv.org/abs/1803.10122  
+[1] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control: Learning Behaviors by Latent Imagination,” *Proc. ICLR 2020*, 2020. [Online]. Available: https://arxiv.org/abs/1912.01603
 
-[2] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control: Learning Behaviors by Latent Imagination,” *Proc. ICLR 2020*, 2020. [Online]. Available: https://arxiv.org/abs/1912.01603
+[2] Yan, Mengyuan, et al. “Self-Supervised Learning of State Estimation for Manipulating Deformable Linear Objects.” ArXiv.org, 2019. [Online]  Available: arxiv.org/abs/1911.06283.
 
-[3] Yan, Mengyuan, et al. “Self-Supervised Learning of State Estimation for Manipulating Deformable Linear Objects.” ArXiv.org, 2019. [Online]  Available: arxiv.org/abs/1911.06283.
+[3] Vaswani, A., Shazeer, N., Parmar, N., et al. (2017). Attention is all you need. Advances in neural information processing systems, 30. NIPS papers. You can also cite it via its arXiv number: Vaswani, A., et al. (2017). Attention Is All You Need. arXiv preprint arXiv:1706.03762.  [Online] Available https://arxiv.org/abs/1706.03762. 
+
+[4] D. Ha and J. Schmidhuber, “World Models,” *CoRR*, vol. abs/1803.10122, 2018. [Online]. Available: https://arxiv.org/abs/1803.10122  
+
 # Presentation Link
 
 [Google Slides Presentation](https://docs.google.com/presentation/d/1fw3_m6minAr5l9Ks6CPWKIoQIB-UsBzjtunPPyIErtY/edit?usp=sharing)
