@@ -259,7 +259,7 @@ checkpoints/
 !images/*
 
 *.part
-*.png
+# *.png
 
 *.npy
 *.zip
