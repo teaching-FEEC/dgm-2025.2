@@ -39,7 +39,7 @@ As inspiration, this project will draw on the methodology and architecture propo
 
 For the development of this stage of the project, two implementation approaches for the image super-resolution model were evaluated: one executed in the Google Colab environment and the other in a local environment using VS Code.
 
-Initially, both platforms were configured and tested with the goal of analyzing the model’s performance under different execution conditions. After the comparative tests, the VS Code environment was selected as the most suitable due to its better processing time, greater stability, and enhanced control over experiments.
+Initially, both platforms were configured and tested with the goal of analyzing the model’s performance under different execution conditions. 
 
 From this definition onward, all subsequent stages of training, validation, and performance analysis were carried out in VS Code. The main evaluation metrics — such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity) — were applied in this environment to assess the quality of the generated images and to compare the results with the high-resolution reference images.
 
