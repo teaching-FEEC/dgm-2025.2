@@ -92,14 +92,14 @@ Measures the structural similarity between two images, focusing on luminance, co
 
 
 **Equation:**
-$$
+$`
 SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
-$$
+`$
 where:
-- $\mu_x, \mu_y$ are the means of images $x$ and $y$
-- $\sigma_x^2, \sigma_y^2$ are their variances
-- $\sigma_{xy}$ is their covariance
-- $C_1, C_2$ are small constants to avoid division by zero
+- $`\mu_x, \mu_y`$ are the means of images $x$ and $y$
+- $`\sigma_x^2, \sigma_y^2`$ are their variances
+- $`\sigma_{xy}`$ is their covariance
+- $`C_1, C_2`$ are small constants to avoid division by zero
 - Range: **[0, 1]**
 - **SSIM ≈ 1** → high structural similarity  
 - **SSIM ≈ 0** → weak similarity  
@@ -109,14 +109,14 @@ Quantifies image reconstruction quality in terms of pixel-wise fidelity, how muc
 
 
 **Equation:**
-$$
+$`
 PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right)
-$$
+`$
 with
-$$
+$`
 MSE = \frac{1}{N}\sum_{i=1}^{N}(x_i - y_i)^2
-$$
-where $L$ is the maximum possible pixel value (e.g., 1.0 or 255).
+`$
+where $`L`$ is the maximum possible pixel value (e.g., 1.0 or 255).
 - Higher PSNR → better image quality
 - Typical values:
   - \> 40 dB → excellent
@@ -132,13 +132,13 @@ In our context, we must use an adapted FID, once the pre trained weights are fit
 **Equation:**
 
 
-$$
+$`
 FID = \|\mu_r - \mu_g\|_2^2 + \text{Tr}\left(\Sigma_r + \Sigma_g - 2(\Sigma_r \Sigma_g)^{1/2}\right)
-$$
+`$
 
 where:
-- $\mu_r, \Sigma_r$: mean and covariance of features from **real images**
-- $\mu_g, \Sigma_g$: mean and covariance of features from **generated images**
+- $`\mu_r, \Sigma_r`$: mean and covariance of features from **real images**
+- $`\mu_g, \Sigma_g`$: mean and covariance of features from **generated images**
 - Lower FID → better quality and diversity
 
 #### Spectral Angle Mapper (SAM)
@@ -148,12 +148,12 @@ Used for hyperspectral images, SAM measures the spectral similarity between two 
 
 **Equation:**
 
-$$
+$`
 SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)
-$$
+`$
 where $x$ and $y$ are spectral vectors of a pixel in the reference and generated images.
-- Units: radians or degrees**
-- **Lower SAM → higher spectral similarity
+- **Units**: radians or degrees
+- **Lower SAM** → higher spectral similarity
 
 #### Summary Table
 
