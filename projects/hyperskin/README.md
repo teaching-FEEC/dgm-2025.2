@@ -278,7 +278,10 @@ Regarding our experiments, we concluded that using 3D convolutional layers in th
 
 
 However, we believe that with the introduction of the optimizations made in the generator in the next steps of the project, the quality of the synthetich HSI data will improve. The main idea is to use RGB images as input to the generator instead of noise, and during the training we calculate a reconstruction Loss of HSI->RGB and add in the cost function. This way the generator learns spatial and color information and use to reconstruct HSI images.
-
+ ![Exp1](images/2d-conv-plot.png)
+ ![Exp2](images/3d-convolution-plot.png)
+![Exp3](images/3d-conv-sn.png)
+![Exp4](images/3D-conv-sn-fft.png)
 
 
 #### FastGAN
