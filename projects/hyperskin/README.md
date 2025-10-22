@@ -33,13 +33,7 @@ https://docs.google.com/presentation/d/1lx3-yT1-Smwg8uxjNo1hsLG3ESJFPZldXnlBdIy1
 - Dataset download link: https://drive.google.com/drive/folders/13ZXXxtUMjEzLAjoAqC19IJEc5RgpFf2f?usp=sharing
 
 ## Proposed Methodology
-> For the first submission, the proposed methodology must clarify:  
-> * Which dataset(s) the project intends to use, justifying the choice(s).
-> * Which generative modeling approaches the group already sees as interesting to be studied.  
-> * Reference articles already identified and that will be studied or used as part of the project planning.  
-> * Tools to be used (based on the group’s current vision of the project).  
-> * Expected results.  
-> * Proposal for evaluating the synthesis results.
+
 ### Tools to be used
 The project will be developed using Python, with the following libraries:
 - TensorFlow/Keras or PyTorch for building and training the generative models.
@@ -208,7 +202,7 @@ where $x$ and $y$ are spectral vectors of a pixel in the reference and generated
 ![workflow](images/hypersynth_flux.png)
 Our methodology was designed to test whether the inclusion of synthetic hyperspectral images can improve tumor classification compared to training with only real data. As shown in the workflow, the process begins with the preprocessing of the hyperspectral dataset, where images are segmented and cropped in the region containing the lesion. The preprocessed data are then used in a generation stage, where four generative models—SHSGAN, DCGAN, FastGAN, and VAE—are trained to produce synthetic hyperspectral tumor images. These models learn the complex spectral and spatial characteristics of malignant tumors, generating synthetic melanoma samples as close to real as possible. The quality of these synthetic images is evaluated using standard generation metrics, including the Spectral Angle Mapper (SAM), Structural Similarity Index (SSIM), Peak Signal-to-Noise Ratio (PSNR), and Fréchet Inception Distance (FID), which assess both spectral and perceptual similarity to the real data.
 
-Following image generation, two classification models are trained to distinguish malignant from benign tumors. The first classifier is trained exclusively with real hyperspectral images, while the second combines real and synthetic images in its training set. For both cases, two deep convolutional architectures, DenseNet and ResNet, are employed, each trained under two conditions: using pre-trained RGB weights or from scratch directly on hyperspectral data. The performance of each classifier is assessed using classification metrics such as F1-score, Accuracy, and SpecAtSens (Specificity at Sensitivity).
+Following image generation, two classification models are trained to distinguish malignant from benign tumors. The first classifier is trained only with real hyperspectral images, while the second combines real and synthetic images in its training set. For both cases, two deep convolutional architectures, DenseNet and ResNet, are employed, each trained under two conditions: using pre-trained RGB weights or from scratch directly on hyperspectral data. The performance of each classifier is assessed using classification metrics such as F1-score, Accuracy, and SpecAtSens (Specificity at Sensitivity).
 
 
 ## Schedule
@@ -336,20 +330,14 @@ From a training perspective, balancing the data appeared to stabilize convergenc
 
 In summary, integrating FastGAN-generated hyperspectral melanoma samples into the training set led to a measurable improvement in classification performance. The balanced model achieved perfect recall and higher overall validation accuracy compared to the model trained on real data alone. Although the slight drop in specificity indicates a small increase in false positives, the results strongly suggest that GAN-based data augmentation is an effective strategy for addressing class imbalance in hyperspectral dermoscopy classification tasks.
 
-> In the partial project submission (E2), this section may contain partial results, explorations of implemented solutions, and  
-> discussions about such experiments, including decisions to change the project trajectory or the description of new experiments as a result of these explorations.  
-
-> In the final project submission (E3), this section should list the **main** results obtained (not necessarily all), which best represent the fulfillment of the project objectives.  
-
 > The discussion of results may be carried out in a separate section or integrated into the results section. This is a matter of style.  
 > It is considered fundamental that the presentation of results should not serve as a treatise whose only purpose is to show that "a lot of work was done."  
 > What is expected from this section is that it **presents and discusses** only the most **relevant results**, highlighting the **strengths and/or limitations** of the methodology, emphasizing aspects of **performance**, and containing content that can be classified as **organized, didactic, and reproducible sharing of knowledge relevant to the community**.  
 
 ## Conclusion
-**Kris TODO*
-> The Conclusion section should recover the main information already presented in the report and point to future work.  
-> In the partial project submission (E2), it may contain information about which steps or how the project will be conducted until its completion.  
-> In the final project submission (E3), the conclusion is expected to outline, among other aspects, possibilities for the project’s continuation.  
+Our results show that classifiers trained with synthetic hyperspectral data perform better than those relying only on standard data augmentation or regularization. Adding GAN-generated melanoma images helped the models generalize better and improved sensitivity, especially for underrepresented classes. We also found that architectures built for high-resolution image generation, like FastGAN, work better than those designed specifically for hyperspectral synthesis—likely because our dataset has higher spatial resolution (256×256) and fewer spectral channels than typical HSI data. Overall, GANs outperformed VAEs on small, high-resolution datasets, producing sharper and more realistic lesion details.
+Next, we plan to test classification models trained purely on synthetic data against real samples, use large RGB skin lesion datasets to generate more diverse images, and explore CycleGAN and pretraining strategies to improve realism. Conditioning FastGAN on RGB images or binary masks may also help control lesion structure and further boost the quality of generated hyperspectral data.
+
 
 ## Bibliographic References
 1. D. A. Abuhani, I. Zualkernan, R. Aldamani and M. Alshafai, "Generative Artificial Intelligence for Hyperspectral Sensor Data: A Review," in IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, vol. 18, pp. 6422-6439, 2025, doi: https://doi.org/10.1109/JSTARS.2025.3538759.
