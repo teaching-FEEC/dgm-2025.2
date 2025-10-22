@@ -55,21 +55,15 @@ From this definition onward, all subsequent stages of training, validation, and 
   - The project intends to use standard super-resolution datasets such as **DIV2K**, **Flickr2K**, and possibly **Set5/Set14** for evaluation.  
   - These datasets were chosen because they are widely adopted benchmarks in super-resolution tasks, providing a reliable basis for comparison with the literature.  
 
-### Workflow
-
-<img width="1284" height="2404" alt="image" src="https://github.com/user-attachments/assets/b1b9dfae-4fc9-475e-b238-a3268ce3109e" />
-
 
 ## Experiments, Results, and Discussion of Results
 
 In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
 
-Two approaches were initially evaluated for implementing the image super-resolution model: one using Google Colab and another using a local environment (VS Code). After comparative tests, the VS Code environment was selected as the main platform due to its superior performance, stability, and control during model execution.
+Two approaches were initially evaluated for implementing the image super-resolution model. After comparative tests, the VS Code environment was selected as the main platform due to its superior performance, stability, and control during model execution.
 
-All subsequent experiments — including training, validation, and performance evaluation — were conducted in the VS Code environment. The validation process focused on analyzing key performance metrics, such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity), to assess the visual quality and fidelity of the generated images. These metrics and validation outputs can be viewed in detail at the following link:
+All subsequent experiments — including training, validation, and performance evaluation. The validation process focused on analyzing key performance metrics, such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity), to assess the visual quality and fidelity of the generated images. These metrics and validation outputs can be viewed in detail at the following link:
 https://github.com/nubiasidene/dgm-2025.2-g4/tree/main/projects/super_resolution/validation
-
-The discussion of results highlights that both environments enabled correct model execution, but the local implementation in VS Code provided a significant reduction in simulation time (from minutes in Colab to milliseconds locally) and allowed greater control over experiments and reproducibility. These findings guided the group’s decision to continue project development exclusively in VS Code.
 
 At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
 
