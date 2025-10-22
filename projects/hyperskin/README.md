@@ -153,7 +153,19 @@ Additionally, each channel of the hyperspectral images is normalized using min-m
 ### Generative Model Training
 
 #### SHS GAN
-**Aline TODO*
+The SHS GAN experiment was used to synthesize 64x64 melanoma hyperspectral images at first. The main idea was to understand what was implemented in the reference article, which had lots of methods to deal with hyperspectral data. 
+
+At first we used a simple DCGAN. The Generator is composed of a sequence of transposed convolutional blocks that progressively upsample a latent vector into an image. Each block includes a ConvTranspose2d, followed by BatchNorm2d and ReLU activations, except for the last layer, which uses a Tanh activation. The architecture adapts to different image sizes (28×28, 64×64, 256×256) by varying depth and number of filters, and all weights are initialized with a normal distribution for stable training.
+The Discriminator mirrors this structure with standard convolutional layers that downsample the image. Each block uses Conv2d, optional BatchNorm2d, and LeakyReLU activations, with the last layer outputting a single scalar without activation.
+
+We add progressively characteristics of SHS GAN and evaluate the main differences it caused on the image, adapting to our context. For the first experiment we evaluated the implementations done on the Discriminator. The first one is replacing the 2D Convolution filter with a 3D convolution. Since we are dealing with an additional spectral channel, convolving in a third dimension might capture spectral relations that a 2D convolution does not.
+
+The second experiment was replacing the Batch Normalization with the Spectral Normalization, which is a regularization technique introduced to stabilize the training of GANs. It works by constraining the spectral norm, considered the largest singular value of each layer’s weight matrix to 1, effectively controlling the Lipschitz constant of the network.
+
+The third experiments was adding the the spectral-frequency arm, which receives the same HS cube after applying a Fast Fourier Transform along the spectral dimension and combined with the spatial arm, containing simple convolutions.
+
+The first observation was that the training was very sensitive to several hyperparameters, and there were a few selections that resulted in pure noise, while the others generated more accurate representations. 
+
 
 #### FastGAN
 The FastGAN experiment was conducted to generate synthetic hyperspectral images of melanoma lesions using a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 256, following the original FastGAN training procedure that includes manual optimization, exponential moving average updates, and perceptual consistency losses. The goal was to evaluate how well the generator could reproduce realistic skin lesion patterns and retain spectral properties similar to real melanoma samples.  
