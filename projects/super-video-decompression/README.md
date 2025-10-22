@@ -41,18 +41,27 @@ To achieve this goal, the project was structured to solve three specific technic
 
 ## Methodology
 
-The methodology proposed for the Super Video Decompression project encompasses architectural selection, rigorous dataset preparation, specialized loss function utilization, and a comprehensive evaluation plan designed to ensure model robustness and real-time feasibility.
+The methodology proposed for the Super Video Decompression project encompasses, training framework selection, architectural selection, dataset preparation, novel loss function creation and experimentation and a evaluation plan designed validate models according to fidelity and perceptual quality, finally we will also benchmark model combinations for real time feasibility.
+
+### Training Framework
+
+We used NeoSR (https://github.com/neosr-project/neosr) as the training framework for our Super Video Decompression problem. It provides implementations of state of the art models from competitions and the literature, as well as losses, metrics and tools to help train a model for image related tasks. 
+
+It is has some rigidity to it and we had to rewrite portions of it to introduce our own losses, specially the face aware loss which required a big rewrite. It also seems to be calculating SSIM wrong as a performance metric( output 1.8 instead of the literature range of -1 to 1)
+
+NeoSr was choosen to improve our iteration time and because there is a lot of pretrain models prepared for it.
 
 ### Model Tasks and Architecture Justification
+
 The project required the training of specific models tailored to three distinct problem tasks:
 
 1. Decompression (1x): Input consists of compressed frames (H.264/AVC), output is the restored image at 1x resolution.
 2. Super Resolution (2x): Input consists of frames reduced in size (downscaled but without compression artifacts), output is the frame at 2x resolution.
-3. Decompression Adequacy for 2X (ad2x): Input consists of frames that have been "decompressed" at 1x resolution, output is the frame upscaled to 2x resolution.
+3. Decompression Adequacy to 2X (ad2x): Input consists of frames that have been time "decompressed" at 1x resolution, output is the frame upscaled to 2x resolution.
 
 ### Architectural Design
 
-The compact architecture (VGG style rectangular convolutionak net) was selected as the foundational network architecture. This choice was justified by the combination of its variations of achieving real-time feasibility during operation and its structural simplicity, which facilitates the crucial step of converting the final model into shaders for optimized use in production.
+The compact architecture (a VGG style rectangular convolutional network) was selected as the foundational network architecture. This choice was justified by the combination of its variations  achieving real-time feasibility during operation and its structural simplicity, which facilitates the crucial step of converting the final model into shaders for optimized use in production.
 
 For each of the three tasks, three distinct model sizes were trained: Super(47k parameters), Mega(93k parameters), and Ultra(280k parameters). 
 
@@ -78,6 +87,11 @@ We created four novel Loss functions to guide the model into learning, they were
 3. Face Aware Loss: This loss combines SSIM, Charbonier, and MSE losses, calculated strictly within the regions identified as faces by an initial face detector. This attention mechanism requires the creation of specialized batches containing only facial patches and pre computing face bounding boxes for the whole dataset, it required a huge rewrite of the training framework.
 4. Combined Patch Variance: A combination of SSIM, Charbonier, and MSE is measured, employing the same attention mechanism leveraged in the Patch Variance Loss.
 
+### The Loss Balancing Act
+
+We balanced the weights of each loss used during training, so that they would value 1 for the compressed image(lq source) and 0 for the original image, when compared to the original image. This way, no loss would overpower the others, numerically. The risk by doing this balancing is that the gradients may have a too shallow slope to move, when each loss is pointing in a different, antagonizing direction, it may however lead into directions that improve all losses at times, so the actual benefit or disavantage of the Loss Balancing Act is very hard to measure.
+
+
 ### Evaluation Methodology
 Evaluation will utilize both quantitative and perceptual metrics to determine if the objectives were met.
 
@@ -96,6 +110,34 @@ While preliminary performance estimations can be derived from existing compact m
 
 A specific test will be conducted to determine if the ad2x model exhibits generalized superiority, allowing it to be used in place of the dedicated 2x model in production environments.
 
+### Datasets and Evolution
+We created our own dataset for this task, using the blender foundation open movies. A varied animation dataset, with 3d and 2d styles. A complete introduction to the database is here:
+https://github.com/VictorManoelRG/dgm-2025.2/tree/main/projects/super-video-decompression/data
+
+
+|Dataset | Web Address | Descriptive Summary|
+|----- | ----- | -----|
+|Blender Foundation Open Movies Compression Decompression | https://huggingface.co/datasets/Fransferdy/blender_foundation_open_movies_compression_decompression | Contains 10 animations videos, 78 minutes, some 3d some 2d|
+
+Initially we deduplicated images that were less than 20% different, ending up with 6k~ images, but we lost too many in between frames, so in a second attempt we remade the dataset with 10% different images, at 15k images per compression quality.
+Videos were compressed with AV 264 codec, at compression levels 10 through 40 with a stride of 2, then converted into webp images at 90/100 quality, we then split the dataset into train, test and val. With test being 30% of the total, and val being 3% of test.
+
+For our model training we used the following combinations:
+
+34 compression to 10 (at same resolution) (decompressModel generated here)
+
+34 compression to 10 (upscale 2X resolution) <- experiment failed, model produced terrible results
+
+10 compression to 10 (upscale 2X resolution)
+
+28 compression decompressed with decompressModel to 10  (upscale 2X resolution)
+
+
+face aware dataset filtering(only images with faces left) ~3k images:
+
+10 compression to 10 (upscale 2X resolution with face aware loss)
+
+28 compression decompressed with decompressModel to 10  (upscale 2X resolution with face aware loss)
 
 ## Bibliographic References
 
