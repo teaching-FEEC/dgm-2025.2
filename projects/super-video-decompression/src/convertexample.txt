@@ -1,1 +1,0 @@
-python optsconvert.py --output t1.onnx --fp16 --optimize -opt "..\..\test_super_ultra_compact.toml"
