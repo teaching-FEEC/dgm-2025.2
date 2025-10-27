@@ -2,8 +2,10 @@
 /**/__pycache__/
 /**/.venv
 /**/*.mp4
-/**/*.png
-/**/*.webp
+/data/**/*.png
+/data/**/*.webp
+/src/**/*.png
+/src/**/*.webp
 /src/**/*.pth
 /**/tb_logger/**
 /src/**/*.onnx
