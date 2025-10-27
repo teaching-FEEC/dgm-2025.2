@@ -1,9 +1,9 @@
 # Ignore files only inside ./projects/super-video-decompression
-./**/__pycache__/
-./**/.venv
-./**/*.mp4
-./**/*.png
-./**/*.webp
-./src/**/*.pth
-./**/tb_logger/**
-./src/**/*.onnx
+/**/__pycache__/
+/**/.venv
+/**/*.mp4
+/**/*.png
+/**/*.webp
+/src/**/*.pth
+/**/tb_logger/**
+/src/**/*.onnx
