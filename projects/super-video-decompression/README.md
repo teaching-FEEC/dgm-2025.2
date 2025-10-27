@@ -59,6 +59,10 @@ The project required the training of specific models tailored to three distinct 
 2. Super Resolution (2x): Input consists of frames reduced in size (downscaled but without compression artifacts), output is the frame at 2x resolution.
 3. Decompression Adequacy to 2X (ad2x): Input consists of frames that have been time "decompressed" at 1x resolution, output is the frame upscaled to 2x resolution.
 
+## Workflow Diagrams
+
+![Workflow Diagrams](./docs/Super%20Video%20Decompression.drawio.svg "Workflow Diagrams")
+
 ### Architectural Design
 
 The compact architecture (a VGG style rectangular convolutional network) was selected as the foundational network architecture. This choice was justified by the combination of its variations  achieving real-time feasibility during operation and its structural simplicity, which facilitates the crucial step of converting the final model into shaders for optimized use in production.
