@@ -7,9 +7,9 @@ data:
     batch_size: 8
     num_workers: 8
     pin_memory: True
-    data_dir: data/hsi_dermoscopy_croppedv2_256
+    data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
     # data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan
-    google_drive_id: 1EnDjh_tNlVDNUyPuFzyZ_rJNOzTcLeB3
+    google_drive_id: 1q9ZlrLHMCR_ipxaQF-KdHMVgSXqqBDZU
     balanced_sampling: False
     global_max: [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
                   0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
