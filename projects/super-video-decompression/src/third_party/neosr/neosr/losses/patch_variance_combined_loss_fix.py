@@ -13,7 +13,7 @@ where patches with high variance have more weight and low variance less weight
 '''
 
 @LOSS_REGISTRY.register()
-class patch_variance_combined_loss(nn.Module):
+class patch_variance_combined_loss_fix(nn.Module):
     def __init__(self, patch_size=20, alpha=10, loss_weight: float = 1.0,alpha_charb=0.3, alpha_mse=0.1, alpha_ssim=0.6, eps=1e-6):
         super().__init__()
         self.loss_weight = loss_weight

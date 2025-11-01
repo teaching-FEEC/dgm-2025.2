@@ -22,14 +22,14 @@ def patch_variance_loss_fn(pred, target, patch_size=20, alpha=430, loss_weight: 
 
     # Compute variance per patch (use unbiased=False for stability)
     target_var = target_patches.var(dim=1, unbiased=False)  # [B, num_patches]
-
+    
     # Compute MSE per patch
     diff = (pred_patches - target_patches) * alpha
     patch_mse = (diff ** 2).mean(dim=1) / alpha  # [B, num_patches]
-
+    #print(patch_mse.shape)
     # Normalize variance (avoid division by zero)
     var_norm = target_var / (target_var.mean(dim=1, keepdim=True) + 1e-8)
-
+    #print(var_norm.shape)
     # Compute weighted loss
     weights = 1.0 + var_norm
     loss = (weights * patch_mse).mean()

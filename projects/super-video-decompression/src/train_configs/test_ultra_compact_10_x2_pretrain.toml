@@ -34,4 +34,4 @@ num_conv = 8
 num_feat = 64
 
 [path]
-pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\data\2x_UltraCompact_Pretrain_nc8.pth'
+pretrain_network_g = 'C:\Users\Fernando\Documents\Unicamp\IA_376_GAN\workspace\dgm-2025.2\projects\super-video-decompression\models\pretrain\2x_UltraCompact_Pretrain_nc8.pth'

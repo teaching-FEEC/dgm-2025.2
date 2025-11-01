@@ -241,6 +241,14 @@ class image(base):
         else:
             self.cri_gan = None
         
+        if train_opt.get("patch_difference_variation_opt"):
+            train_opt["patch_difference_variation_opt"]["upscale"] = self.scale
+            self.cri_patch_difference_variation = build_loss(train_opt["patch_difference_variation_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
+                self.device, memory_format=torch.channels_last, non_blocking=True
+            )
+        else:
+            self.cri_patch_difference_variation = None
+        
         # hsv wavelet loss
         if train_opt.get("wavelet_hsv_opt"):
             self.cri_wavelet_hsv = build_loss(train_opt["wavelet_hsv_opt"]).to(  # type: ignore[reportCallIssue,attr-defined]
@@ -640,6 +648,11 @@ class image(base):
                 l_g_combined_faceaware = self.cri_combined_faceaware(self.output, self.gt,self.gt_file_path,self.top_gt,self.left_gt,self.patch_size,self.scale)
                 l_g_total += l_g_combined_faceaware
                 loss_dict["l_g_combined_faceaware"] = l_g_combined_faceaware
+            #mse charb ssim patch difference variance loss
+            if self.cri_patch_difference_variation:
+                l_g_combined_patchdiffvar = self.cri_patch_difference_variation(self.output, self.gt, self.lq)
+                l_g_total += l_g_combined_patchdiffvar
+                loss_dict["l_g_combined_patchdiffvar"] = l_g_combined_patchdiffvar
             # mse charb ssim combined patch variance loss
             if self.cri_combined_patchvariance:
                 l_g_combined_patchvariance = self.cri_combined_patchvariance(self.output, self.gt)
