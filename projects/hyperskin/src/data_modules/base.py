@@ -214,10 +214,9 @@ class BaseDataModule(pl.LightningDataModule):
         return False
 
     def ensure_splits_exist(self):
-        if not self.load_splits_from_disk():
-            print("Generating new data splits...")
-            self.setup_splits()
-            self.save_splits_to_disk()
+        print("Generating new data splits...")
+        self.setup_splits()
+        self.save_splits_to_disk()
 
     # =========================================================================
     # GOOGLE DRIVE DOWNLOAD LOGIC

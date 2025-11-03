@@ -1,8 +1,17 @@
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+
+if __name__ == "__main__":
+    import pyrootutils
+
+    pyrootutils.setup_root(
+        Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
+    )
+
 
 from src.data_modules.base import BaseDataModule
 from src.data_modules.datasets.milk10k_dataset import (
@@ -21,11 +30,11 @@ class MILK10kDataModule(BaseDataModule):
         pin_memory: bool = False,
         data_dir: str = "data/MILK10k",
         transforms: Optional[dict] = None,
-        google_drive_id: Optional[str] = None,
         allowed_labels: Optional[list[int | str]] = None,
         image_size: int = 224,
         global_max: Optional[float | list[float]] = None,
         global_min: Optional[float | list[float]] = None,
+        google_drive_id: Optional[str] = "183BASdfQ55TgtRFSdfQ6k3qaSeeNOMp1",
         **kwargs,
     ):
         super().__init__(
@@ -168,3 +177,57 @@ class MILK10kDataModule(BaseDataModule):
             pin_memory=self.hparams.pin_memory,
             shuffle=False,
         )
+
+    # Add this method to MILK10kDataModule class
+    def export_dataset(self, output_dir: str, **kwargs):
+        """Export dataset using the RGB exporter."""
+        from src.utils.dataset_exporter import RGBDatasetExporter
+
+        exporter = RGBDatasetExporter(self, output_dir)
+        exporter.export(**kwargs)
+
+if __name__ == "__main__":
+    image_size = 256
+    data_module = MILK10kDataModule(
+        task="melanoma_vs_nevus",
+        train_val_test_split=(0.7, 0.15, 0.15),
+        batch_size=8,
+        data_dir="data/MILK10k",
+        image_size=image_size,
+        transforms={
+            "train": [
+                {"class_path": "HorizontalFlip", "init_args": {"p": 0.5}},
+                {"class_path": "VerticalFlip", "init_args": {"p": 0.5}},
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+            "val": [
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+            "test": [
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
+                {"class_path": "ToTensorV2", "init_args": {}},
+            ],
+        },
+    )
+    data_module.prepare_data()
+    data_module.setup()
+
+    # Export dataset example
+    data_module.export_dataset(
+        output_dir="export/milk10k_melanoma_cropped_256",
+        crop_with_mask=True,
+        bbox_scale=2,
+        structure="original",
+        image_size=image_size,
+        allowed_labels=[
+                        "melanoma",
+                        # "melanocytic_nevus"
+                        ],
+        global_normalization=False,
+        export_cropped_masks=True,
+    )

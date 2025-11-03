@@ -6,66 +6,68 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 import albumentations as A
+from pathlib import Path
+
 
 class MILK10kTask(enum.Enum):
     """Available tasks for MILK10k dataset."""
 
     MULTILABEL = "multilabel"
     MELANOMA_VS_NEVUS = "melanoma_vs_nevus"
+    SEGMENTATION = "segmentation"
 
 
 class MILK10kDataset(Dataset):
     """
-    PyTorch dataset for MILK10k skin lesion classification.
-
-    Supports:
-      - Multi-label prediction across 11 classes
-      - Binary classification (melanoma=0 vs melanocytic_nevus=1)
+    PyTorch dataset for MILK10k skin lesion tasks:
+      - Multi-label classification
+      - Binary melanoma vs nevus
+      - Segmentation (with per-lesion masks)
 
     Args:
-        root_dir (str): Root directory (e.g. 'data/MILK10k').
-        transform (callable, optional): Transform applied to each image.
-        target_transform (callable, optional): Transform applied to label.
-        allowed_labels (list[str], optional): Filter subset of samples by
-            their class names (snake_case, e.g. ['melanoma']).
-        task (MILK10kTask): Task type. Defaults to MILK10kTask.MULTILABEL.
-        return_metadata (bool): If True, returns (image, label, metadata).
+        root_dir (str): Root directory (e.g. 'data/MILK10k')
+        transform (callable, optional): Albumentations transform for image (and mask)
+        task (MILK10kTask): One of the defined tasks.
+        return_metadata (bool): If True, include metadata in return tuple.
     """
 
     def __init__(
         self,
         root_dir,
         transform: A.Compose | None = None,
-        allowed_labels=None,
         task=MILK10kTask.MULTILABEL,
         return_metadata=False,
     ):
-        self.root_dir = root_dir
+        self.root_dir = Path(root_dir)
         self.transform = transform
-        self.allowed_labels = allowed_labels
         self.task = task
         self.return_metadata = return_metadata
 
-        # CSV paths
-        gt_path = os.path.join(root_dir, "MILK10k_Training_GroundTruth.csv")
-        meta_path = os.path.join(root_dir, "MILK10k_Training_Metadata.csv")
+        # Load metadata and ground truth
+        gt_path = self.root_dir / "MILK10k_Training_GroundTruth.csv"
+        meta_path = self.root_dir / "MILK10k_Training_Metadata.csv"
 
-        # Load dataframes
         self.gt_df = pd.read_csv(gt_path)
         self.meta_df = pd.read_csv(meta_path)
 
-        # Merge on lesion_id
+        # Merge into single dataframe
         self.data = pd.merge(self.meta_df, self.gt_df, on="lesion_id")
 
         # Construct absolute image paths
         self.data["image_path"] = self.data.apply(
             lambda row: os.path.join(
-                root_dir, "images", row["lesion_id"], f"{row['isic_id']}.jpg"
+                self.root_dir,
+                "images",
+                row["lesion_id"],
+                f"{row['isic_id']}.jpg",
             ),
             axis=1,
         )
 
-        # Human-readable, snake_case class names
+        # Add masks column (only relevant in segmentation mode)
+        self.data["masks"] = self.data["isic_id"].apply(self.find_masks)
+
+        # Class mapping
         self.class_map = {
             "AKIEC": "actinic_keratosis_intraepidermal_carcinoma",
             "BCC": "basal_cell_carcinoma",
@@ -83,57 +85,107 @@ class MILK10kDataset(Dataset):
         self.class_codes = list(self.class_map.keys())
         self.class_names = [self.class_map[c] for c in self.class_codes]
 
-        # Optional filtering by allowed_labels
-        if allowed_labels is not None:
-            valid_set = set(self.class_names)
-            invalid = [label for label in allowed_labels if label not in valid_set]
-            if invalid:
-                raise ValueError(
-                    f"Invalid label(s) in allowed_labels: {invalid}\n"
-                    f"Valid labels are: {sorted(valid_set)}"
-                )
-
-            allowed_codes = [
-                code
-                for code, name in self.class_map.items()
-                if name in allowed_labels
-            ]
-            mask = self.data[allowed_codes].sum(axis=1) > 0
-            self.data = self.data.loc[mask].reset_index(drop=True)
-
-        # Validate binary task compatibility
-        if task == MILK10kTask.MELANOMA_VS_NEVUS:
-            # Keep only rows that are either melanoma or nevus
+        # Filter binary task
+        if self.task == MILK10kTask.MELANOMA_VS_NEVUS:
             mel_mask = self.data["MEL"] == 1
             nev_mask = self.data["NV"] == 1
             self.data = self.data.loc[mel_mask | nev_mask].reset_index(drop=True)
 
+        # Filter segmentation task
+        elif self.task == MILK10kTask.SEGMENTATION:
+            no_mask_rows = self.data[self.data["masks"].isna()]
+            if not no_mask_rows.empty:
+                print(
+                    f"Warning: {len(no_mask_rows)} samples have no masks and are ignored."
+                )
+            self.data = self.data.dropna(subset=["masks"]).reset_index(drop=True)
+
+    # -------------------------------------------------------------
+
+    def find_masks(self, isic_id: str) -> str | None:
+        """Find all associated masks for an image (with numbered suffixes)."""
+        masks_dir = self.root_dir / "masks"
+        if not masks_dir.exists():
+            return None
+
+        masks = []
+        base_path = masks_dir / isic_id
+
+        # Search for numbered masks (_00, _01, etc)
+        idx = 0
+        while True:
+            mask_path = base_path.parent / f"{isic_id}_{idx:02d}.png"
+            if mask_path.exists():
+                masks.append(str(mask_path))
+                idx += 1
+            else:
+                break
+
+        # If none found, try unsuffixed
+        if not masks:
+            plain_mask = base_path.parent / f"{isic_id}.png"
+            if plain_mask.exists():
+                masks.append(str(plain_mask))
+
+        return ";".join(masks) if masks else None
+
+    def get_masks_list(self, index: int) -> list[str]:
+        """Get list of mask paths for the sample at index."""
+        val = self.data.iloc[index]["masks"]
+        if pd.isna(val):
+            return []
+        return val.split(";")
+
+    # -------------------------------------------------------------
+
     def __len__(self):
         return len(self.data)
 
-    def __getitem__(self, idx):
-        row = self.data.iloc[idx]
-        image = Image.open(row["image_path"]).convert("RGB")
-
-        # --- Label processing depending on task ---
-        if self.task == MILK10kTask.MULTILABEL:
-            label = row[self.class_codes].astype(float).values
-
+    def _get_label(self, row):
+        """Helper to extract per-task label."""
+        if self.task in [MILK10kTask.MULTILABEL, MILK10kTask.SEGMENTATION]:
+            return row[self.class_codes].astype(float).values
         elif self.task == MILK10kTask.MELANOMA_VS_NEVUS:
             if row["MEL"] == 1:
-                label = 0
+                return 0
             elif row["NV"] == 1:
-                label = 1
+                return 1
             else:
-                raise ValueError(
-                    f"Unexpected class row for binary task in index {idx}"
-                )
+                raise ValueError("Row not compatible with melanoma_vs_nevus task.")
         else:
-            raise ValueError(f"Unknown task type: {self.task}")
+            raise ValueError(f"Unknown task: {self.task}")
 
-        # --- Apply transform ---
+    def __getitem__(self, idx):
+        row = self.data.iloc[idx]
+        image = np.array(Image.open(row["image_path"]).convert("RGB"))
+        label = self._get_label(row)
+
+        # --- Segmentation Task ---
+        if self.task == MILK10kTask.SEGMENTATION:
+            mask_paths = self.get_masks_list(idx)
+            if not mask_paths:
+                raise ValueError(f"No masks found for {row['isic_id']}")
+
+            masks = [np.array(Image.open(p).convert("L"), dtype=np.uint8) for p in mask_paths]
+            combined_mask = masks[0].copy()
+            for mask in masks[1:]:
+                combined_mask = np.maximum(combined_mask, mask)
+
+            if self.transform:
+                transformed = self.transform(image=image, mask=combined_mask)
+                image = transformed["image"]
+                combined_mask = transformed["mask"]
+            else:
+                image = torch.tensor(image).permute(2, 0, 1)
+
+            return (
+                image.float(),
+                torch.as_tensor(combined_mask, dtype=torch.long),
+                torch.tensor(label, dtype=torch.float),
+            )
+
+        # --- Classification Tasks ---
         if self.transform:
-            image = np.array(image)
             transformed = self.transform(image=image)
             image = transformed["image"]
 
@@ -148,32 +200,3 @@ class MILK10kDataset(Dataset):
             return image.float(), torch.tensor(label, dtype=torch.long), metadata
 
         return image.float(), torch.tensor(label, dtype=torch.long)
-
-if __name__ == "__main__":
-    from torchvision import transforms
-    from torch.utils.data import DataLoader
-
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-    ])
-
-    # --- Multi-label (default) ---
-    dataset_multilabel = MILK10kDataset(
-        root_dir="data/MILK10k",
-        transform=transform,
-    )
-
-    # --- Filtered + binary (melanoma vs nevus) ---
-    dataset_binary = MILK10kDataset(
-        root_dir="data/MILK10k",
-        transform=transform,
-        task=MILK10kTask.MELANOMA_VS_NEVUS,
-    )
-
-    print("Multilabel classes:", dataset_multilabel.class_names)
-    print("Binary dataset size:", len(dataset_binary))
-
-    # value counts for using the data dataframe
-    print("Class distribution in binary dataset:")
-    print(dataset_binary.data[["MEL", "NV"]].sum())
