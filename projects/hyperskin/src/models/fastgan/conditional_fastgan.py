@@ -179,7 +179,10 @@ class Generator(nn.Module):
         if im_size > 512:
             self.feat_1024 = UpBlock(nfc[512], nfc[1024])
 
-    def forward(self, input):
+    def forward(self, input, mask):
+        mask = mask.view(mask.size(0), -1).float()
+        input = torch.cat([input, mask], dim=-1)
+
         feat_4 = self.init(input)
         feat_8 = self.feat_8(feat_4)
         feat_16 = self.feat_16(feat_8)
@@ -348,7 +351,8 @@ class Discriminator(nn.Module):
 
     # Forward pass is invoked directly; defines the discriminator's execution flow
     # imgs is a single image or a list of images
-    def forward(self, imgs, label, part=None):
+    def forward(self, imgs, label, mask, part=None):
+        imgs = torch.cat([imgs.view(imgs.size(0), -1), mask.view(mask.size(0), -1).float()], dim=-1) #new
         # Preprocess by interpolation; ensure a list with original and reduced images
         if type(imgs) is not list:
             imgs = [F.interpolate(imgs, size=self.im_size), F.interpolate(imgs, size=128)]
