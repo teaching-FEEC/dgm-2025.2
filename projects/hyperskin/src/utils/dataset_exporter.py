@@ -423,7 +423,6 @@ class DatasetExporter:
             original_path,
             crop_idx,
         )
-
         # Resize if needed
         if image_size is not None:
             cropped_data = smallest_maxsize_and_centercrop(cropped_data, image_size)
@@ -441,7 +440,7 @@ class DatasetExporter:
 
         if export_cropped_masks and mask_path is not None:
             mask_path.parent.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(cropped_mask.astype("uint8")).save(mask_path)
+            Image.fromarray((cropped_mask * 255).astype("uint8")).save(mask_path)
 
         return img_path, mask_path
 
@@ -553,9 +552,21 @@ class DatasetExporter:
 
             img_path = self.output_dir / rel_path.parent / filename
             img_path.parent.mkdir(parents=True, exist_ok=True)
-            mask_path = img_path.parent / filename.replace(
-                self.file_extension, "_mask.png"
+
+            # remove images from the rel_path to get mask path
+            rel_path_parts = list(rel_path.parent.parts)
+            if "images" in rel_path_parts:
+                images_index = rel_path_parts.index("images")
+                rel_path_parts[images_index] = "masks"
+                rel_path = Path(*rel_path_parts) / rel_path.name
+
+            mask_filename = filename.replace(self.file_extension, "_mask.png")
+            mask_path = (
+            self.output_dir
+            / rel_path.parent
+            / mask_filename
             )
+            mask_path.parent.mkdir(parents=True, exist_ok=True)
 
         elif structure == "imagenet":
             filename = f"{label_name}_{counter['count']:05d}{self.file_extension}"
@@ -651,7 +662,7 @@ class RGBDatasetExporter(DatasetExporter):
             data_module,
             output_dir,
             data_type="rgb",
-            file_extension=".png",
+            file_extension=".jpg",
             **kwargs,
         )
 

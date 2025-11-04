@@ -13,6 +13,7 @@ from skimage import filters, morphology
 import torchvision
 from tqdm import tqdm
 
+from src.data_modules.joint_rgb_hsi_dermoscopy import JointRGBHSIDataModule
 from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import weights_init
@@ -114,6 +115,9 @@ class FastGANModule(pl.LightningModule):
     def setup(self, stage: str) -> None:
         datamodule = self.trainer.datamodule
 
+        if isinstance(datamodule, JointRGBHSIDataModule):
+            datamodule = datamodule.hsi_dm
+
         if stage == 'fit':
             train_dataset = datamodule.data_train
         elif stage == 'validate':
@@ -182,8 +186,21 @@ class FastGANModule(pl.LightningModule):
             err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
             return err, pred.mean()
 
+    def process_batch(self, batch):
+        if isinstance(batch, dict):
+            hsi_image, hsi_mask, hsi_label = batch["hsi"]
+            rgb_image, rgb_mask, rgb_label = batch["rgb"]
+
+            real_image = hsi_image
+            real_mask = hsi_mask
+            label = hsi_label
+        else:
+            real_image, real_mask, label = batch
+        return real_image, real_mask, label
+
     def training_step(self, batch, batch_idx):
-        real_image, label = batch
+        real_image, real_mask, label = self.process_batch(batch)
+
         batch_size = real_image.size(0)
         noise = torch.randn(
             batch_size, self.hparams.nz,
@@ -279,9 +296,10 @@ class FastGANModule(pl.LightningModule):
         count = 0
 
         with torch.no_grad():
-            for i, (real_image, _) in enumerate(val_loader):
+            for i, batch in enumerate(val_loader):
                 if i >= self.hparams.num_val_batches:
                     break
+                real_image, real_mask, label = self.process_batch(batch)
 
                 real_image = real_image.to(self.device, non_blocking=True)
                 batch_size = real_image.size(0)

@@ -4,10 +4,10 @@ from pathlib import Path
 from typing import Optional, Any
 
 import numpy as np
-import pytorch_lightning as pl
 from sklearn.model_selection import train_test_split
 import gdown
 import albumentations as A
+import pytorch_lightning as pl
 
 
 class BaseDataModule(pl.LightningDataModule):
@@ -31,6 +31,7 @@ class BaseDataModule(pl.LightningDataModule):
         image_size: Optional[int] = None,
         global_max: Optional[float | list[float]] = None,
         global_min: Optional[float | list[float]] = None,
+        in_channels: int = 3,
         range_mode: str = "0_1",
         **kwargs,
     ):
@@ -46,6 +47,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.global_max = global_max
         self.global_min = global_min
         self.range_mode = range_mode
+        self.in_channels = in_channels
         self.image_size = image_size
 
         # --- transforms ---
@@ -110,8 +112,8 @@ class BaseDataModule(pl.LightningDataModule):
                 )
             else:
                 norm_transform = NormalizeByMinMax(
-                    mins=[self.global_min] * 16,
-                    maxs=[self.global_max] * 16,
+                    mins=[self.global_min] * self.in_channels,
+                    maxs=[self.global_max] * self.in_channels,
                     range_mode=self.range_mode,
                     clip=True,
                 )
@@ -155,7 +157,7 @@ class BaseDataModule(pl.LightningDataModule):
         return indices, labels
 
     def setup_splits(self, seed: int = 42) -> None:
-        """Generate stratified train/val/test splits."""
+        """Generate stratified train/val/test splits, allowing up to two zero-sized splits."""
         indices, labels = self.get_dataset_indices_and_labels()
         indices, labels = self._filter_and_remap_indices(indices, labels, self.allowed_labels)
 
@@ -165,30 +167,129 @@ class BaseDataModule(pl.LightningDataModule):
             mask = np.isin(labels, valid_labels)
             indices, labels = indices[mask], labels[mask]
 
-        # --- handle absolute sizes or ratios ---
         tvt = self.train_val_test_split
-        if all(isinstance(x, int) for x in tvt):
-            train_size, val_size, test_size = tvt
-            total = train_size + val_size + test_size
-            if total != len(indices):
-                raise ValueError(f"Split sum ({total}) != dataset length ({len(indices)})")
-            train_idx, temp_idx, y_train, y_temp = train_test_split(
-                indices, labels, train_size=train_size, stratify=labels, random_state=seed
-            )
-            val_idx, test_idx, _, _ = train_test_split(
-                temp_idx, y_temp, train_size=val_size, stratify=y_temp, random_state=seed
-            )
-        elif all(isinstance(x, float) for x in tvt) and abs(sum(tvt) - 1.0) < 1e-6:
+        num_samples = len(indices)
+
+        def warn(msg: str):
+            print(f"⚠️ {msg}")
+
+        # Handle special cases where one split takes all
+        if tvt[0] == 1 and tvt[1] == 0 and tvt[2] == 0:
+            self.train_indices = indices
+            self.val_indices = np.array([], dtype=int)
+            self.test_indices = np.array([], dtype=int)
+            print("⚠️ Using all data for training (no validation/test split).")
+            return
+        elif tvt[1] == 1 and tvt[0] == 0 and tvt[2] == 0:
+            self.train_indices = np.array([], dtype=int)
+            self.val_indices = indices
+            self.test_indices = np.array([], dtype=int)
+            print("⚠️ Using all data for validation (no training/test split).")
+            return
+        elif tvt[2] == 1 and tvt[0] == 0 and tvt[1] == 0:
+            self.train_indices = np.array([], dtype=int)
+            self.val_indices = np.array([], dtype=int)
+            self.test_indices = indices
+            print("⚠️ Using all data for test (no training/validation split).")
+            return
+
+        # --- ratio-based splits ---
+        if abs(sum(tvt) - 1.0) < 1e-6 or int(sum(tvt)) == 1:
             train_ratio, val_ratio, test_ratio = tvt
-            train_idx, temp_idx, y_train, y_temp = train_test_split(
-                indices, labels, train_size=train_ratio, stratify=labels, random_state=seed
-            )
-            val_size = val_ratio / (val_ratio + test_ratio)
-            val_idx, test_idx, _, _ = train_test_split(
-                temp_idx, y_temp, train_size=val_size, stratify=y_temp, random_state=seed
-            )
+            if train_ratio < 0 or val_ratio < 0 or test_ratio < 0:
+                raise ValueError("Split ratios cannot be negative.")
+            if train_ratio == val_ratio == test_ratio == 0:
+                raise ValueError("At least one split ratio must be > 0.")
+
+            empty = np.array([], dtype=int)
+            remaining_indices, remaining_labels = indices, labels
+
+            # Train split
+            if train_ratio > 0:
+                train_idx, remaining_indices, y_train, remaining_labels = train_test_split(
+                    remaining_indices,
+                    remaining_labels,
+                    train_size=train_ratio,
+                    stratify=remaining_labels,
+                    random_state=seed,
+                )
+            else:
+                warn("Train split ratio is 0 — skipping train split.")
+                train_idx = empty
+
+            # Val/test splitting
+            nonzero_remaining = val_ratio + test_ratio
+            if val_ratio > 0 and test_ratio > 0:
+                val_share = val_ratio / nonzero_remaining
+                val_idx, test_idx, _, _ = train_test_split(
+                    remaining_indices,
+                    remaining_labels,
+                    train_size=val_share,
+                    stratify=remaining_labels,
+                    random_state=seed,
+                )
+            elif val_ratio > 0:
+                val_idx = remaining_indices
+                test_idx = empty
+                warn("Test split ratio is 0 — skipping test split.")
+            elif test_ratio > 0:
+                test_idx = remaining_indices
+                val_idx = empty
+                warn("Validation split ratio is 0 — skipping validation split.")
+            else:
+                warn("Both val and test split ratios are 0 — using entire dataset for train.")
+                val_idx = empty
+                test_idx = empty
+        # --- absolute split sizes ---
+        elif int(sum(tvt)) == num_samples:
+            train_size, val_size, test_size = tvt
+
+            if train_size < 0 or val_size < 0 or test_size < 0:
+                raise ValueError("Split sizes cannot be negative.")
+
+            empty = np.array([], dtype=int)
+            remaining_indices, remaining_labels = indices, labels
+
+            # handle non-empty splits step-by-step
+            if train_size > 0:
+                train_idx, remaining_indices, y_train, remaining_labels = train_test_split(
+                    remaining_indices,
+                    remaining_labels,
+                    train_size=train_size,
+                    stratify=remaining_labels,
+                    random_state=seed,
+                )
+            else:
+                warn("Train split size is 0 — skipping train split.")
+                train_idx = empty
+
+            nonzero_remaining = val_size + test_size
+            if val_size > 0 and test_size > 0:
+                val_share = val_size / nonzero_remaining
+                val_idx, test_idx, _, _ = train_test_split(
+                    remaining_indices,
+                    remaining_labels,
+                    train_size=val_share,
+                    stratify=remaining_labels,
+                    random_state=seed,
+                )
+            elif val_size > 0:
+                val_idx = remaining_indices
+                test_idx = empty
+                warn("Test split size is 0 — skipping test split.")
+            elif test_size > 0:
+                test_idx = remaining_indices
+                val_idx = empty
+                warn("Validation split size is 0 — skipping validation split.")
+            else:
+                warn("Both val and test split sizes are 0 — using entire dataset for train.")
+                val_idx = empty
+                test_idx = empty
+
         else:
-            raise ValueError("train_val_test_split must be integers summing to N, or floats summing to 1")
+            raise ValueError(
+                "train_val_test_split must be integers summing to N, or floats summing to 1"
+            )
 
         self.train_indices = train_idx
         self.val_indices = val_idx
@@ -214,6 +315,8 @@ class BaseDataModule(pl.LightningDataModule):
         return False
 
     def ensure_splits_exist(self):
+        # if self.load_splits_from_disk():
+        #     return
         print("Generating new data splits...")
         self.setup_splits()
         self.save_splits_to_disk()

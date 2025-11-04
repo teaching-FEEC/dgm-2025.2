@@ -8,7 +8,7 @@ data:
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy
-    google_drive_id: 1557yQpqO3baKVSqstuKLjr31NuC2eqcO
+    google_drive_id: 1BQWqSq5Q0xfu381VNwyVU8XlXaIy9ds9
     # data_dir: data/hsi_dermoscopy_cropped
     # google_drive_id: 18fRaTH4FReHretz3OBJr3-takvxtDy1E
     balanced_sampling: True

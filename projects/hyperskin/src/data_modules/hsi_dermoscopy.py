@@ -35,9 +35,12 @@ class HSIDermoscopyDataModule(BaseDataModule):
         global_min: Optional[float | list[float]] = None,
         balanced_sampling: bool = False,
         infinite_train:  bool = False,
+        sample_size: Optional[int] = None,
         synthetic_data_dir: Optional[str] = None,
+        range_mode: str = '-1_1',
         **kwargs,
     ):
+        self.save_hyperparameters()
         super().__init__(
             train_val_test_split=train_val_test_split,
             data_dir=data_dir,
@@ -47,15 +50,26 @@ class HSIDermoscopyDataModule(BaseDataModule):
             image_size=image_size,
             global_max=global_max,
             global_min=global_min,
+            range_mode=range_mode,
         )
 
-        self.save_hyperparameters()
+        # save data_dir to hyperparams for access in setup
+        self.save_hyperparameters({"data_dir": data_dir,
+                                   "synthetic_data_dir": synthetic_data_dir,
+                                   "balanced_sampling": balanced_sampling,
+                                   "infinite_train": infinite_train,
+                                   "batch_size": batch_size,
+                                   "num_workers": num_workers,
+                                   "pin_memory": pin_memory,
+                                   "sample_size": sample_size
+                                   })
+
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
         if isinstance(task, str):
-            self.hparams.task = HSIDermoscopyTask[task]
+            self.hparams.task = HSIDermoscopyTask[task.upper()]
 
         self.data_train = None
         self.data_val = None
@@ -272,7 +286,7 @@ if __name__ == "__main__":
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
         },
-        google_drive_id="1557yQpqO3baKVSqstuKLjr31NuC2eqcO",
+        google_drive_id="1BQWqSq5Q0xfu381VNwyVU8XlXaIy9ds9",
         # synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
     )
     data_module.prepare_data()
@@ -285,7 +299,6 @@ if __name__ == "__main__":
         crop_with_mask=True,
         bbox_scale=2,
         structure="original",
-        mode="hyper",
         image_size=image_size,
         allowed_labels=["melanoma", "dysplastic_nevi"],
         global_normalization=False,

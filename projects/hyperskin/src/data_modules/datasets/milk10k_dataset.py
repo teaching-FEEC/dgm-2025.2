@@ -1,5 +1,6 @@
+from enum import auto
+import glob
 import os
-import enum
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -8,13 +9,17 @@ from torch.utils.data import Dataset
 import albumentations as A
 from pathlib import Path
 
+from zmq import IntEnum
 
-class MILK10kTask(enum.Enum):
+
+class MILK10kTask(IntEnum):
     """Available tasks for MILK10k dataset."""
 
-    MULTILABEL = "multilabel"
-    MELANOMA_VS_NEVUS = "melanoma_vs_nevus"
-    SEGMENTATION = "segmentation"
+    MULTILABEL = auto()
+    MELANOMA_VS_NEVUS = auto()
+    SEGMENTATION = auto()
+    GENERATION = auto()
+    GENERATION_MELANOMA_VS_NEVUS = auto()
 
 
 class MILK10kDataset(Dataset):
@@ -53,19 +58,40 @@ class MILK10kDataset(Dataset):
         # Merge into single dataframe
         self.data = pd.merge(self.meta_df, self.gt_df, on="lesion_id")
 
-        # Construct absolute image paths
-        self.data["image_path"] = self.data.apply(
-            lambda row: os.path.join(
-                self.root_dir,
-                "images",
-                row["lesion_id"],
-                f"{row['isic_id']}.jpg",
-            ),
-            axis=1,
-        )
+        # Construct absolute image paths and expand dataset for multiple crops
+        expanded_rows = []
 
-        # Add masks column (only relevant in segmentation mode)
-        self.data["masks"] = self.data["isic_id"].apply(self.find_masks)
+        for _, row in self.data.iterrows():
+            lesion_dir = self.root_dir / "images" / row["lesion_id"]
+
+            # Find all cropped variants (may include _crop00, _crop01, ...)
+            crop_matches = sorted(lesion_dir.glob(f"{row['isic_id']}_crop*.jpg"))
+
+            # Fallback to unsuffixed image if no cropped ones found
+            if not crop_matches:
+                unsuffixed = lesion_dir / f"{row['isic_id']}.jpg"
+                if unsuffixed.exists():
+                    row["image_path"] = str(unsuffixed)
+                    expanded_rows.append(row.copy())
+                continue
+
+            for extra_img in crop_matches:
+                new_row = row.copy()
+                new_row["image_path"] = str(extra_img)
+                expanded_rows.append(new_row)
+
+        # Convert expanded row list back to DataFrame
+        self.data = pd.DataFrame(expanded_rows).reset_index(drop=True)
+
+        # add masks column
+        self.data["masks"] = self.data["image_path"].apply(self.find_masks)
+
+        # Drop rows with missing images (if any)
+        missing_imgs = self.data[self.data["image_path"].isna()]
+        if not missing_imgs.empty:
+            print(f"Warning: {len(missing_imgs)} samples have missing image files and were removed.")
+            self.data = self.data.dropna(subset=["image_path"]).reset_index(drop=True)
+
 
         # Class mapping
         self.class_map = {
@@ -86,13 +112,14 @@ class MILK10kDataset(Dataset):
         self.class_names = [self.class_map[c] for c in self.class_codes]
 
         # Filter binary task
-        if self.task == MILK10kTask.MELANOMA_VS_NEVUS:
+        if self.task == MILK10kTask.MELANOMA_VS_NEVUS or self.task == MILK10kTask.GENERATION_MELANOMA_VS_NEVUS:
             mel_mask = self.data["MEL"] == 1
             nev_mask = self.data["NV"] == 1
             self.data = self.data.loc[mel_mask | nev_mask].reset_index(drop=True)
+            self.class_names = ["melanoma", "nevus"]
 
         # Filter segmentation task
-        elif self.task == MILK10kTask.SEGMENTATION:
+        elif self.task == MILK10kTask.SEGMENTATION or self.task == MILK10kTask.GENERATION:
             no_mask_rows = self.data[self.data["masks"].isna()]
             if not no_mask_rows.empty:
                 print(
@@ -102,32 +129,26 @@ class MILK10kDataset(Dataset):
 
     # -------------------------------------------------------------
 
-    def find_masks(self, isic_id: str) -> str | None:
+    def find_masks(self, image_path: str) -> str | None:
         """Find all associated masks for an image (with numbered suffixes)."""
         masks_dir = self.root_dir / "masks"
         if not masks_dir.exists():
             return None
 
-        masks = []
-        base_path = masks_dir / isic_id
+        image_path = Path(image_path)
+        isic_id = image_path.stem.split("_crop")[0]  # strip any _cropXX suffix
+        base_path = masks_dir / image_path.parent.name
 
-        # Search for numbered masks (_00, _01, etc)
-        idx = 0
-        while True:
-            mask_path = base_path.parent / f"{isic_id}_{idx:02d}.png"
-            if mask_path.exists():
-                masks.append(str(mask_path))
-                idx += 1
-            else:
-                break
+        # Search cropped masks (_cropXX_mask.png)
+        masks = sorted(base_path.glob(f"{isic_id}_crop*_mask.png"))
 
-        # If none found, try unsuffixed
         if not masks:
-            plain_mask = base_path.parent / f"{isic_id}.png"
+            # Fallback to unsuffixed mask
+            plain_mask = base_path / f"{isic_id}_mask.png"
             if plain_mask.exists():
-                masks.append(str(plain_mask))
+                masks = [plain_mask]
 
-        return ";".join(masks) if masks else None
+        return ";".join(map(str, masks)) if masks else None
 
     def get_masks_list(self, index: int) -> list[str]:
         """Get list of mask paths for the sample at index."""
@@ -143,9 +164,9 @@ class MILK10kDataset(Dataset):
 
     def _get_label(self, row):
         """Helper to extract per-task label."""
-        if self.task in [MILK10kTask.MULTILABEL, MILK10kTask.SEGMENTATION]:
+        if self.task in [MILK10kTask.MULTILABEL, MILK10kTask.SEGMENTATION, MILK10kTask.GENERATION]:
             return row[self.class_codes].astype(float).values
-        elif self.task == MILK10kTask.MELANOMA_VS_NEVUS:
+        elif self.task == MILK10kTask.MELANOMA_VS_NEVUS or self.task == MILK10kTask.GENERATION_MELANOMA_VS_NEVUS:
             if row["MEL"] == 1:
                 return 0
             elif row["NV"] == 1:
@@ -161,7 +182,8 @@ class MILK10kDataset(Dataset):
         label = self._get_label(row)
 
         # --- Segmentation Task ---
-        if self.task == MILK10kTask.SEGMENTATION:
+        if self.task == MILK10kTask.SEGMENTATION or self.task == MILK10kTask.GENERATION or \
+            self.task == MILK10kTask.GENERATION_MELANOMA_VS_NEVUS:
             mask_paths = self.get_masks_list(idx)
             if not mask_paths:
                 raise ValueError(f"No masks found for {row['isic_id']}")
@@ -170,6 +192,7 @@ class MILK10kDataset(Dataset):
             combined_mask = masks[0].copy()
             for mask in masks[1:]:
                 combined_mask = np.maximum(combined_mask, mask)
+            combined_mask = (combined_mask > 0).astype(np.uint8)  # Binarize
 
             if self.transform:
                 transformed = self.transform(image=image, mask=combined_mask)
@@ -200,3 +223,28 @@ class MILK10kDataset(Dataset):
             return image.float(), torch.tensor(label, dtype=torch.long), metadata
 
         return image.float(), torch.tensor(label, dtype=torch.long)
+
+if __name__ == "__main__":
+    # Example usage
+    dataset = MILK10kDataset(
+        root_dir="data/milk10k_melanoma_cropped_256",
+        task=MILK10kTask.MULTILABEL,
+        transform=A.Compose([
+            A.Resize(224, 224),
+            # A.Normalize(),
+            A.pytorch.ToTensorV2(),
+        ]),
+    )
+
+    # get global max and min values for normalization
+    max_vals = np.ones((3,)) * -1e6
+    min_vals = np.ones((3,)) * 1e6
+
+    for i in range(len(dataset)):
+        image, label = dataset[i]
+        max_vals = np.maximum(max_vals, image.view(3, -1).max(dim=1).values.numpy())
+        min_vals = np.minimum(min_vals, image.view(3, -1).min(dim=1).values.numpy())
+
+    print("Global max values per channel:", max_vals)
+    print("Global min values per channel:", min_vals)
+

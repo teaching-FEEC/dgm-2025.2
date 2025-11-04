@@ -44,7 +44,7 @@ class HSIDermoscopyDataset(Dataset):
         task: HSIDermoscopyTask,
         data_dir: str = "data/hsi_dermoscopy",
         transform: Optional[A.Compose] = None,
-        force_create_df: bool = False,
+        force_create_df: bool = True,
         save_labels_df: bool = True,
     ):
         self.transform = transform
@@ -79,7 +79,7 @@ class HSIDermoscopyDataset(Dataset):
         # Try finding masks with _00, _01, etc. suffixes
         idx = 0
         while True:
-            mask_path = f"{base_mask_path}_{idx:02d}.png"
+            mask_path = f"{base_mask_path}_crop{idx:02d}_mask.png"
             if Path(mask_path).exists():
                 masks.append(mask_path)
                 idx += 1
@@ -88,7 +88,7 @@ class HSIDermoscopyDataset(Dataset):
 
         # If no numbered masks found, try the exact name
         if not masks:
-            mask_path = f"{base_mask_path}.png"
+            mask_path = f"{base_mask_path}_mask.png"
             if Path(mask_path).exists():
                 masks.append(mask_path)
 
@@ -200,7 +200,8 @@ class HSIDermoscopyDataset(Dataset):
         image = loadmat(self.labels_df.iloc[index]['file_path']).popitem()[-1]
         image = image.astype('float32')
 
-        if self.task == HSIDermoscopyTask.SEGMENTATION:
+        if self.task == HSIDermoscopyTask.SEGMENTATION or \
+           self.task == HSIDermoscopyTask.GENERATION:
             mask_paths = self.get_masks_list(index)
             if not mask_paths:
                 raise ValueError(f"No masks found for index {index}")
@@ -216,6 +217,7 @@ class HSIDermoscopyDataset(Dataset):
             combined_mask = masks[0].copy()
             for mask in masks[1:]:
                 combined_mask = np.maximum(combined_mask, mask)
+            combined_mask = (combined_mask > 0).astype(np.uint8)
 
             if self.transform is not None:
                 augmented = self.transform(image=image, mask=combined_mask)
@@ -238,10 +240,11 @@ class HSIDermoscopyDataset(Dataset):
 
 if __name__ == "__main__":
     dataset = HSIDermoscopyDataset(
-        task=HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
-        data_dir="data/hsi_dermoscopy_cropped_synth"
+        task=HSIDermoscopyTask.GENERATION,
+        data_dir="data/hsi_dermoscopy_croppedv2_256_with_masks"
     )
 
     for i in range(len(dataset)):
-        image, label = dataset[i]
-        print(f"Image shape: {image.shape}, Label: {label}")
+        image, mask, label = dataset[i]
+        # print(f"Image shape: {image.shape}, Label: {label}")
+        # print(f"Mask shape: {mask.shape}")

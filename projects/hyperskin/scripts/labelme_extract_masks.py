@@ -62,14 +62,14 @@ def extract_masks(input_dir: str, output_dir: str = "./masks", combine: bool = F
                 combined_mask = np.maximum(combined_mask, m)
 
             out_img = Image.fromarray(combined_mask, mode="L")
-            output_path = output_dir / f"{image_name}.png"
+            output_path = output_dir / f"{image_name}_mask.png"
             out_img.save(output_path, format="PNG")
             print(f"✔ Saved combined mask: {output_path}")
 
         else:
             for idx, m in enumerate(masks):
                 out_img = Image.fromarray(m, mode="L")
-                output_path = output_dir / f"{image_name}_{idx:02d}.png"
+                output_path = output_dir / f"{image_name}_crop{idx:02d}_mask.png"
                 out_img.save(output_path, format="PNG")
                 print(f"✔ Saved: {output_path}")
 
