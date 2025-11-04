@@ -186,10 +186,9 @@ class FastGANModule(pl.LightningModule):
             err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
             return err, pred.mean()
 
-    def process_batch(self, batch):
-        if isinstance(batch, dict):
-            hsi_image, hsi_mask, hsi_label = batch["hsi"]
-            rgb_image, rgb_mask, rgb_label = batch["rgb"]
+    def process_batch(self, batch, key: Optional[str] = None):
+        if isinstance(batch, dict) and key is not None:
+            hsi_image, hsi_mask, hsi_label = batch[key]
 
             real_image = hsi_image
             real_mask = hsi_mask
@@ -199,7 +198,8 @@ class FastGANModule(pl.LightningModule):
         return real_image, real_mask, label
 
     def training_step(self, batch, batch_idx):
-        real_image, real_mask, label = self.process_batch(batch)
+        real_image, real_mask, label = self.process_batch(batch, "hsi")
+        # real_rgb_image, real_rgb_mask, label = self.process_batch(batch, "rgb")
 
         batch_size = real_image.size(0)
         noise = torch.randn(
@@ -277,6 +277,30 @@ class FastGANModule(pl.LightningModule):
         load_params(self.netG, backup_para)
         self.netG.train()
 
+    def _iterate_val_loaders(self, val_loader):
+        """
+        Handle both dict of dataloaders or single dataloader cases.
+        If val_loader is a dict, yield dicts with one batch per loader key.
+        """
+        if isinstance(val_loader, dict):
+            # Synchronize iteration across all dataloaders
+            iterators = {k: iter(v) for k, v in val_loader.items()}
+            while True:
+                batch_dict = {}
+                exhausted = False
+                for name, it in iterators.items():
+                    try:
+                        batch_dict[name] = next(it)
+                    except StopIteration:
+                        exhausted = True
+                        break
+                if exhausted:
+                    break
+                yield batch_dict
+        else:
+            # Regular dataloader case
+            yield from val_loader
+
     def _run_validation(self):
         """Run validation metrics on multiple batches from val_dataloader
         using rolling sums for efficiency."""
@@ -296,10 +320,15 @@ class FastGANModule(pl.LightningModule):
         count = 0
 
         with torch.no_grad():
-            for i, batch in enumerate(val_loader):
+            for i, batch in enumerate(self._iterate_val_loaders(val_loader)):
                 if i >= self.hparams.num_val_batches:
                     break
-                real_image, real_mask, label = self.process_batch(batch)
+
+                # If batch is dict of batches, process however needed (e.g. use "hsi" or combine)
+                if isinstance(batch, dict):
+                    real_image, real_mask, label = self.process_batch(batch, "hsi")
+                else:
+                    real_image, real_mask, label = self.process_batch(batch)
 
                 real_image = real_image.to(self.device, non_blocking=True)
                 batch_size = real_image.size(0)

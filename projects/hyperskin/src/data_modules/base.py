@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 import gdown
 import albumentations as A
 import pytorch_lightning as pl
+import torch
 
 
 class BaseDataModule(pl.LightningDataModule):
@@ -33,11 +34,13 @@ class BaseDataModule(pl.LightningDataModule):
         global_min: Optional[float | list[float]] = None,
         in_channels: int = 3,
         range_mode: str = "0_1",
+        normalize_mask_tanh: bool = False,
         **kwargs,
     ):
         super().__init__()
 
         # --- storage ---
+        self.normalize_mask_tanh = normalize_mask_tanh
         self.train_val_test_split = train_val_test_split
         self.data_dir = Path(data_dir)
         self.allowed_labels = allowed_labels
@@ -124,6 +127,48 @@ class BaseDataModule(pl.LightningDataModule):
                     comp.transforms.append(norm_transform)
                 else:
                     setattr(self, f"transforms_{t}", A.Compose([norm_transform]))
+
+        def normalize_mask(mask, **kwargs):
+            """
+            Normalize mask to [-1, 1]. Supports numpy arrays and torch tensors.
+            - If values in [0, 255], scales to [0, 1] then to [-1, 1].
+            - If values in [0, 1], maps to [-1, 1].
+            - If values already in [-1, 1], returned as-is.
+            """
+
+            is_tensor = isinstance(mask, torch.Tensor)
+
+            if is_tensor:
+                m = mask.to(dtype=torch.float32)
+                max_val = m.max().item()
+                min_val = m.min().item()
+                if min_val >= 0.0:
+                    if max_val > 1.0:
+                        m = m / 255.0
+                    m = m.mul(2.0).sub(1.0)
+                return m
+            else:
+                m = np.asarray(mask).astype(np.float32, copy=False)
+            if m.size == 0:
+                return m
+            max_val = float(m.max())
+            min_val = float(m.min())
+            if min_val >= 0.0:
+                if max_val > 1.0:
+                    m = m / 255.0
+                m = (m * 2.0) - 1.0
+            return m
+
+        norm_transform_mask = None
+        if self.normalize_mask_tanh:
+            norm_transform_mask = A.Lambda(mask=normalize_mask)
+
+            for t in ["train", "val", "test"]:
+                comp = getattr(self, f"transforms_{t}")
+                if comp is not None:
+                    comp.transforms.append(norm_transform_mask)
+                else:
+                    setattr(self, f"transforms_{t}", A.Compose([norm_transform_mask]))
 
     # =========================================================================
     # SPLIT MANAGEMENT LOGIC

@@ -38,6 +38,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
         sample_size: Optional[int] = None,
         synthetic_data_dir: Optional[str] = None,
         range_mode: str = '-1_1',
+        normalize_mask_tanh: bool = False,
         **kwargs,
     ):
         self.save_hyperparameters()
@@ -51,6 +52,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
             global_max=global_max,
             global_min=global_min,
             range_mode=range_mode,
+            normalize_mask_tanh=normalize_mask_tanh,
         )
 
         # save data_dir to hyperparams for access in setup

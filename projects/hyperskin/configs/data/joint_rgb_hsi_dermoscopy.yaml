@@ -19,6 +19,7 @@ data:
                     0.01310135, 0.01476806, 0.01932094, 0.02020744]
       range_mode: '-1_1'
       infinite_train: True
+      normalize_mask_tanh: True
 
       transforms:
         train:

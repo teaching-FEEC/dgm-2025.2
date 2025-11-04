@@ -41,6 +41,7 @@ class MILK10kDataModule(BaseDataModule):
         infinite_train: bool = False,
         sample_size: Optional[int] = None,
         range_mode: str = '-1_1',
+        normalize_mask_tanh: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -53,6 +54,7 @@ class MILK10kDataModule(BaseDataModule):
             global_max=global_max,
             global_min=global_min,
             range_mode = range_mode,
+            normalize_mask_tanh=normalize_mask_tanh,
         )
         self.save_hyperparameters(
             {
@@ -78,10 +80,17 @@ class MILK10kDataModule(BaseDataModule):
         self.data_train = None
         self.data_val = None
         self.data_test = None
+
+        self.full_dataset = None
+
+    def prepare_data(self):
+        # use superclass method first
+        self.download_and_extract_if_needed()
         self.full_dataset = MILK10kDataset(
             root_dir=self.hparams.data_dir,
             task=self.hparams.task,
         )
+        self.ensure_splits_exist()
 
     def get_split_dir(self) -> Path:
         return Path(self.hparams.data_dir).parent / "splits" / "milk10k"
