@@ -16,8 +16,8 @@
       "args": [
         "fit",
         "-c",
-        // "configs/data/hsi_dermoscopy_croppedv2.yaml",
-        "configs/data/joint_rgb_hsi_dermoscopy.yaml",
+        "configs/data/hsi_dermoscopy_croppedv2_gan.yaml",
+        // "configs/data/joint_rgb_hsi_dermoscopy.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
         "configs/model/hsi_fastgan.yaml",
