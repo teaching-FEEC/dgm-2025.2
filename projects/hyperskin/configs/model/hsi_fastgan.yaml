@@ -64,6 +64,6 @@ trainer:
     #     strict: true
     #     check_on_train_epoch_end: False
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
-    - class_path: LearningRateMonitor
-      init_args:
-        logging_interval: epoch
+    # - class_path: LearningRateMonitor
+    #   init_args:
+    #     logging_interval: epoch

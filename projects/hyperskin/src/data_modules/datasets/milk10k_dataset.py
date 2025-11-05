@@ -176,6 +176,14 @@ class MILK10kDataset(Dataset):
         else:
             raise ValueError(f"Unknown task: {self.task}")
 
+    @property
+    def labels(self) -> np.ndarray:
+        """Return integer labels for each sample, as a NumPy array."""
+        labels_list = []
+        for _, row in self.data.iterrows():
+            labels_list.append(self._get_label(row))
+        return np.array(labels_list)
+
     def __getitem__(self, idx):
         row = self.data.iloc[idx]
         image = np.array(Image.open(row["image_path"]).convert("RGB"))

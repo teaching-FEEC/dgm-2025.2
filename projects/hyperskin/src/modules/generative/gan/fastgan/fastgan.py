@@ -268,7 +268,14 @@ class FastGANModule(pl.LightningModule):
             return real_image, real_mask, label
 
     def training_step(self, batch, batch_idx):
-        real_image, real_mask, label = self.process_batch(batch, "hsi")
+        if isinstance(batch, dict):
+            real_image, real_mask, label = self.process_batch(batch, "hsi")
+        elif len(batch) == 3:
+            real_image, real_mask, label = batch
+        elif len(batch) == 2:
+            real_image, label = batch
+        else:
+            raise ValueError("Batch format not recognized.")
 
         # Get conditioning if using SPADE
         seg = self.get_conditioning(batch) if self.hparams.use_spade else None
@@ -328,13 +335,7 @@ class FastGANModule(pl.LightningModule):
         self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
-        if isinstance(batch, dict):
-            real_image, _, _ = self.process_batch(batch, "hsi")
-            batch_size = real_image.size(0)
-            current_step = self.global_step // 2
-        else:
-            batch_size = len(batch[0])
-            current_step = (self.global_step + 1) // batch_size
+        current_step = self.global_step // 2
 
         backup_para = copy_G_params(self.netG)
         load_params(self.netG, self.avg_param_G)
@@ -373,8 +374,11 @@ class FastGANModule(pl.LightningModule):
             else:
                 vis_combined = sample
 
-            sample_grid = torchvision.utils.make_grid(vis_combined, nrow=4).detach().cpu()
-            self.logger.experiment.log({"generated_samples": wandb.Image(sample_grid)})
+            sample_grid = torchvision.utils.make_grid(vis_combined, nrow=4
+                                                      ).detach().cpu()
+
+            if hasattr(self.logger, "experiment") and self.logger.experiment is not None:
+                self.logger.experiment.log({"generated_samples": wandb.Image(sample_grid)})
 
         load_params(self.netG, backup_para)
         self.netG.train()
@@ -423,7 +427,12 @@ class FastGANModule(pl.LightningModule):
                     real_image, real_mask, label = self.process_batch(batch, "hsi")
                     seg = self.get_conditioning(batch)
                 else:
-                    real_image, real_mask, label = self.process_batch(batch)
+                    if len(batch) == 3:
+                        real_image, real_mask, label = batch
+                    elif len(batch) == 2:
+                        real_image, label = batch
+                    else:
+                        raise ValueError("Batch format not recognized.")
                     seg = None
 
                 real_image = real_image.to(self.device, non_blocking=True)

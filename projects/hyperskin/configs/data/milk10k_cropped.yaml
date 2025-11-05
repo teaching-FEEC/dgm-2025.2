@@ -1,0 +1,68 @@
+data:
+  class_path: data_modules.MILK10kDataModule
+  init_args:
+    task: MULTILABEL
+    train_val_test_split: [1, 0, 0]
+    image_size: 256
+    batch_size: 40
+    num_workers: 8
+    pin_memory: True
+    allowed_labels: ['melanoma']
+    data_dir: data/milk10k_melanoma_cropped_256
+    global_max: [255, 255, 255]
+    global_min: [0, 0, 0]
+    range_mode: '-1_1'
+    infinite_train: True
+    google_drive_id: 1xOkWxJnSKNdDMRa0EsOrCnHsQV9JJ4al
+    
+    transforms:
+      train:
+      # - class_path: ShiftScaleRotate
+      #   init_args:
+      #     shift_limit: 0.1
+      #     scale_limit: 0
+      #     rotate_limit: 4
+      #     interpolation: 2
+      #     p: 0.5
+      # - class_path: RandomCropFromBorders
+      #   init_args:
+      #     crop_left: 0.2
+      #     crop_right: 0.2
+      #     crop_top: 0.2
+      #     crop_bottom: 0.2
+      #     p: 0.5
+      # - class_path: HorizontalFlip
+      #   init_args:
+      #     p: 0.5
+      # - class_path: VerticalFlip
+      #   init_args:
+      #     p: 0.5
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      val:
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
+      test:
+      - class_path: SmallestMaxSize
+        init_args:
+          max_size: ${data.init_args.image_size}
+      - class_path: CenterCrop
+        init_args:
+          height: ${data.init_args.image_size}
+          width: ${data.init_args.image_size}
+      - class_path: ToTensorV2
+        init_args: {}
