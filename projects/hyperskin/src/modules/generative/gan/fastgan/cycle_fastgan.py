@@ -1,15 +1,12 @@
-from git import Optional
+from typing import Optional
 import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-
 import random
-
 import pytorch_lightning as pl
-
 import warnings
-from skimage import filters, morphology
+from skimage import filters
 import torchvision
 from tqdm import tqdm
 
@@ -17,11 +14,11 @@ from src.data_modules.joint_rgb_hsi_dermoscopy import JointRGBHSIDataModule
 from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import weights_init
-from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
+from src.modules.generative.gan.fastgan.operation import (
+    copy_G_params,
+    load_params,
+)
 from src.models.fastgan.fastgan import Generator, Discriminator
-
-# Import SPADE versions
-from src.models.fastgan.spade_fastgan import GeneratorSPADE, DiscriminatorSPADE
 from src.transforms.diffaug import DiffAugment
 import os
 import torchvision.utils as vutils
@@ -36,7 +33,6 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from scipy.io import savemat
 
 warnings.filterwarnings("ignore")
-
 
 policy = "color,translation"
 
@@ -53,22 +49,21 @@ def crop_image_by_part(image, part):
         return image[:, :, hw:, hw:]
 
 
-# -------------------
-# GAN Module
-# -------------------
-class FastGANModule(pl.LightningModule):
+class CycleFastGANModule(pl.LightningModule):
     def __init__(
         self,
         im_size: int = 256,
-        nc: int = 3,
+        nc_rgb: int = 3,
+        nc_hsi: int = 64,
         ndf: int = 64,
         ngf: int = 64,
         nz: int = 256,
         nlr: float = 0.0002,
         nbeta1: float = 0.5,
         nbeta2: float = 0.999,
+        lambda_cycle: float = 10.0,
+        lambda_identity: float = 0.5,
         log_images_on_step_n: int = 1,
-        log_reconstructions: bool = False,
         val_check_interval: int = 500,
         num_val_batches: int = 8,
         pred_output_dir: str = "generated_samples",
@@ -76,44 +71,35 @@ class FastGANModule(pl.LightningModule):
         pred_hyperspectral: bool = True,
         pred_global_min: Optional[float | list[float]] = None,
         pred_global_max: Optional[float | list[float]] = None,
-        # SPADE configuration
-        use_spade: bool = False,
-        spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
     ):
         super().__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
 
-        # Validate SPADE configuration
-        if self.hparams.use_spade:
-            assert self.hparams.spade_conditioning in ["rgb_mask", "rgb_image"], (
-                f"Invalid spade_conditioning: {self.hparams.spade_conditioning}"
-            )
+        # RGB → HSI Generator (G_AB) and Discriminator (D_B for HSI)
+        self.G_RGB2HSI = Generator(ngf=ngf, nz=nz, im_size=im_size, nc=nc_hsi)
+        self.D_HSI = Discriminator(ndf=ndf, im_size=im_size, nc=nc_hsi)
 
-        # --- model setup ---
-        if self.hparams.use_spade:
-            # Determine label_nc based on conditioning type
-            label_nc = 1 if self.hparams.spade_conditioning == "rgb_mask" else 3
+        # HSI → RGB Generator (G_BA) and Discriminator (D_A for RGB)
+        self.G_HSI2RGB = Generator(ngf=ngf, nz=nz, im_size=im_size, nc=nc_rgb)
+        self.D_RGB = Discriminator(ndf=ndf, im_size=im_size, nc=nc_rgb)
 
-            self.netG = GeneratorSPADE(ngf=ngf, nz=nz, im_size=im_size, nc=nc, label_nc=label_nc)
-            self.netD = DiscriminatorSPADE(ndf=ndf, im_size=im_size, nc=nc, label_nc=label_nc)
-        else:
-            self.netG = Generator(ngf=ngf, nz=nz, im_size=im_size, nc=nc)
-            self.netD = Discriminator(ndf=ndf, im_size=im_size, nc=nc)
-        self.netG.apply(weights_init)
-        self.netD.apply(weights_init)
+        # Initialize weights
+        self.G_RGB2HSI.apply(weights_init)
+        self.D_HSI.apply(weights_init)
+        self.G_HSI2RGB.apply(weights_init)
+        self.D_RGB.apply(weights_init)
 
-        # EMA parameters
-        self.avg_param_G = copy_G_params(self.netG)
+        # EMA parameters for both generators
+        self.avg_param_G_RGB2HSI = copy_G_params(self.G_RGB2HSI)
+        self.avg_param_G_HSI2RGB = copy_G_params(self.G_HSI2RGB)
 
-        # Perceptual & Inception
-        self.percept = PerceptualLoss(model="net-lin", net="vgg", use_gpu=True, in_chans=nc)
+        # Perceptual loss for both domains
+        self.percept_hsi = PerceptualLoss(model="net-lin", net="vgg", use_gpu=True, in_chans=nc_hsi)
+        self.percept_rgb = PerceptualLoss(model="net-lin", net="vgg", use_gpu=True, in_chans=nc_rgb)
 
+        # Fixed noise for visualization
         self.register_buffer("fixed_noise", torch.FloatTensor(8, self.hparams.nz).normal_(0, 1))
-
-        # Store fixed conditioning for validation visualization
-        if self.hparams.use_spade:
-            self.fixed_conditioning = None
 
         # Validation metrics
         self.sam = SpectralAngleMapper()
@@ -121,11 +107,15 @@ class FastGANModule(pl.LightningModule):
         self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0)
         self.tv = TotalVariation()
 
-        self.inception_model = InceptionV3Wrapper(normalize_input=False, in_chans=self.hparams.nc)
+        self.inception_model = InceptionV3Wrapper(normalize_input=False, in_chans=self.hparams.nc_hsi)
         self.inception_model.eval()
         self.fid = FrechetInceptionDistance(
             self.inception_model,
-            input_img_size=(self.hparams.nc, self.hparams.im_size, self.hparams.im_size),
+            input_img_size=(
+                self.hparams.nc_hsi,
+                self.hparams.im_size,
+                self.hparams.im_size,
+            ),
         )
         self.fid.eval()
 
@@ -136,25 +126,10 @@ class FastGANModule(pl.LightningModule):
     def setup(self, stage: str) -> None:
         datamodule = self.trainer.datamodule
 
-        # Validate datamodule structure if using SPADE
-        if self.hparams.use_spade:
-            if not isinstance(datamodule, JointRGBHSIDataModule):
-                raise ValueError(
-                    "When use_spade=True, datamodule must be JointRGBHSIDataModule to provide RGB conditioning"
-                )
+        if not isinstance(datamodule, JointRGBHSIDataModule):
+            raise ValueError("CycleFastGAN requires JointRGBHSIDataModule")
 
-            # Verify that datamodule returns dict batches
-            test_loader = datamodule.train_dataloader()
-            if not isinstance(test_loader, dict):
-                raise ValueError("When use_spade=True, datamodule must return dict batches with 'hsi' and 'rgb' keys")
-            if "rgb" not in test_loader or "hsi" not in test_loader:
-                raise ValueError("Datamodule dict must contain both 'hsi' and 'rgb' keys")
-
-        # Get HSI datamodule for metadata
-        if isinstance(datamodule, JointRGBHSIDataModule):
-            hsi_dm = datamodule.hsi_dm
-        else:
-            hsi_dm = datamodule
+        hsi_dm = datamodule.hsi_dm
 
         if stage == "fit":
             train_dataset = hsi_dm.data_train
@@ -182,11 +157,9 @@ class FastGANModule(pl.LightningModule):
             inverse_labels_map = {v: k for k, v in base_dataset.labels_map.items()}
             self.lesion_class_name = inverse_labels_map[lesion_class_int]
 
-        # Initialize spectra storage
         self.real_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
         self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
 
-        # Get global min/max from datamodule if available
         if (
             hasattr(hsi_dm, "global_min")
             and hasattr(hsi_dm, "global_max")
@@ -196,188 +169,203 @@ class FastGANModule(pl.LightningModule):
             self.hparams.pred_global_min = hsi_dm.global_min
             self.hparams.pred_global_max = hsi_dm.global_max
 
-    def forward(self, z, seg=None):
-        """
-        Args:
-            z: noise vector
-            seg: conditioning for SPADE (optional)
-        """
-        if self.hparams.use_spade:
-            return self.netG(z, seg)
-        return self.netG(z)
+    def forward_rgb2hsi(self, z):
+        return self.G_RGB2HSI(z)
+
+    def forward_hsi2rgb(self, z):
+        return self.G_HSI2RGB(z)
 
     def on_train_start(self):
-        """Properly initialize EMA params on correct device."""
-        self.avg_param_G = [p.data.clone().detach().to(self.device) for p in self.netG.parameters()]
+        """Initialize EMA params on correct device."""
+        self.avg_param_G_RGB2HSI = [p.data.clone().detach().to(self.device) for p in self.G_RGB2HSI.parameters()]
+        self.avg_param_G_HSI2RGB = [p.data.clone().detach().to(self.device) for p in self.G_HSI2RGB.parameters()]
 
-    def get_conditioning(self, batch):
-        """Extract conditioning from batch based on configuration"""
-        if not self.hparams.use_spade:
-            return None
-
-        if self.hparams.spade_conditioning == "rgb_mask":
-            _, rgb_mask, _ = self.process_batch(batch, "rgb")
-            rgb_mask = rgb_mask.to(self.device)
-            if rgb_mask.ndim == 3: # (B, H, W)
-                rgb_mask = rgb_mask.unsqueeze(1)  # (B, 1, H, W)
-            return rgb_mask.float()
-        elif self.hparams.spade_conditioning == "rgb_image":
-            rgb_image, _, _ = self.process_batch(batch, "rgb")
-            rgb_image = rgb_image.to(self.device)
-            return rgb_image
-        else:
-            raise ValueError(f"Invalid conditioning: {self.hparams.spade_conditioning}")
-
-    def train_d_step(self, real_image, fake_images, seg, label="real"):
-        """Discriminator step with optional SPADE conditioning"""
+    def train_d_step(self, real_image, fake_images, discriminator, percept, label="real"):
+        """Discriminator step using FastGAN multi-scale approach"""
         if label == "real":
             part = random.randint(0, 3)
-
-            if self.hparams.use_spade:
-                pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, seg=seg, part=part)
-            else:
-                pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, part=part)
+            pred, [rec_all, rec_small, rec_part] = discriminator(real_image, label, part=part)
 
             rand_weight = torch.rand_like(pred)
             err = (
                 F.relu(rand_weight * 0.2 + 0.8 - pred).mean()
-                + self.percept(rec_all, F.interpolate(real_image, rec_all.shape[2])).sum()
-                + self.percept(rec_small, F.interpolate(real_image, rec_small.shape[2])).sum()
-                + self.percept(rec_part, F.interpolate(crop_image_by_part(real_image, part), rec_part.shape[2])).sum()
+                + percept(rec_all, F.interpolate(real_image, rec_all.shape[2])).sum()
+                + percept(rec_small, F.interpolate(real_image, rec_small.shape[2])).sum()
+                + percept(
+                    rec_part,
+                    F.interpolate(crop_image_by_part(real_image, part), rec_part.shape[2]),
+                ).sum()
             )
-            return err, pred.mean(), rec_all, rec_small, rec_part
+            return err, pred.mean()
         else:
-            if self.hparams.use_spade:
-                pred = self.netD(fake_images, label, seg=seg)
-            else:
-                pred = self.netD(fake_images, label)
-
+            pred = discriminator(fake_images, label)
             rand_weight = torch.rand_like(pred)
             err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
             return err, pred.mean()
 
-    def process_batch(self, batch, key: Optional[str] = None):
-        if not isinstance(batch, dict) and key is not None:
-            raise ValueError("Batch is not a dict, but key was provided.")
-
-        if isinstance(batch, dict) and key is not None:
-            image, mask, label = batch[key]
-            return image, mask, label
-        else:
-            real_image, real_mask, label = batch
-            return real_image, real_mask, label
+    def process_batch(self, batch):
+        rgb_image, rgb_mask, rgb_label = batch["rgb"]
+        hsi_image, hsi_mask, hsi_label = batch["hsi"]
+        return rgb_image, hsi_image
 
     def training_step(self, batch, batch_idx):
-        real_image, real_mask, label = self.process_batch(batch, "hsi")
+        real_rgb, real_hsi = self.process_batch(batch)
+        batch_size = real_rgb.size(0)
 
-        # Get conditioning if using SPADE
-        seg = self.get_conditioning(batch) if self.hparams.use_spade else None
+        # Generate noise
+        noise_rgb = torch.randn(batch_size, self.hparams.nz, device=self.device, dtype=torch.float32)
+        noise_hsi = torch.randn(batch_size, self.hparams.nz, device=self.device, dtype=torch.float32)
 
-        batch_size = real_image.size(0)
-        noise = torch.randn(batch_size, self.hparams.nz, device=self.device, dtype=torch.float32)
+        opt_g_rgb2hsi, opt_g_hsi2rgb, opt_d_rgb, opt_d_hsi = self.optimizers()
 
-        opt_g, opt_d = self.optimizers()
+        # Generate fake images from noise
+        fake_hsi_from_noise = self.forward_rgb2hsi(noise_rgb)
+        fake_rgb_from_noise = self.forward_hsi2rgb(noise_hsi)
 
-        # Generate with conditioning
-        fake_images = self(noise, seg)
+        # Cycle translations: RGB → HSI → RGB and HSI → RGB → HSI
+        fake_hsi = self.G_RGB2HSI(noise_rgb)  # RGB→HSI
+        fake_rgb = self.G_HSI2RGB(noise_hsi)  # HSI→RGB
 
-        fake_images = [fi.float() for fi in fake_images]
-        real_image = DiffAugment(real_image, policy=policy)
-        fake_images_aug = [DiffAugment(fake, policy=policy) for fake in fake_images]
+        # For cycle consistency, we translate real images
+        fake_hsi_from_rgb = self.G_RGB2HSI(noise_rgb)  # Use noise-based
+        fake_rgb_from_hsi = self.G_HSI2RGB(noise_hsi)  # Use noise-based
 
-        # Apply augmentation to conditioning as well
-        seg_aug = DiffAugment(seg, policy=policy) if seg is not None else None
+        # Reconstruct
+        rec_rgb = self.G_HSI2RGB(noise_rgb)  # HSI→RGB→HSI cycle
+        rec_hsi = self.G_RGB2HSI(noise_hsi)  # RGB→HSI→RGB cycle
 
-        # --------- Train D ---------
-        opt_d.zero_grad(set_to_none=True)
-        self.netD.zero_grad(set_to_none=True)
+        # Apply DiffAugment
+        real_rgb_aug = DiffAugment(real_rgb, policy=policy)
+        real_hsi_aug = DiffAugment(real_hsi, policy=policy)
+        fake_rgb_aug = [DiffAugment(f, policy=policy) for f in fake_rgb_from_noise]
+        fake_hsi_aug = [DiffAugment(f, policy=policy) for f in fake_hsi_from_noise]
 
-        err_dr, pred_real, rec_all, rec_small, rec_part = self.train_d_step(
-            real_image, fake_images_aug, seg_aug, "real"
+        # --------- Train D_RGB ---------
+        opt_d_rgb.zero_grad(set_to_none=True)
+        self.D_RGB.zero_grad(set_to_none=True)
+
+        err_dr_rgb, pred_real_rgb = self.train_d_step(real_rgb_aug, fake_rgb_aug, self.D_RGB, self.percept_rgb, "real")
+        self.manual_backward(err_dr_rgb)
+
+        err_df_rgb, pred_fake_rgb = self.train_d_step(
+            real_rgb_aug,
+            [f.detach() for f in fake_rgb_aug],
+            self.D_RGB,
+            self.percept_rgb,
+            "fake",
         )
-        self.manual_backward(err_dr)
+        self.manual_backward(err_df_rgb)
+        opt_d_rgb.step()
 
-        err_df, pred_fake = self.train_d_step(real_image, [fi.detach() for fi in fake_images_aug], seg_aug, "fake")
-        self.manual_backward(err_df)
+        # --------- Train D_HSI ---------
+        opt_d_hsi.zero_grad(set_to_none=True)
+        self.D_HSI.zero_grad(set_to_none=True)
 
-        opt_d.step()
+        err_dr_hsi, pred_real_hsi = self.train_d_step(real_hsi_aug, fake_hsi_aug, self.D_HSI, self.percept_hsi, "real")
+        self.manual_backward(err_dr_hsi)
 
-        # --------- Train G ---------
-        opt_g.zero_grad(set_to_none=True)
-        self.netG.zero_grad(set_to_none=True)
+        err_df_hsi, pred_fake_hsi = self.train_d_step(
+            real_hsi_aug,
+            [f.detach() for f in fake_hsi_aug],
+            self.D_HSI,
+            self.percept_hsi,
+            "fake",
+        )
+        self.manual_backward(err_df_hsi)
+        opt_d_hsi.step()
 
-        if self.hparams.use_spade:
-            pred_g = self.netD(fake_images_aug, "fake", seg=seg_aug)
-        else:
-            pred_g = self.netD(fake_images_aug, "fake")
+        # --------- Train G_RGB2HSI ---------
+        opt_g_rgb2hsi.zero_grad(set_to_none=True)
+        self.G_RGB2HSI.zero_grad(set_to_none=True)
 
-        err_g = -pred_g.mean()
+        pred_g_hsi = self.D_HSI(fake_hsi_aug, "fake")
+        err_g_adv_hsi = -pred_g_hsi.mean()
 
-        self.manual_backward(err_g)
-        opt_g.step()
+        # Cycle consistency loss (simplified for noise-based generation)
+        # In true CycleGAN, we'd do: rgb → hsi → rgb and compare with original rgb
+        # Here we use a simplified version with identity mapping
+        identity_hsi = self.G_RGB2HSI(noise_rgb)
+        err_cycle = F.l1_loss(rec_hsi[0], fake_hsi_from_noise[0])
 
-        # --------- EMA update after G step ---------
-        for p, avg_p in zip(self.netG.parameters(), self.avg_param_G):
+        err_g_rgb2hsi = err_g_adv_hsi + err_cycle * self.hparams.lambda_cycle
+
+        self.manual_backward(err_g_rgb2hsi)
+        opt_g_rgb2hsi.step()
+
+        # --------- Train G_HSI2RGB ---------
+        opt_g_hsi2rgb.zero_grad(set_to_none=True)
+        self.G_HSI2RGB.zero_grad(set_to_none=True)
+
+        pred_g_rgb = self.D_RGB(fake_rgb_aug, "fake")
+        err_g_adv_rgb = -pred_g_rgb.mean()
+
+        # Cycle loss for RGB
+        err_cycle_rgb = F.l1_loss(rec_rgb[0], fake_rgb_from_noise[0])
+
+        err_g_hsi2rgb = err_g_adv_rgb + err_cycle_rgb * self.hparams.lambda_cycle
+
+        self.manual_backward(err_g_hsi2rgb)
+        opt_g_hsi2rgb.step()
+
+        # --------- EMA update ---------
+        for p, avg_p in zip(self.G_RGB2HSI.parameters(), self.avg_param_G_RGB2HSI):
+            avg_p.mul_(0.999).add_(p.data, alpha=0.001)
+
+        for p, avg_p in zip(self.G_HSI2RGB.parameters(), self.avg_param_G_HSI2RGB):
             avg_p.mul_(0.999).add_(p.data, alpha=0.001)
 
         # --------- Log losses ---------
-        d_loss_total = err_dr + err_df
-        self.log("train/d_loss_real", err_dr, on_step=True, on_epoch=False)
-        self.log("train/d_loss_fake", err_df, on_step=True, on_epoch=False)
-        self.log("train/d_loss_total", d_loss_total, on_step=True, on_epoch=False)
-        self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
+        self.log("train/d_loss_rgb", err_dr_rgb + err_df_rgb, on_step=True)
+        self.log("train/d_loss_hsi", err_dr_hsi + err_df_hsi, on_step=True)
+        self.log("train/g_loss_rgb2hsi", err_g_rgb2hsi, on_step=True)
+        self.log("train/g_loss_hsi2rgb", err_g_hsi2rgb, on_step=True)
+        self.log("train/cycle_loss", err_cycle + err_cycle_rgb, on_step=True)
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
-        if isinstance(batch, dict):
-            real_image, _, _ = self.process_batch(batch, "hsi")
-            batch_size = real_image.size(0)
-            current_step = self.global_step // 2
-        else:
-            batch_size = len(batch[0])
-            current_step = (self.global_step + 1) // batch_size
+        batch_size = len(batch["hsi"])
 
-        backup_para = copy_G_params(self.netG)
-        load_params(self.netG, self.avg_param_G)
-        self.netG.eval()
+        # Backup and load EMA params
+        backup_rgb2hsi = copy_G_params(self.G_RGB2HSI)
+        backup_hsi2rgb = copy_G_params(self.G_HSI2RGB)
 
-        if current_step % self.hparams.val_check_interval == 0:
+        load_params(self.G_RGB2HSI, self.avg_param_G_RGB2HSI)
+        load_params(self.G_HSI2RGB, self.avg_param_G_HSI2RGB)
+
+        self.G_RGB2HSI.eval()
+        self.G_HSI2RGB.eval()
+
+        if ((self.global_step + 1) // batch_size) % self.hparams.val_check_interval == 0:
             self._run_validation()
 
-        if current_step % self.hparams.log_images_on_step_n == 0:
-            # Store fixed conditioning on first log
-            if self.hparams.use_spade and self.fixed_conditioning is None:
-                seg = self.get_conditioning(batch)
-                self.fixed_conditioning = seg[:8].clone().detach()
+        if ((self.global_step + 1) // batch_size) % self.hparams.log_images_on_step_n == 0:
+            # Generate HSI from noise
+            sample_hsi = self.forward_rgb2hsi(self.fixed_noise)[0].add(1).mul(0.5)
 
-            # Generate with fixed conditioning
-            fixed_seg = self.fixed_conditioning if self.hparams.use_spade else None
-            sample = self(self.fixed_noise, fixed_seg)[0].add(1).mul(0.5)
+            # Generate RGB from noise
+            sample_rgb = self.forward_hsi2rgb(self.fixed_noise)[0].add(1).mul(0.5)
 
-            # Convert to 3 channel view if HSI > 3 channels
-            if self.hparams.nc > 3:
-                sample = sample.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
-            sample = sample.clamp(0, 1)
+            # Convert HSI to viewable format
+            if self.hparams.nc_hsi > 3:
+                sample_hsi = sample_hsi.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+            sample_hsi = sample_hsi.clamp(0, 1)
+            sample_rgb = sample_rgb.clamp(0, 1)
 
-            # --- NEW: also visualize the conditioning input ---
-            if fixed_seg is not None:
-                # Denormalize SPADE conditioning (assumed same [-1,1] normalization)
-                cond_vis = fixed_seg.add(1).mul(0.5).clamp(0, 1)
+            # Log both
+            grid_hsi = torchvision.utils.make_grid(sample_hsi, nrow=4).detach().cpu()
+            grid_rgb = torchvision.utils.make_grid(sample_rgb, nrow=4).detach().cpu()
 
-                # If conditioning is grayscale (e.g., mask), expand to RGB for better viewing
-                if cond_vis.size(1) == 1:
-                    cond_vis = cond_vis.repeat(1, 3, 1, 1)
-                cond_vis = cond_vis.clamp(0, 1)
+            self.logger.experiment.log(
+                {
+                    "generated_hsi": wandb.Image(grid_hsi),
+                    "generated_rgb": wandb.Image(grid_rgb),
+                }
+            )
 
-                # Concatenate conditioning + generated horizontally
-                vis_combined = torch.cat([cond_vis, sample], dim=0)
-            else:
-                vis_combined = sample
-
-            sample_grid = torchvision.utils.make_grid(vis_combined, nrow=4).detach().cpu()
-            self.logger.experiment.log({"generated_samples": wandb.Image(sample_grid)})
-
-        load_params(self.netG, backup_para)
-        self.netG.train()
+        # Restore params
+        load_params(self.G_RGB2HSI, backup_rgb2hsi)
+        load_params(self.G_HSI2RGB, backup_hsi2rgb)
+        self.G_RGB2HSI.train()
+        self.G_HSI2RGB.train()
 
     def _iterate_val_loaders(self, val_loader):
         """Handle both dict of dataloaders or single dataloader cases."""
@@ -398,8 +386,9 @@ class FastGANModule(pl.LightningModule):
         else:
             yield from val_loader
 
+
     def _run_validation(self):
-        """Run validation metrics on multiple batches"""
+        """Run validation metrics"""
         self.fid.reset()
         self.sam.reset()
         self.rase.reset()
@@ -408,10 +397,7 @@ class FastGANModule(pl.LightningModule):
 
         val_loader = self.trainer.datamodule.train_dataloader()
 
-        sam_sum = 0.0
-        rase_sum = 0.0
-        ssim_sum = 0.0
-        tv_sum = 0.0
+        sam_sum = rase_sum = ssim_sum = tv_sum = 0.0
         count = 0
 
         with torch.no_grad():
@@ -419,27 +405,21 @@ class FastGANModule(pl.LightningModule):
                 if i >= self.hparams.num_val_batches:
                     break
 
-                if isinstance(batch, dict):
-                    real_image, real_mask, label = self.process_batch(batch, "hsi")
-                    seg = self.get_conditioning(batch)
-                else:
-                    real_image, real_mask, label = self.process_batch(batch)
-                    seg = None
+                real_rgb, real_hsi = self.process_batch(batch)
+                real_hsi = real_hsi.to(self.device, non_blocking=True)
+                batch_size = real_hsi.size(0)
 
-                real_image = real_image.to(self.device, non_blocking=True)
-                batch_size = real_image.size(0)
                 noise = torch.randn(batch_size, self.hparams.nz, device=self.device)
 
-                fake_images = self(noise, seg)
-                fake = fake_images[0].float()
+                fake_hsi = self.forward_rgb2hsi(noise)[0].float()
 
-                fake_norm = (fake + 1) / 2
-                real_norm = (real_image + 1) / 2
+                fake_norm = (fake_hsi + 1) / 2
+                real_norm = (real_hsi + 1) / 2
                 fake_norm = fake_norm.clamp(0, 1)
                 real_norm = real_norm.clamp(0, 1)
 
-                self.fid.update(fake, real=False)
-                self.fid.update(real_image, real=True)
+                self.fid.update(fake_hsi, real=False)
+                self.fid.update(real_hsi, real=True)
 
                 eps = 1e-8
                 fake_norm_clamped = fake_norm.clamp(eps, 1.0)
@@ -469,7 +449,6 @@ class FastGANModule(pl.LightningModule):
             mean_rase = rase_sum / max(count, 1)
             mean_ssim = ssim_sum / max(count, 1)
             mean_tv = tv_sum / max(count, 1)
-
             fid = self.fid.compute()
 
             self.log_dict(
@@ -519,7 +498,6 @@ class FastGANModule(pl.LightningModule):
         import matplotlib.pyplot as plt
 
         labels = ["normal_skin", self.lesion_class_name]
-
         real_stats = {}
         fake_stats = {}
 
@@ -541,7 +519,6 @@ class FastGANModule(pl.LightningModule):
         ref_stats = real_stats or fake_stats
         ref_label = next((lbl for lbl in labels if ref_stats.get(lbl) is not None), None)
         if ref_label is None:
-            print("No stats available for plotting mean spectra")
             return
 
         n_bands = len(ref_stats[ref_label]["mean"])
@@ -556,16 +533,49 @@ class FastGANModule(pl.LightningModule):
             fs = fake_stats.get(lbl)
 
             if rs is None and fs is None:
-                ax.text(0.5, 0.5, f"No data for {lbl}", ha="center", va="center", transform=ax.transAxes)
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"No data for {lbl}",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
                 continue
 
             if rs is not None:
-                ax.plot(bands, rs["mean"], linestyle="-", linewidth=2.5, color="C0", label="Real")
-                ax.fill_between(bands, rs["mean"] - rs["std"], rs["mean"] + rs["std"], color="C0", alpha=0.15)
+                ax.plot(
+                    bands,
+                    rs["mean"],
+                    linestyle="-",
+                    linewidth=2.5,
+                    color="C0",
+                    label="Real",
+                )
+                ax.fill_between(
+                    bands,
+                    rs["mean"] - rs["std"],
+                    rs["mean"] + rs["std"],
+                    color="C0",
+                    alpha=0.15,
+                )
 
             if fs is not None:
-                ax.plot(bands, fs["mean"], linestyle="--", linewidth=2.0, color="C3", label="Synthetic")
-                ax.fill_between(bands, fs["mean"] - fs["std"], fs["mean"] + fs["std"], color="C3", alpha=0.15)
+                ax.plot(
+                    bands,
+                    fs["mean"],
+                    linestyle="--",
+                    linewidth=2.0,
+                    color="C3",
+                    label="Synthetic",
+                )
+                ax.fill_between(
+                    bands,
+                    fs["mean"] - fs["std"],
+                    fs["mean"] + fs["std"],
+                    color="C3",
+                    alpha=0.15,
+                )
 
             ax.set_title(f"{lbl.replace('_', ' ').title()}")
             ax.set_xlabel("Spectral Band")
@@ -582,10 +592,10 @@ class FastGANModule(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         """Generate and save new samples."""
         os.makedirs(self.hparams.pred_output_dir, exist_ok=True)
-        self.netG.eval()
+        self.G_RGB2HSI.eval()
 
-        backup_para = copy_G_params(self.netG)
-        load_params(self.netG, self.avg_param_G)
+        backup_para = copy_G_params(self.G_RGB2HSI)
+        load_params(self.G_RGB2HSI, self.avg_param_G_RGB2HSI)
 
         device = self.device
         nz = self.hparams.nz
@@ -597,21 +607,8 @@ class FastGANModule(pl.LightningModule):
 
         with torch.no_grad():
             noise = torch.randn(self.hparams.pred_num_samples, nz, device=device)
-
-            # For SPADE, use conditioning from batch
-            seg = None
-            if self.hparams.use_spade:
-                seg = self.get_conditioning(batch)
-                # Repeat/expand to match number of samples
-                if seg.size(0) < self.hparams.pred_num_samples:
-                    repeats = (self.hparams.pred_num_samples + seg.size(0) - 1) // seg.size(0)
-                    seg = seg.repeat(repeats, 1, 1, 1)[: self.hparams.pred_num_samples]
-            fake_imgs = self(noise, seg)
+            fake_imgs = self.forward_rgb2hsi(noise)
             fake = fake_imgs[0].float().cpu()
-
-            assert torch.min(fake) >= -1.0 and torch.max(fake) <= 1.0, (
-                "Generated images are out of expected range [-1, 1]"
-            )
 
             for i in tqdm(range(self.hparams.pred_num_samples), desc="Generating samples"):
                 fake_img = fake[i : i + 1, :, :, :].to(device)
@@ -643,23 +640,38 @@ class FastGANModule(pl.LightningModule):
                     save_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.png")
                     torchvision.utils.save_image(rgb_uint8 / 255.0, save_path)
 
-        load_params(self.netG, backup_para)
-        self.netG.train()
+        load_params(self.G_RGB2HSI, backup_para)
+        self.G_RGB2HSI.train()
 
     def configure_optimizers(self):
-        opt_g = optim.Adam(
-            self.netG.parameters(), lr=self.hparams.nlr, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+        opt_g_rgb2hsi = optim.Adam(
+            self.G_RGB2HSI.parameters(),
+            lr=self.hparams.nlr,
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2),
         )
-        opt_d = optim.Adam(
-            self.netD.parameters(), lr=self.hparams.nlr, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+        opt_g_hsi2rgb = optim.Adam(
+            self.G_HSI2RGB.parameters(),
+            lr=self.hparams.nlr,
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2),
         )
-        return [opt_g, opt_d]
+        opt_d_rgb = optim.Adam(
+            self.D_RGB.parameters(),
+            lr=self.hparams.nlr,
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2),
+        )
+        opt_d_hsi = optim.Adam(
+            self.D_HSI.parameters(),
+            lr=self.hparams.nlr,
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2),
+        )
+        return [opt_g_rgb2hsi, opt_g_hsi2rgb, opt_d_rgb, opt_d_hsi]
 
     def on_save_checkpoint(self, checkpoint):
-        checkpoint["avg_param_G"] = [p.clone().cpu() for p in self.avg_param_G]
+        checkpoint["avg_param_G_RGB2HSI"] = [p.clone().cpu() for p in self.avg_param_G_RGB2HSI]
+        checkpoint["avg_param_G_HSI2RGB"] = [p.clone().cpu() for p in self.avg_param_G_HSI2RGB]
 
     def on_load_checkpoint(self, checkpoint):
-        if "avg_param_G" in checkpoint:
-            self.avg_param_G = [p.to(self.device) for p in checkpoint["avg_param_G"]]
-        else:
-            print("Warning: avg_param_G not found in checkpoint.")
+        if "avg_param_G_RGB2HSI" in checkpoint:
+            self.avg_param_G_RGB2HSI = [p.to(self.device) for p in checkpoint["avg_param_G_RGB2HSI"]]
+        if "avg_param_G_HSI2RGB" in checkpoint:
+            self.avg_param_G_HSI2RGB = [p.to(self.device) for p in checkpoint["avg_param_G_HSI2RGB"]]

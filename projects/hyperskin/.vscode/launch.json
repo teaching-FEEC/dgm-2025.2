@@ -21,16 +21,19 @@
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
         // "configs/model/hsi_fastgan.yaml",
-        "configs/model/hsi_spade_fastgan.yaml",
+        "configs/model/hsi_cycle_gan.yaml",
+        // "configs/model/hsi_spade_fastgan.yaml",
         // "configs/model/hsi_wgan.yaml",
         // "configs/model/hsi_seg.yaml",
         // "--trainer.logger.name",
         // "exp1"
+        "--trainer.logger=false"
       ],
       "justMyCode": false,
       "console": "integratedTerminal",
       "env": {
-        "DEBUG": "0" // run normally (no remote wait)
+        "DEBUG": "0", // run normally (no remote wait)
+        "WANDB_MODE": "disabled"
       }
     },
     {
