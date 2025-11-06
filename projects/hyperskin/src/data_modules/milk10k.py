@@ -226,6 +226,55 @@ class MILK10kDataModule(BaseDataModule):
         shutil.copy(data_dir / "MILK10k_Training_Metadata.csv",
                     Path(output_dir) / "MILK10k_Training_Metadata.csv")
 
+    def _get_tags_and_run_name(self):
+        """Attach automatic tags and run name inferred from hparams."""
+
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = ["milk10k"]
+        run_name = "milk10k_"
+
+        if hasattr(hparams, "data_dir") and "crop" in hparams.data_dir.lower():
+                tags.append("cropped")
+                run_name += "crop_"
+
+        if getattr(hparams, "infinite_train", False):
+            tags.append("infinite_train")
+
+        if hasattr(hparams, "allowed_labels") and hparams.allowed_labels:
+            labels = hparams.allowed_labels
+            if isinstance(labels, list):
+                for label in labels:
+                    tags.append(label.lower())
+
+        # Core metadata
+        if getattr(hparams, 'task', None):
+            run_name += f"{str(getattr(hparams, 'task')).lower()}_"
+            tags.append(str(getattr(hparams, 'task')).lower())
+
+        if "train" in hparams.transforms:
+            transforms = hparams.transforms["train"]
+            not_augs = [
+                "ToTensorV2",
+                "Normalize",
+                "PadIfNeeded",
+                "CenterCrop",
+                "Resize",
+                "Equalize",
+                "SmallestMaxSize",
+                "LongestMaxSize",
+            ]
+            has_augmentation = any(
+                transform.get("class_path") not in not_augs for transform in transforms
+            )
+            if has_augmentation:
+                run_name += "aug_"
+                tags.append("augmented")
+
+        return tags, run_name.rstrip("_")
+
 if __name__ == "__main__":
     image_size = 256
     data_module = MILK10kDataModule(

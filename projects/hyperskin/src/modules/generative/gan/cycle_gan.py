@@ -26,6 +26,8 @@ from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from skimage import filters
 
+from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
+
 warnings.filterwarnings("ignore")
 
 
@@ -203,6 +205,7 @@ class CycleGANModule(pl.LightningModule):
         self,
         rgb_channels: int = 3,
         hsi_channels: int = 16,
+        image_size: int = 256,
         lambda_identity: float = 0.5,
         lambda_cycle: float = 10.0,
         lambda_perceptual: float = 1.0,
@@ -214,8 +217,8 @@ class CycleGANModule(pl.LightningModule):
         pred_output_dir: str = "generated_samples",
         pred_num_samples: int = 100,
         pred_hyperspectral: bool = True,
-        pred_global_min: Optional[float | list[float]] = None,
-        pred_global_max: Optional[float | list[float]] = None,
+        pred_global_min: float | list[float] | None = None,
+        pred_global_max: float | list[float] | None = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -238,7 +241,9 @@ class CycleGANModule(pl.LightningModule):
         )
 
         # ------------------ Logging and buffers ------------------
-        self.register_buffer("fixed_rgb", torch.zeros(8, rgb_channels, 256, 256))
+        self.register_buffer("fixed_rgb", torch.zeros(8, rgb_channels,
+                                                      self.hparams.image_size,
+                                                      self.hparams.image_size))
 
         # ------------------ Validation metrics ------------------
         self.sam = SpectralAngleMapper()
@@ -252,7 +257,7 @@ class CycleGANModule(pl.LightningModule):
         self.inception_model.eval()
         self.fid = FrechetInceptionDistance(
             self.inception_model,
-            input_img_size=(hsi_channels, 256, 256),
+            input_img_size=(hsi_channels, self.hparams.image_size, self.hparams.image_size),
         )
         self.fid.eval()
 
@@ -260,7 +265,37 @@ class CycleGANModule(pl.LightningModule):
         self.fake_spectra = None
         self.lesion_class_name = None
 
+    def _get_tags_and_run_name(self):
+        """Automatically derive tags and a run name from FastGANModule hyperparameters."""
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = []
+        run_name = "cyclegan_"
+
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        # add init args to tags and run name
+        run_name += f"{hparams.image_size}px_"
+        run_name += f"{hparams.rgb_channels}to{hparams.hsi_channels}_"
+        tags.append(f"imsize_{hparams.image_size}")
+        tags.append(f"rgbch_{hparams.rgb_channels}")
+        tags.append(f"hsich_{hparams.hsi_channels}")
+        tags.append(f"lambda_id_{hparams.lambda_identity}")
+        tags.append(f"lambda_cycle_{hparams.lambda_cycle}")
+        tags.append(f"lambda_percept_{hparams.lambda_perceptual}")
+        tags.append(f"lambda_l1_{hparams.lambda_l1}")
+
+        # append learning rate using scientific notation
+        tags.append(f"lr_{hparams.lr:.0e}")
+
+        return tags, run_name
+
     def setup(self, stage: str) -> None:
+        add_tags_and_run_name_to_logger(self)
         from src.data_modules.joint_rgb_hsi_dermoscopy import (
             JointRGBHSIDataModule,
         )

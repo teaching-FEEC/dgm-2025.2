@@ -92,6 +92,13 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
         self.hsi_dm.teardown(stage)
         self.rgb_dm.teardown(stage)
 
+    def _get_tags_and_run_name(self):
+        """Attach automatic tags and run name inferred from hparams."""
+
+        tags, run_name = self.hsi_dm._get_tags_and_run_name()
+        run_name = run_name.replace("hsi_", "hsi_rgb_")
+
+        return tags, run_name
 
 if __name__ == "__main__":
     image_size = 256
