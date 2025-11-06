@@ -3,14 +3,8 @@ from pytorch_lightning.trainer.states import TrainerFn
 def add_tags_and_run_name_to_logger(self):
     """Add derived tags and run name to the logger if using WandB."""
     stage = self.trainer.state.stage
-    mapping = {
-        TrainerFn.FITTING: "fit",
-        TrainerFn.VALIDATING: "val",
-        TrainerFn.TESTING: "test",
-        TrainerFn.PREDICTING: "pred",
-    }
 
-    stage_str = mapping.get(stage, "")
+    stage_str = stage.value
 
     if not hasattr(self.trainer, "datamodule"):
         return

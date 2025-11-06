@@ -245,17 +245,24 @@ class MILK10kDataModule(BaseDataModule):
 
         if hasattr(hparams, "allowed_labels") and hparams.allowed_labels:
             labels = hparams.allowed_labels
-            if isinstance(labels, list):
-                for label in labels:
-                    tags.append(label.lower())
+            labels_map = self.get_labels_map()
+            inv_labels_map = {v: k for k, v in labels_map.items()}
+            labels = [inv_labels_map[label] if isinstance(label, int) else label for label in labels]
+            for label in labels:
+                tags.append(label.lower())
 
         # Core metadata
         if getattr(hparams, 'task', None):
-            run_name += f"{str(getattr(hparams, 'task')).lower()}_"
-            tags.append(str(getattr(hparams, 'task')).lower())
+            task_name = getattr(hparams, 'task').name.lower()
+            if "segmentation" in task_name:
+                run_name += "seg_"
+            elif "generation" in task_name:
+                run_name += "gen_"
+            else:
+                run_name += "cls_"
 
-        if "train" in hparams.transforms:
-            transforms = hparams.transforms["train"]
+        if "train" in self.transforms_cfg:
+            transforms = self.transforms_cfg["train"]
             not_augs = [
                 "ToTensorV2",
                 "Normalize",
