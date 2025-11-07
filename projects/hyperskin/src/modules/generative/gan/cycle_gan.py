@@ -27,6 +27,8 @@ from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from skimage import filters
 
+from src.models.fastgan.unet_generator import define_D, define_G
+from src.utils.spectra_plot import compute_spectra_statistics, plot_mean_spectra
 from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
 
 warnings.filterwarnings("ignore")
@@ -223,16 +225,30 @@ class CycleGANModule(pl.LightningModule):
         noise_std_end: float = 0.0,
         noise_std: float | None = None,
         noise_decay_steps: int = 100000,
+        model_opt: Optional[dict] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
 
         # ------------------ Generator/Discriminator setup ------------------
-        self.G_AB = Generator(rgb_channels, hsi_channels)
-        self.G_BA = Generator(hsi_channels, rgb_channels)
-        self.D_A = Discriminator(rgb_channels)
-        self.D_B = Discriminator(hsi_channels)
+        if model_opt is not None:
+            self.G_AB = define_G(rgb_channels, hsi_channels, model_opt["ngf"], model_opt["netG"], model_opt["norm"],
+                                            not model_opt["no_dropout"], model_opt["init_type"], model_opt["init_gain"])
+            self.G_BA = define_G(hsi_channels, rgb_channels, model_opt["ngf"], model_opt["netG"], model_opt["norm"],
+                                            not model_opt["no_dropout"], model_opt["init_type"], model_opt["init_gain"])
+
+            self.D_A = define_D(rgb_channels, model_opt["ndf"], model_opt["netD"],
+                                            model_opt["n_layers_D"], model_opt["norm"], model_opt["init_type"],
+                                            model_opt["init_gain"])
+            self.D_B = define_D(hsi_channels, model_opt["ndf"], model_opt["netD"],
+                                            model_opt["n_layers_D"], model_opt["norm"], model_opt["init_type"],
+                                            model_opt["init_gain"])
+        else:
+            self.G_AB = Generator(rgb_channels, hsi_channels)
+            self.G_BA = Generator(hsi_channels, rgb_channels)
+            self.D_A = Discriminator(rgb_channels)
+            self.D_B = Discriminator(hsi_channels)
 
         self.avg_param_G = None
 
@@ -338,6 +354,12 @@ class CycleGANModule(pl.LightningModule):
                 v: k for k, v in base_dataset.labels_map.items()
             }
             self.lesion_class_name = inverse_labels_map[lesion_class_int]
+        else:
+            self.lesion_class_name = None
+            print(
+                "Warning: Multiple lesion classes detected in training data. "
+                "Spectral analysis will be skipped."
+            )
 
         # Initialize spectra storage
         self.real_spectra = (
@@ -380,8 +402,6 @@ class CycleGANModule(pl.LightningModule):
         """Extract RGB and HSI from batch dict"""
         if not isinstance(batch, dict) and self.trainer.state.stage == TrainerFn.PREDICTING:
             return batch
-        else:
-            raise ValueError("Batch must be a dict with 'rgb' and 'hsi' keys")
 
         if isinstance(batch["rgb"], torch.Tensor):
             rgb_image = batch["rgb"]
@@ -752,8 +772,10 @@ class CycleGANModule(pl.LightningModule):
                 count += 1
 
                 if self.lesion_class_name is not None:
-                    self.compute_spectra_statistics(
-                        real_norm_clamped, fake_norm_clamped
+                    compute_spectra_statistics(
+                        real_norm_clamped, fake_norm_clamped,
+                        self.real_spectra, self.fake_spectra,
+                        self.lesion_class_name
                     )
 
             mean_sam = sam_sum / max(count, 1)
@@ -778,140 +800,12 @@ class CycleGANModule(pl.LightningModule):
             if self.lesion_class_name is not None and (
                 self.real_spectra or self.fake_spectra
             ):
-                self._plot_mean_spectra()
+                plot_mean_spectra(self.lesion_class_name,
+                                        self.real_spectra,
+                                        self.fake_spectra)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-    def compute_spectra_statistics(self, real_norm, fake_norm):
-        """Extract spectra from lesion regions using Otsu thresholding"""
-        for img, spectra_dict in [
-            (real_norm, self.real_spectra),
-            (fake_norm, self.fake_spectra),
-        ]:
-            for b in range(img.size(0)):
-                image_np = img[b].cpu().numpy().transpose(1, 2, 0)
-                mean_image = image_np.mean(axis=-1)
-
-                try:
-                    otsu_thresh = filters.threshold_otsu(mean_image)
-                    binary_mask = mean_image < (otsu_thresh * 1)
-
-                    if np.any(binary_mask):
-                        spectrum = image_np[binary_mask].mean(axis=0)
-                        spectra_dict[self.lesion_class_name].append(spectrum)
-
-                    normal_skin_mask = ~binary_mask
-                    if np.any(normal_skin_mask):
-                        normal_spectrum = image_np[normal_skin_mask].mean(
-                            axis=0
-                        )
-                        spectra_dict["normal_skin"].append(normal_spectrum)
-                except Exception:
-                    continue
-
-    def _plot_mean_spectra(self):
-        """Plot mean spectra comparing real vs synthetic data"""
-        import matplotlib.pyplot as plt
-
-        labels = ["normal_skin", self.lesion_class_name]
-
-        real_stats = {}
-        fake_stats = {}
-
-        for label_name in labels:
-            if self.real_spectra.get(label_name):
-                arr = np.array(self.real_spectra[label_name])
-                real_stats[label_name] = {
-                    "mean": np.mean(arr, axis=0),
-                    "std": np.std(arr, axis=0),
-                }
-
-            if self.fake_spectra.get(label_name):
-                arr = np.array(self.fake_spectra[label_name])
-                fake_stats[label_name] = {
-                    "mean": np.mean(arr, axis=0),
-                    "std": np.std(arr, axis=0),
-                }
-
-        ref_stats = real_stats or fake_stats
-        ref_label = next(
-            (lbl for lbl in labels if ref_stats.get(lbl) is not None), None
-        )
-        if ref_label is None:
-            return
-
-        n_bands = len(ref_stats[ref_label]["mean"])
-        bands = np.arange(1, n_bands + 1)
-
-        fig, axes = plt.subplots(1, len(labels), figsize=(15, 5))
-        if len(labels) == 1:
-            axes = [axes]
-
-        for ax, lbl in zip(axes, labels):
-            rs = real_stats.get(lbl)
-            fs = fake_stats.get(lbl)
-
-            if rs is None and fs is None:
-                ax.text(
-                    0.5,
-                    0.5,
-                    f"No data for {lbl}",
-                    ha="center",
-                    va="center",
-                    transform=ax.transAxes,
-                )
-                continue
-
-            if rs is not None:
-                ax.plot(
-                    bands,
-                    rs["mean"],
-                    linestyle="-",
-                    linewidth=2.5,
-                    color="C0",
-                    label="Real",
-                )
-                ax.fill_between(
-                    bands,
-                    rs["mean"] - rs["std"],
-                    rs["mean"] + rs["std"],
-                    color="C0",
-                    alpha=0.15,
-                )
-
-            if fs is not None:
-                ax.plot(
-                    bands,
-                    fs["mean"],
-                    linestyle="--",
-                    linewidth=2.0,
-                    color="C3",
-                    label="Synthetic",
-                )
-                ax.fill_between(
-                    bands,
-                    fs["mean"] - fs["std"],
-                    fs["mean"] + fs["std"],
-                    color="C3",
-                    alpha=0.15,
-                )
-
-            ax.set_title(f"{lbl.replace('_', ' ').title()}")
-            ax.set_xlabel("Spectral Band")
-            ax.set_ylabel("Reflectance")
-            ax.legend()
-            ax.grid(True, alpha=0.25)
-
-        plt.suptitle(
-            "Mean Spectra Comparison: Real vs Synthetic",
-            fontsize=14,
-            y=1.02,
-        )
-        plt.tight_layout()
-
-        self.logger.experiment.log({"val/mean_spectra": wandb.Image(fig)})
-        plt.close(fig)
 
     def predict_step(self, batch, batch_idx):
         """Generate HSI from RGB samples"""

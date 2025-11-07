@@ -5,7 +5,7 @@ data:
       task: GENERATION
       train_val_test_split: [0.7, 0.15, 0.15]
       image_size: 256
-      batch_size: 9
+      batch_size: 30
       num_workers: 8
       pin_memory: True
       data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
@@ -58,7 +58,7 @@ data:
       task: GENERATION_MELANOMA_VS_NEVUS
       train_val_test_split: [1, 0, 0]
       image_size: ${data.init_args.hsi_config.image_size}
-      batch_size: 9
+      batch_size: 30
       num_workers: 8
       pin_memory: True
       data_dir: data/milk10k_melanoma_cropped_256
