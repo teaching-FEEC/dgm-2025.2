@@ -46,10 +46,12 @@ class HSIDermoscopyDataset(Dataset):
         transform: Optional[A.Compose] = None,
         force_create_df: bool = True,
         save_labels_df: bool = True,
+        images_only: bool = False,
     ):
         self.transform = transform
         self.data_dir = data_dir
         self.task = task
+        self.images_only = images_only
 
         self.labels_map = labels_map
 
@@ -226,12 +228,16 @@ class HSIDermoscopyDataset(Dataset):
 
             combined_mask = torch.as_tensor(combined_mask, dtype=torch.long)
             label = torch.tensor(label, dtype=torch.long)
+            if self.images_only:
+                return image
             return image, combined_mask, label
         else:
             if self.transform is not None:
                 augmented = self.transform(image=image)
                 image = augmented['image']
             label = torch.tensor(label, dtype=torch.long)
+            if self.images_only:
+                return image
             return image, label
 
     def __len__(self):

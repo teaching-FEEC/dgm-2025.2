@@ -45,3 +45,4 @@ opencv-python
 # interface
 gradio
 lpips
+torchinfo

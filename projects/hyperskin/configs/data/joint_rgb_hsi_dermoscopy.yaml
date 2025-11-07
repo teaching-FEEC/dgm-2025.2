@@ -5,7 +5,7 @@ data:
       task: GENERATION
       train_val_test_split: [0.7, 0.15, 0.15]
       image_size: 256
-      batch_size: 6
+      batch_size: 30
       num_workers: 8
       pin_memory: True
       data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
@@ -21,6 +21,7 @@ data:
       infinite_train: True
       normalize_mask_tanh: True
       allowed_labels: [melanoma]
+      images_only: True
 
       transforms:
         train:
@@ -57,16 +58,17 @@ data:
       task: GENERATION_MELANOMA_VS_NEVUS
       train_val_test_split: [1, 0, 0]
       image_size: ${data.init_args.hsi_config.image_size}
-      batch_size: 6
+      batch_size: 30
       num_workers: 8
       pin_memory: True
       data_dir: data/milk10k_melanoma_cropped_256
       allowed_labels: [melanoma]
-      global_max: [255, 255, 255]
-      global_min: [0, 0, 0]
-      range_mode: '-1_1'
+      # global_max: [255, 255, 255]
+      # global_min: [0, 0, 0]
+      # range_mode: '-1_1'
       infinite_train: True
       google_drive_id: 1xOkWxJnSKNdDMRa0EsOrCnHsQV9JJ4al
+      images_only: True
 
       transforms:
         train:
@@ -77,6 +79,11 @@ data:
             init_args:
               height: ${data.init_args.hsi_config.image_size}
               width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
           - class_path: "ToTensorV2"
             init_args: {}
         val:
@@ -87,6 +94,11 @@ data:
             init_args:
               height: ${data.init_args.hsi_config.image_size}
               width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
           - class_path: "ToTensorV2"
             init_args: {}
         test:
@@ -97,5 +109,10 @@ data:
             init_args:
               height: ${data.init_args.hsi_config.image_size}
               width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
           - class_path: "ToTensorV2"
             init_args: {}

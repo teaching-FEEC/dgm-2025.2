@@ -39,6 +39,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
         synthetic_data_dir: Optional[str] = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
+        images_only: bool = False,
         **kwargs,
     ):
         self.save_hyperparameters()
@@ -63,7 +64,10 @@ class HSIDermoscopyDataModule(BaseDataModule):
                                    "batch_size": batch_size,
                                    "num_workers": num_workers,
                                    "pin_memory": pin_memory,
-                                   "sample_size": sample_size
+                                   "sample_size": sample_size,
+                                   "allowed_labels": allowed_labels,
+                                    "task": task,
+                                    "images_only": images_only
                                    })
 
         self.batch_size = batch_size
@@ -100,6 +104,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
+                images_only=self.hparams.images_only,
             )
             self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
 
@@ -109,6 +114,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                     task=self.hparams.task,
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
+                    images_only=self.hparams.images_only,
                 )
 
                 # Use all samples from synthetic dataset
@@ -132,6 +138,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_val,
+                images_only=self.hparams.images_only,
             )
             self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
@@ -141,6 +148,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_test,
+                images_only=self.hparams.images_only,
             )
             self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
@@ -258,6 +266,71 @@ class HSIDermoscopyDataModule(BaseDataModule):
             global_max=self.global_max,
         )
         exporter.export(**kwargs)
+
+    def _get_tags_and_run_name(self):
+        """Attach automatic tags and run name inferred from hparams."""
+
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = ["hsi_dermoscopy"]
+        run_name = "hsi_"
+
+        if hasattr(hparams, "data_dir") and "crop" in hparams.data_dir.lower():
+                tags.append("cropped")
+                run_name += "crop_"
+
+        if getattr(hparams, "balanced_sampling", False):
+            tags.append("balanced_sampling")
+
+        if getattr(hparams, "infinite_train", False):
+            tags.append("infinite_train")
+
+        if hasattr(hparams, "allowed_labels") and hparams.allowed_labels:
+            labels = hparams.allowed_labels
+            labels_map = self.get_labels_map()
+            inv_labels_map = {v: k for k, v in labels_map.items()}
+            labels = [inv_labels_map[label] if isinstance(label, int) else label for label in labels]
+            for label in labels:
+                tags.append(label.lower())
+
+        # Core metadata
+        if getattr(hparams, 'task', None):
+            task_name = getattr(hparams, 'task').name.lower()
+            if "segmentation" in task_name:
+                run_name += "seg_"
+            elif "generation" in task_name:
+                run_name += "gen_"
+            else:
+                run_name += "cls_"
+
+            tags.append(getattr(hparams, 'task').name.lower())
+
+        if getattr(hparams, "synthetic_data_dir", None):
+            run_name += "synth_"
+            tags.append("synthetic_data")
+
+        if "train" in self.transforms_cfg:
+            transforms = self.transforms_cfg["train"]
+            not_augs = [
+                "ToTensorV2",
+                "Normalize",
+                "PadIfNeeded",
+                "CenterCrop",
+                "Resize",
+                "Equalize",
+                "SmallestMaxSize",
+                "LongestMaxSize",
+            ]
+            has_augmentation = any(
+                transform.get("class_path") not in not_augs for transform in transforms
+            )
+            if has_augmentation:
+                run_name += "aug_"
+                tags.append("augmented")
+
+        return tags, run_name.rstrip("_")
 
 if __name__ == "__main__":
 

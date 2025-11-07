@@ -17,13 +17,13 @@
         "fit",
         "-c",
         // "configs/data/hsi_dermoscopy_croppedv2_gan.yaml",
-        // "configs/data/joint_rgb_hsi_dermoscopy.yaml",
-        "configs/data/milk10k_cropped.yaml",
+        "configs/data/joint_rgb_hsi_dermoscopy.yaml",
+        // "configs/data/milk10k_cropped.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
         // "configs/model/hsi_fastgan.yaml",
-        // "configs/model/hsi_cycle_gan.yaml",
-        "configs/model/hsi_fastgan.yaml", "--model.init_args.nc=3",
+        "configs/model/hsi_cycle_gan.yaml",
+        // "configs/model/hsi_fastgan.yaml", "--model.init_args.nc=3",
         // "configs/model/hsi_spade_fastgan.yaml",
         // "configs/model/hsi_wgan.yaml",
         // "configs/model/hsi_seg.yaml",
@@ -35,7 +35,7 @@
       "console": "integratedTerminal",
       "env": {
         "DEBUG": "0", // run normally (no remote wait)
-        "WANDB_MODE": "disabled"
+          "WANDB_MODE": "disabled"
       }
     },
     {

@@ -98,7 +98,7 @@ class WandbSaveConfigCallback(SaveConfigCallback):
                 "class_path" in self.config.model and "fastgan" in self.config.model["class_path"].lower():
             run_name += "fastgan_"
             tags.append("fastgan")
-        
+
         if hasattr(self.config, "model") and self.config.model is not None and \
                 "class_path" in self.config.model and "vae" in self.config.model["class_path"].lower():
             run_name += "VAE_"
@@ -177,17 +177,17 @@ class WandbSaveConfigCallback(SaveConfigCallback):
         if self.already_saved:
             return
 
-        run_name, tags = self._build_run_name_and_tags()
+        # run_name, tags = self._build_run_name_and_tags()
 
         # apply the name and tags to all loggers
-        for _logger in trainer.loggers:
-            if isinstance(_logger, WandbLogger):
-                # only set the name if it hasn't been manually by the user
-                if hasattr(trainer.logger, "_name") and not trainer.logger._name:
-                    _logger.experiment.name = run_name
-                _logger.experiment.tags = tuple(
-                    set(_logger.experiment.tags).union(set(tags))
-                )
+        # for _logger in trainer.loggers:
+        #     if isinstance(_logger, WandbLogger):
+        #         # only set the name if it hasn't been manually by the user
+        #         if hasattr(trainer.logger, "_name") and not trainer.logger._name:
+        #             _logger.experiment.name = run_name
+        #         _logger.experiment.tags = tuple(
+        #             set(_logger.experiment.tags).union(set(tags))
+        #         )
 
         log_dir = trainer.log_dir  # this broadcasts the directory
         if trainer.logger is not None and trainer.logger.name is not None and trainer.logger.version is not None:

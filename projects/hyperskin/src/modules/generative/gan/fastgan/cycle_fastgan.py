@@ -32,6 +32,8 @@ from torchmetrics.image import (
 from torchmetrics.image.fid import FrechetInceptionDistance
 from scipy.io import savemat
 
+from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
+
 warnings.filterwarnings("ignore")
 
 policy = "color,translation"
@@ -123,7 +125,37 @@ class CycleFastGANModule(pl.LightningModule):
         self.fake_spectra = None
         self.lesion_class_name = None
 
+    def _get_tags_and_run_name(self):
+        """Automatically derive tags and a run name from FastGANModule hyperparameters."""
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = []
+        run_name = "cyclefastgan_"
+
+        if hparams.use_spade:
+            tags.append("spade")
+            run_name += "spade_"
+            tags.append(f"cond_{hparams.spade_conditioning}")
+            run_name += f"{hparams.spade_conditioning}_"
+
+        # Core configuration flags
+        tags.append(f"imsize_{hparams.im_size}")
+        tags.append(f"nz_{hparams.nz}")
+        run_name += f"{hparams.im_size}px_"
+
+        # Model architecture features
+        tags.append(f"ndf_{hparams.ndf}")
+        tags.append(f"ngf_{hparams.ngf}")
+
+        # Clean trailing underscore
+        run_name = run_name.rstrip("_")
+
+        return tags, run_name
+
     def setup(self, stage: str) -> None:
+        add_tags_and_run_name_to_logger(self)
         datamodule = self.trainer.datamodule
 
         if not isinstance(datamodule, JointRGBHSIDataModule):

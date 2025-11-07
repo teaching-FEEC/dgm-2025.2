@@ -82,16 +82,20 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
 
     def predict_dataloader(self):
         """Return both predict dataloaders (if needed)."""
-        return {
-            "hsi": self.hsi_dm.predict_dataloader(),
-            "rgb": self.rgb_dm.predict_dataloader(),
-        }
+        return self.rgb_dm.predict_dataloader()
 
     def teardown(self, stage: Optional[str] = None):
         """Teardown both datamodules."""
         self.hsi_dm.teardown(stage)
         self.rgb_dm.teardown(stage)
 
+    def _get_tags_and_run_name(self):
+        """Attach automatic tags and run name inferred from hparams."""
+
+        tags, run_name = self.hsi_dm._get_tags_and_run_name()
+        run_name = run_name.replace("hsi_", "hsi_rgb_")
+
+        return tags, run_name
 
 if __name__ == "__main__":
     image_size = 256
