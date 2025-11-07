@@ -117,9 +117,18 @@ class VAE(pl.LightningModule):
             metrics=list(metrics),
             data_range=1.0
         )
-        self.val_best: Dict[str, MaxMetric] = {          # best-so-far trackers for each metric
-            name: MaxMetric() for name in self.val_metrics._order
+        _best_tracker_cls = {                              # dictionary from metric name → tracker class
+            "ssim": MaxMetric,                             # higher SSIM is better
+            "psnr": MaxMetric,                             # higher PSNR is better
+            "sam":  MinMetric,                             # lower SAM (angle) is better
+            "fid":  MinMetric,                             # lower FID (distance) is better
         }
+        
+        self.val_best = {                                  # per-metric best-so-far trackers
+            name: _best_tracker_cls.get(name)() # default to MaxMetric if ever unknown
+            for name in self.val_metrics._order            # respect the enabled + ordered list
+        }
+
 
         # ========= FIXED LATENTS (for optional epoch-end grid) =========
         self.register_buffer(
