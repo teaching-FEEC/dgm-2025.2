@@ -92,6 +92,7 @@ class MILK10kDataModule(BaseDataModule):
             root_dir=self.hparams.data_dir,
             task=self.hparams.task,
             images_only=self.hparams.images_only,
+            transform=self.transforms_test
         )
         self.ensure_splits_exist()
 

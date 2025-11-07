@@ -219,21 +219,12 @@ class HSIDermoscopyDataModule(BaseDataModule):
         )
 
     def predict_dataloader(self):
-        if self.hparams.task == HSIDermoscopyTask.GENERATION:
-            dummy_dataset = torch.utils.data.TensorDataset(torch.zeros(1, 1))
-            return DataLoader(
-                dummy_dataset,
-                batch_size=1,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                shuffle=False,
-            )
-        else:
-            return self.test_dataloader()
+        return self.all_dataloader()
 
     def all_dataloader(self):
         full_dataset = HSIDermoscopyDataset(
-            task=self.hparams.task, data_dir=self.hparams.data_dir, transform=self.transforms_test
+            task=self.hparams.task, data_dir=self.hparams.data_dir, transform=self.transforms_test,
+            images_only=self.hparams.images_only
         )
 
         # use _filter_and_remap_indices to filter the full dataset

@@ -1,3 +1,4 @@
+from typing import Any, Self
 from git import Optional
 import numpy as np
 import torch
@@ -80,7 +81,6 @@ class FastGANModule(pl.LightningModule):
         # SPADE configuration
         use_spade: bool = False,
         spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
-         # Accept legacy config key
         log_reconstructions: bool = False,
     ):
         super().__init__()
@@ -705,3 +705,54 @@ class FastGANModule(pl.LightningModule):
             self.avg_param_G = [p.to(self.device) for p in checkpoint["avg_param_G"]]
         else:
             print("Warning: avg_param_G not found in checkpoint.")
+
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path,
+        map_location=None,
+        hparams_file=None,
+        strict=True,
+        **kwargs,
+    ):
+        try:
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=strict,
+                **kwargs,
+            )
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            print("Attempting to load with strict=False")
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=False,
+                **kwargs,
+            )
+
+        return model
+
+    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
+        try:
+            super().load_state_dict(state_dict, strict)
+        except Exception as e:
+            print(f"Error loading state_dict: {e}")
+            print("Attempting to load with strict=False")
+            super().load_state_dict(state_dict, strict=False)
+
+if __name__ == "__main__":
+    # Simple test to instantiate the module
+    model = FastGANModule(
+        im_size=64,
+        nc=10,
+        ndf=32,
+        ngf=32,
+        nz=128,
+        use_spade=True,
+        spade_conditioning="rgb_image",
+    )
+    model.load_from_checkpoint
