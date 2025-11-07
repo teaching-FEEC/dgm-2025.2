@@ -1,3 +1,4 @@
+from typing import Any, Self
 from git import Optional
 import numpy as np
 import torch
@@ -80,7 +81,6 @@ class FastGANModule(pl.LightningModule):
         # SPADE configuration
         use_spade: bool = False,
         spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
-         # Accept legacy config key
         log_reconstructions: bool = False,
     ):
         super().__init__()
@@ -714,55 +714,53 @@ class FastGANModule(pl.LightningModule):
         else:
             print("Warning: avg_param_G not found in checkpoint.")
 
-        # attempt robust state dict load (non-strict)
-        state_dict = checkpoint.get("state_dict", checkpoint)
-        if not isinstance(state_dict, dict):
-            return
-
-        # ignore prefixes that come from removed metrics/modules
-        ignore_prefixes = ("mifid.", "metrics.mifid.", "mifid_inception.", "mifid.")  # extend if needed
-
-        # Build filtered state dict only with keys present in current model
-        own_keys = set(self.state_dict().keys())
-        filtered = {}
-        removed_keys = []
-        for k, v in state_dict.items():
-            if any(k.startswith(p) for p in ignore_prefixes):
-                removed_keys.append(k)
-                continue
-            if k in own_keys:
-                filtered[k] = v
-            else:
-                # also try removing common checkpoint prefixes like "model." or "module."
-                k_stripped = k
-                for prefix in ("model.", "module."):
-                    if k.startswith(prefix) and k[len(prefix) :] in own_keys:
-                        filtered[k[len(prefix) :]] = v
-                        break
-                else:
-                    removed_keys.append(k)
-
-        if not filtered:
-            print("Warning: no matching keys found in checkpoint.state_dict() for this model. Skipping state load.")
-            return
-
-        # Load filtered state dict with strict=False to allow missing keys
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path,
+        map_location=None,
+        hparams_file=None,
+        strict=True,
+        **kwargs,
+    ):
         try:
-            load_result = self.load_state_dict(filtered, strict=False)
-            # summarize
-            missing = load_result.missing_keys if hasattr(load_result, "missing_keys") else []
-            unexpected = load_result.unexpected_keys if hasattr(load_result, "unexpected_keys") else []
-            print(
-                f"Loaded checkpoint (non-strict). Keys removed: {len(removed_keys)}, "
-                f"missing_keys: {len(missing)}, unexpected_keys: {len(unexpected)}"
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=strict,
+                **kwargs,
             )
-            if removed_keys:
-                print(f"Removed keys sample (first 10): {removed_keys[:10]}")
         except Exception as e:
-            # fallback: try direct non-strict load of entire dict (may still error if PL already raised upstream)
-            try:
-                self.load_state_dict(state_dict, strict=False)
-                print("Fallback: loaded full checkpoint.state_dict() with strict=False")
-            except Exception as e2:
-                print("Failed to load checkpoint state_dict non-strictly:", e2)
-# ...existing code...
+            print(f"Error loading checkpoint: {e}")
+            print("Attempting to load with strict=False")
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=False,
+                **kwargs,
+            )
+
+        return model
+
+    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
+        try:
+            super().load_state_dict(state_dict, strict)
+        except Exception as e:
+            print(f"Error loading state_dict: {e}")
+            print("Attempting to load with strict=False")
+            super().load_state_dict(state_dict, strict=False)
+
+if __name__ == "__main__":
+    # Simple test to instantiate the module
+    model = FastGANModule(
+        im_size=64,
+        nc=10,
+        ndf=32,
+        ngf=32,
+        nz=128,
+        use_spade=True,
+        spade_conditioning="rgb_image",
+    )
+    model.load_from_checkpoint

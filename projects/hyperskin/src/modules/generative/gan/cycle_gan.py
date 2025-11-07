@@ -1,5 +1,6 @@
 from typing import Optional
 
+from matplotlib.pyplot import isinteractive
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -28,154 +29,9 @@ from src.metrics.inception import InceptionV3Wrapper
 from skimage import filters
 
 from src.models.fastgan.unet_generator import define_D, define_G
-from src.utils.spectra_plot import compute_spectra_statistics, plot_mean_spectra
+from src.models.cycle_gan.cycle_gan import Generator, Discriminator
+from src.utils.spectra_plot import MeanSpectraMetric
 from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
-
-warnings.filterwarnings("ignore")
-
-
-class ResidualBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        kernel_size: int = 3,
-        padding: int = 1,
-    ):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.ReflectionPad2d(padding),
-            nn.Conv2d(in_channels, in_channels, kernel_size),
-            nn.InstanceNorm2d(in_channels),
-            nn.LeakyReLU(0.2),
-            nn.ReflectionPad2d(padding),
-            nn.Conv2d(in_channels, in_channels, kernel_size),
-            nn.InstanceNorm2d(in_channels),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x + self.block(x)
-
-
-class Generator(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        num_res_blocks: int = 9,
-    ):
-        super().__init__()
-        self.model = nn.Sequential(
-            self._initial_block(in_channels=in_channels, out_channels=64),
-            *self._downsampling_blocks(in_channels=64, num_blocks=2),
-            *self._residual_blocks(in_channels=256, num_blocks=num_res_blocks),
-            *self._upsampling_blocks(in_channels=256, num_blocks=2),
-            self._output_block(in_channels=64, out_channels=out_channels),
-        )
-
-    def _initial_block(self, in_channels: int, out_channels: int):
-        return nn.Sequential(
-            nn.ReflectionPad2d(padding=3),
-            nn.Conv2d(in_channels, out_channels, kernel_size=7),
-            nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2),
-        )
-
-    def _downsampling_blocks(
-        self,
-        in_channels: int,
-        num_blocks: int,
-        kernel_size: int = 3,
-        stride: int = 2,
-        padding: int = 1,
-    ):
-        blocks = []
-        for _ in range(num_blocks):
-            blocks.append(
-                nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=in_channels * 2,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding=padding,
-                )
-            )
-            blocks.append(nn.InstanceNorm2d(in_channels * 2))
-            blocks.append(nn.LeakyReLU(0.2))
-            in_channels *= 2
-        return blocks
-
-    def _residual_blocks(self, in_channels: int, num_blocks: int):
-        return [ResidualBlock(in_channels) for _ in range(num_blocks)]
-
-    def _upsampling_blocks(
-        self,
-        in_channels: int,
-        num_blocks: int,
-        kernel_size: int = 3,
-        stride: int = 2,
-        padding: int = 1,
-    ):
-        blocks = []
-        for _ in range(num_blocks):
-            blocks.append(
-                nn.ConvTranspose2d(
-                    in_channels,
-                    in_channels // 2,
-                    kernel_size,
-                    stride,
-                    padding,
-                    output_padding=1,
-                )
-            )
-            blocks.append(nn.InstanceNorm2d(in_channels // 2))
-            blocks.append(nn.LeakyReLU(0.2))
-            in_channels //= 2
-        return blocks
-
-    def _output_block(
-        self,
-        in_channels: int,
-        out_channels: int,
-    ):
-        return nn.Sequential(
-            nn.ReflectionPad2d(padding=3),
-            nn.Conv2d(in_channels, out_channels, kernel_size=7),
-            nn.Tanh(),
-        )
-
-    def forward(self, x):
-        return self.model(x)
-
-
-class Discriminator(nn.Module):
-    def __init__(self, in_channels):
-        super().__init__()
-        self.model = nn.Sequential(
-            self._discriminator_block(in_channels, 64, stride=2),
-            self._discriminator_block(64, 128, stride=2),
-            self._discriminator_block(128, 256, stride=2),
-            self._discriminator_block(256, 512),
-            nn.Conv2d(512, 1, 4, padding=1),
-        )
-
-    def _discriminator_block(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 4,
-        stride: int = 1,
-        padding: int = 1,
-    ):
-        return nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels, kernel_size, stride, padding
-            ),
-            nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-    def forward(self, x):
-        return self.model(x)
 
 
 def copy_cyclegan_params(G_AB, G_BA):
@@ -281,9 +137,7 @@ class CycleGANModule(pl.LightningModule):
         )
         self.fid.eval()
 
-        self.real_spectra = None
-        self.fake_spectra = None
-        self.lesion_class_name = None
+        self.spectra_metric = MeanSpectraMetric()
 
     def _get_tags_and_run_name(self):
         """Automatically derive tags and a run name from FastGANModule hyperparameters."""
@@ -324,55 +178,6 @@ class CycleGANModule(pl.LightningModule):
             )
 
         hsi_dm = datamodule.hsi_dm
-
-        if stage == "fit":
-            train_dataset = hsi_dm.data_train
-        elif stage == "validate":
-            train_dataset = hsi_dm.data_val
-        elif stage == "test" or stage == "predict":
-            train_dataset = hsi_dm.data_test
-        else:
-            raise ValueError(f"Unknown stage: {stage}")
-
-        if isinstance(train_dataset, torch.utils.data.ConcatDataset):
-            base_dataset = train_dataset.datasets[0]
-        else:
-            base_dataset = train_dataset
-
-        if isinstance(base_dataset, torch.utils.data.Subset):
-            base_dataset = base_dataset.dataset
-
-        train_indices = hsi_dm.train_indices
-        train_labels = np.array(
-            [base_dataset.labels[i] for i in train_indices]
-        )
-        unique_labels = np.unique(train_labels)
-
-        if len(unique_labels) == 1:
-            lesion_class_int = unique_labels[0]
-            inverse_labels_map = {
-                v: k for k, v in base_dataset.labels_map.items()
-            }
-            self.lesion_class_name = inverse_labels_map[lesion_class_int]
-        else:
-            self.lesion_class_name = None
-            print(
-                "Warning: Multiple lesion classes detected in training data. "
-                "Spectral analysis will be skipped."
-            )
-
-        # Initialize spectra storage
-        self.real_spectra = (
-            {"normal_skin": [], self.lesion_class_name: []}
-            if self.lesion_class_name
-            else None
-        )
-        self.fake_spectra = (
-            {"normal_skin": [], self.lesion_class_name: []}
-            if self.lesion_class_name
-            else None
-        )
-
         # Get global min/max from datamodule
         if (
             hasattr(hsi_dm, "global_min")
@@ -400,8 +205,22 @@ class CycleGANModule(pl.LightningModule):
 
     def process_batch(self, batch):
         """Extract RGB and HSI from batch dict"""
-        if not isinstance(batch, dict) and self.trainer.state.stage == TrainerFn.PREDICTING:
-            return batch
+        if not isinstance(batch, dict):
+            if isinstance(batch, list) or isinstance(batch, tuple):
+                return batch[0], batch[1]
+            if isinstance(batch, torch.Tensor):
+                return batch
+
+        rgb_mask = None
+        hsi_mask = None
+        if isinstance(batch["rgb"], list) or isinstance(batch["rgb"], tuple):
+            rgb_image = batch["rgb"][0]
+            rgb_mask = batch["rgb"][1] if len(batch["rgb"]) > 1 else None
+
+        if isinstance(batch["hsi"], list) or isinstance(batch["hsi"], tuple):
+            hsi_image = batch["hsi"][0]
+            hsi_mask = batch["hsi"][1] if len(batch["hsi"]) > 1 else None
+
 
         if isinstance(batch["rgb"], torch.Tensor):
             rgb_image = batch["rgb"]
@@ -413,7 +232,10 @@ class CycleGANModule(pl.LightningModule):
         else:
             hsi_image = batch["hsi"][0]
 
-        return rgb_image, hsi_image
+        if rgb_mask is not None and hsi_mask is not None:
+            return rgb_image, hsi_image, rgb_mask, hsi_mask
+        else:
+            return rgb_image, hsi_image
 
     def _calculate_g_loss(
         self, real_A, real_B, fake_A, fake_B, rec_A, rec_B
@@ -771,12 +593,7 @@ class CycleGANModule(pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
-                if self.lesion_class_name is not None:
-                    compute_spectra_statistics(
-                        real_norm_clamped, fake_norm_clamped,
-                        self.real_spectra, self.fake_spectra,
-                        self.lesion_class_name
-                    )
+                self.spectra_metric.update(real_hsi, fake_hsi)
 
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
@@ -797,32 +614,57 @@ class CycleGANModule(pl.LightningModule):
                 sync_dist=True,
             )
 
-            if self.lesion_class_name is not None and (
-                self.real_spectra or self.fake_spectra
-            ):
-                plot_mean_spectra(self.lesion_class_name,
-                                        self.real_spectra,
-                                        self.fake_spectra)
+        fig = self.spectra_metric.plot()
+        if fig is not None:
+            self.logger.experiment.log({"Mean Spectra": wandb.Image(fig)})
+        self.spectra_metric.reset()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def predict_step(self, batch, batch_idx):
+    def predict_step(self, batch, batch_idx, dataloader_idx):
         """Generate HSI from RGB samples"""
         os.makedirs(self.hparams.pred_output_dir, exist_ok=True)
 
-        backup_para = copy_cyclegan_params(self.G_AB, self.G_BA)
-        load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
-        self.G_AB.eval()
-
         gmin = getattr(self.hparams, "pred_global_min", None)
         gmax = getattr(self.hparams, "pred_global_max", None)
+        gmin = torch.tensor(gmin).to(self.device) if gmin is not None else None
+        gmax = torch.tensor(gmax).to(self.device) if gmax is not None else None
+
+        if dataloader_idx == 1:
+            # compute real spectra from HSI dataloader
+            masks = None
+            if isinstance(batch, tuple) or isinstance(batch, list):
+                real_hsi, masks = batch
+            else:
+                real_hsi = batch
+            real_hsi_denorm = real_hsi.add(1).div(2)
+
+            if gmin is not None and gmax is not None:
+                real_hsi_denorm = real_hsi_denorm * (gmax - gmin) + gmin
+            self.spectra_metric.update(
+                real_hsi_denorm,
+                is_fake=False,
+                masks=masks,
+            )
+            return
+
+        backup_para = copy_cyclegan_params(self.G_AB, self.G_BA)
+        if self.avg_param_G is None:
+            load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
+        self.G_AB.eval()
+
 
         with torch.no_grad():
-            real_rgb = self.process_batch(batch)
-            real_rgb = real_rgb.to(self.device)
+            batch = self.process_batch(batch)
+            masks = None
+            if isinstance(batch, tuple):
+                real_rgb = batch[0]
+                masks = batch[1] if len(batch) > 2 else None
+            else:
+                real_rgb = batch
 
-            # Generate HSI from RGB
+            real_rgb = real_rgb.to(self.device)
             fake_hsi = self.G_AB(real_rgb)
 
             for i in tqdm(
@@ -834,28 +676,15 @@ class CycleGANModule(pl.LightningModule):
                     fake_denorm = fake_img.add(1).div(2)
 
                     if gmin is not None and gmax is not None:
-                        gmin_arr = (
-                            torch.tensor(gmin, device=self.device)
-                            if isinstance(gmin, list)
-                            else np.array(gmin)
-                        )
-                        gmax_arr = (
-                            torch.tensor(gmax, device=self.device)
-                            if isinstance(gmax, list)
-                            else np.array(gmax)
+                        fake_denorm = (
+                            fake_denorm * (gmax - gmin) + gmin
                         )
 
-                        if gmin_arr.size == 1:
-                            fake_denorm = (
-                                fake_denorm * (gmax_arr - gmin_arr) + gmin_arr
-                            )
-                        else:
-                            gmin_t = torch.tensor(gmin_arr, device=self.device).view(1, -1, 1, 1)
-                            gmax_t = torch.tensor(gmax_arr, device=self.device).view(1, -1, 1, 1)
-                            fake_denorm = (
-                                fake_denorm * (gmax_t - gmin_t) + gmin_t
-                            )
-
+                    self.spectra_metric.update(
+                        fake_denorm,
+                        fake_denorm,
+                        masks=masks[i : i + 1, :, :, :] if masks is not None else None
+                    )
                     fake_np = fake_denorm.squeeze().cpu().numpy()
                     fake_np = np.transpose(fake_np, (1, 2, 0))
                     mat_path = os.path.join(
@@ -877,6 +706,11 @@ class CycleGANModule(pl.LightningModule):
         load_cyclegan_params(self.G_AB, self.G_BA, backup_para)
         self.G_AB.train()
 
+    def on_predict_end(self) -> None:
+        fig = self.spectra_metric.plot()
+        if fig is not None:
+            fig.savefig("predicted_mean_spectra.png")
+        self.spectra_metric.reset()
     def configure_optimizers(self):
         d_optim = Adam(
             list(self.D_A.parameters()) + list(self.D_B.parameters()),
@@ -904,3 +738,5 @@ class CycleGANModule(pl.LightningModule):
             ]
         else:
             print("Warning: avg_param_G not found in checkpoint.")
+        del checkpoint["hyper_parameters"]
+        del checkpoint["datamodule_hyper_parameters"]

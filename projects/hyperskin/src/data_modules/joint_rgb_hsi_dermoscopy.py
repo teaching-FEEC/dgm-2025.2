@@ -82,7 +82,10 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
 
     def predict_dataloader(self):
         """Return both predict dataloaders (if needed)."""
-        return self.rgb_dm.predict_dataloader()
+        return {
+            "hsi": self.hsi_dm.predict_dataloader(),
+            "rgb": self.rgb_dm.predict_dataloader(),
+        }
 
     def teardown(self, stage: Optional[str] = None):
         """Teardown both datamodules."""
