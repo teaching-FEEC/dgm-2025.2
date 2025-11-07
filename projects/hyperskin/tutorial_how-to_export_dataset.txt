@@ -1,0 +1,13 @@
+data_module.export_dataset(
+        output_dir="export/hsi_dermoscopy_croppedv2_256_with_masks",
+        # splits=["train", "val", "test"],
+        crop_with_mask=True,
+        bbox_scale=2,
+        structure="original",
+        image_size=image_size,
+        allowed_labels=["melanoma", "dysplastic_nevi"],
+        global_normalization=False,
+        export_cropped_masks=True,
+    )
+
+python src/main.py predict -c logs/hypersynth/fastgan_cpkt/config.yaml --ckpt_path logs/hypersynth/fastgan_cpkt/checkpoints/j7od0bbk_fastgan_melanoma_step=0-val_MIFID=114.7889.ckpt

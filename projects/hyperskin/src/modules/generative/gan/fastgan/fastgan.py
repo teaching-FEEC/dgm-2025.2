@@ -80,6 +80,8 @@ class FastGANModule(pl.LightningModule):
         # SPADE configuration
         use_spade: bool = False,
         spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
+         # Accept legacy config key
+        log_reconstructions: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
