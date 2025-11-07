@@ -700,8 +700,69 @@ class FastGANModule(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint):
         checkpoint["avg_param_G"] = [p.clone().cpu() for p in self.avg_param_G]
 
+    # ...existing code...
     def on_load_checkpoint(self, checkpoint):
+        """
+        Robust checkpoint loader:
+        - restore avg_param_G if present
+        - attempt to load state_dict non-strictly, removing keys that don't match this model
+          (e.g. metric/net additions like 'mifid.*' that were removed from the codebase)
+        """
+        # restore EMA params if present
         if "avg_param_G" in checkpoint:
             self.avg_param_G = [p.to(self.device) for p in checkpoint["avg_param_G"]]
         else:
             print("Warning: avg_param_G not found in checkpoint.")
+
+        # attempt robust state dict load (non-strict)
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        if not isinstance(state_dict, dict):
+            return
+
+        # ignore prefixes that come from removed metrics/modules
+        ignore_prefixes = ("mifid.", "metrics.mifid.", "mifid_inception.", "mifid.")  # extend if needed
+
+        # Build filtered state dict only with keys present in current model
+        own_keys = set(self.state_dict().keys())
+        filtered = {}
+        removed_keys = []
+        for k, v in state_dict.items():
+            if any(k.startswith(p) for p in ignore_prefixes):
+                removed_keys.append(k)
+                continue
+            if k in own_keys:
+                filtered[k] = v
+            else:
+                # also try removing common checkpoint prefixes like "model." or "module."
+                k_stripped = k
+                for prefix in ("model.", "module."):
+                    if k.startswith(prefix) and k[len(prefix) :] in own_keys:
+                        filtered[k[len(prefix) :]] = v
+                        break
+                else:
+                    removed_keys.append(k)
+
+        if not filtered:
+            print("Warning: no matching keys found in checkpoint.state_dict() for this model. Skipping state load.")
+            return
+
+        # Load filtered state dict with strict=False to allow missing keys
+        try:
+            load_result = self.load_state_dict(filtered, strict=False)
+            # summarize
+            missing = load_result.missing_keys if hasattr(load_result, "missing_keys") else []
+            unexpected = load_result.unexpected_keys if hasattr(load_result, "unexpected_keys") else []
+            print(
+                f"Loaded checkpoint (non-strict). Keys removed: {len(removed_keys)}, "
+                f"missing_keys: {len(missing)}, unexpected_keys: {len(unexpected)}"
+            )
+            if removed_keys:
+                print(f"Removed keys sample (first 10): {removed_keys[:10]}")
+        except Exception as e:
+            # fallback: try direct non-strict load of entire dict (may still error if PL already raised upstream)
+            try:
+                self.load_state_dict(state_dict, strict=False)
+                print("Fallback: loaded full checkpoint.state_dict() with strict=False")
+            except Exception as e2:
+                print("Failed to load checkpoint state_dict non-strictly:", e2)
+# ...existing code...
