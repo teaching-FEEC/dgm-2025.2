@@ -157,8 +157,55 @@ class VAE(pl.LightningModule):
     # Shared step
     # ---------------------------------------------------------------------
     def _common_step(self, batch, batch_idx: int, split: str) -> Tensor:
-        """Compute loss and (if val) metrics; update running means and log per-step scalars."""
-        x, _ = batch
+        """Compute loss and (if val) metrics; handle multiple batch formats robustly.
+
+        Acceptable batch formats:
+         - (image, label)                  -> typical supervised tuple
+         - (image, mask, label)            -> 3-tuple used by HSI datamodules
+         - dict with keys like 'hsi'/'rgb' -> datamodule may return dicts of tuples
+         - plain image tensor
+        """
+
+        # Resolve image tensor from variety of batch shapes
+        x = None
+
+        # Case: dict batches (e.g. {'hsi': (img, mask, label), 'rgb': (...)})
+        if isinstance(batch, dict):
+            # prefer 'hsi' key, else pick first tensor-like entry
+            if "hsi" in batch:
+                candidate = batch["hsi"]
+            else:
+                # pick first value from dict
+                candidate = next(iter(batch.values()))
+
+            # candidate may itself be a tuple (img, mask, label) or a tensor
+            if isinstance(candidate, (list, tuple)):
+                x = candidate[0]
+            else:
+                x = candidate
+
+        # Case: sequence batches (tuple/list)
+        elif isinstance(batch, (list, tuple)):
+            if len(batch) == 2:
+                x, _ = batch
+            elif len(batch) == 3:
+                x, _, _ = batch
+            else:
+                # fallback: take first element
+                x = batch[0]
+
+        # Case: direct tensor
+        else:
+            x = batch
+
+        # Ensure we have a tensor
+        if not torch.is_tensor(x):
+            # try conversion if first element is a tuple-like
+            try:
+                x = torch.as_tensor(x)
+            except Exception:
+                raise ValueError(f"Cannot extract image tensor from batch of type {type(batch)}")
+
         x_hat, mu, log_var = self.forward(x)
 
         recon = F.l1_loss(x_hat, x)                                 # L1 recon loss
@@ -201,6 +248,43 @@ class VAE(pl.LightningModule):
             )
 
         return loss
+
+    def _unwrap_image_from_batch(self, batch):
+        """Return the image tensor from common batch formats without raising on extra fields.
+
+        Supported formats:
+         - tensor -> returned as-is
+         - (image, label) or (image, mask, label) -> image
+         - dict with values like ('hsi': (image, mask, label), 'rgb': (...)) -> prefer 'hsi' else first value
+        """
+        # direct tensor
+        if torch.is_tensor(batch):
+            return batch
+
+        # dict batch (e.g. Joint datamodule)
+        if isinstance(batch, dict):
+            # prefer 'hsi' key (most important), else take first value
+            candidate = batch.get("hsi", None)
+            if candidate is None:
+                # pick first value (could be tuple or tensor)
+                candidate = next(iter(batch.values()))
+            # candidate might be (img, mask, label) or a tensor
+            if isinstance(candidate, (tuple, list)):
+                return candidate[0]
+            return candidate
+
+        # tuple/list batch
+        if isinstance(batch, (tuple, list)):
+            if len(batch) == 0:
+                raise ValueError("Empty batch encountered")
+            first = batch[0]
+            # if first is itself a tuple (rare), unwrap one level
+            if isinstance(first, (tuple, list)) and len(first) > 0 and torch.is_tensor(first[0]):
+                return first[0]
+            return first
+
+        # fallback: cannot extract
+        raise ValueError(f"Cannot extract image tensor from batch of type {type(batch)}")
 
     # ---------------------------------------------------------------------
     # Training / Validation / Test steps
@@ -361,16 +445,41 @@ class VAE(pl.LightningModule):
                     self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []}
 
                     with torch.no_grad():
-                        for i, (real_image, _) in enumerate(val_loader):
+                        for i, batch in enumerate(val_loader):
                             if i >= self.hparams.val_num_sample_batches:
                                 break
+                            # robustly extract image tensor from batch regardless of format
+                            try:
+                                real_image = self._unwrap_image_from_batch(batch)
+                            except Exception as e:
+                                # skip malformed/unknown batch formats
+                                self.print(f"[VAE] Skipping val batch for spectra (unrecognized format): {e}")
+                                continue
+
+                            # ensure tensor and move to device
+                            if not torch.is_tensor(real_image):
+                                try:
+                                    real_image = torch.as_tensor(real_image)
+                                except Exception:
+                                    self.print("[VAE] Skipping val batch: image not convertible to tensor")
+                                    continue
+
                             real_image = real_image.to(self.device, non_blocking=True)
-                            bsz = real_image.size(0)
+                            bsz = real_image.size(0) if real_image.ndim >= 4 else 1
                             z = torch.randn(bsz, self.hparams.latent_dim, device=self.device, dtype=torch.float32)
                             fake_image = self.decoder(z)                  # no clamp
                             self.compute_spectra_statistics(real_image, fake_image)
 
-                    self._plot_mean_spectra()                             # log figure to W&B
+                    # Only attempt plotting if we have collected any spectra
+                    try:
+                        if (self.real_spectra and any(self.real_spectra.values())) or (
+                            self.fake_spectra and any(self.fake_spectra.values())
+                        ):
+                            self._plot_mean_spectra()                             # log figure to W&B
+                        else:
+                            self.print("[VAE] No spectra collected this epoch; skipping mean spectra plot.")
+                    except Exception as e:
+                        self.print(f"[VAE] Plotting failed: {e}")
             except Exception as e:
                 self.print(f"[VAE] Spectra stats/plotting failed: {e}")
 
