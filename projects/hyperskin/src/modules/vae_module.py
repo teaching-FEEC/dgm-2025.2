@@ -19,6 +19,7 @@ Heavily commented for clarity.
 # ---------------------------
 # Typing helpers
 # ---------------------------
+from pdb import run
 from typing import Dict, List, Optional, Tuple
 
 # ---------------------------
@@ -43,7 +44,8 @@ from src.models.vae.vae_model import (              # your generic encoder/decod
     GenericEncoder,
     GenericDecoder,
 )
-from src.metrics.synthesis_metrics import SynthMetrics  # SSIM/PSNR/SAM bundle
+from src.metrics.synthesis_metrics import SynthMetrics
+from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger  # SSIM/PSNR/SAM bundle
 
 
 class VAE(pl.LightningModule):
@@ -142,6 +144,27 @@ class VAE(pl.LightningModule):
         self.real_spectra: Optional[Dict[str, List[np.ndarray]]] = None
         self.fake_spectra: Optional[Dict[str, List[np.ndarray]]] = None
 
+    def _get_tags_and_run_name(self):
+        """Automatically derive tags and a run name from FastGANModule hyperparameters."""
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = []
+        run_name = "VAE"
+        tags.append(hparams.model_type)
+
+        # latent dim
+        run_name += f"_lat{hparams.latent_dim}"
+
+        # kld weight, scientific notation for very small values
+        run_name += f"_kld{hparams.kld_weight:.0e}"
+
+        # block type
+        run_name += f"_{hparams.block}"
+        tags.append(hparams.block)
+
+        return tags, run_name
     # ---------------------------------------------------------------------
     # Core VAE utilities
     # ---------------------------------------------------------------------
@@ -391,6 +414,8 @@ class VAE(pl.LightningModule):
                 self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []}
         except Exception:
             pass  # dataset may not expose these attributes
+
+        add_tags_and_run_name_to_logger(self)
 
     # ---------------------------------------------------------------------
     # Validation epoch end: log val_loss (epoch), bests, optional grid, spectra plots

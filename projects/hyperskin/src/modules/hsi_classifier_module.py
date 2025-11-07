@@ -17,6 +17,8 @@ from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.models import TIMMModel
 from pytorch_lightning.loggers import WandbLogger
 
+from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
+
 def load_class(path: str):
     """
     Load a class dynamically given a dotted path like:
@@ -124,6 +126,45 @@ class HSIClassifierModule(pl.LightningModule):
         self.test_spec_at_sens = SpecificityAtSensitivity(min_sensitivity=self.hparams.min_sensitivity,
                                                           task=self.class_task,
                                                           num_classes=self.hparams.num_classes)
+
+    def _get_tags_and_run_name(self):
+        """Automatically derive tags and a run name from FastGANModule hyperparameters."""
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = []
+        run_name = hparams.model_name
+        tags.append(hparams.model_name)
+
+        # add pretrained tag
+        if hparams.pretrained:
+            tags.append("pretrained")
+            run_name += "_pt"
+        else:
+            tags.append("not_pretrained")
+
+        # add freeze_backbone tag
+        if hparams.freeze_backbone:
+            tags.append("frozen_backbone")
+            run_name += "_fb"
+
+        # add criterion tag
+        if hparams.criterion is not None:
+            criterion_class = hparams.criterion.get("class_path", "")
+            criterion_class = "".join(["_" + c.lower() if c.isupper() else c for c in criterion_class])
+            criterion_name = criterion_class.split(".")
+            if len(criterion_name) > 0:
+                criterion_name = criterion_name[-1].lstrip("_")
+                # criterion_name is in CamelCase, convert to snake_case
+                tags.append(criterion_name)
+            else:
+                tags.append(criterion_class.lstrip("_"))
+
+        return tags, run_name
+
+    def setup(self, stage: str) -> None:
+        add_tags_and_run_name_to_logger(self)
 
     def forward(self, x: torch.Tensor):
         return self.net(x)

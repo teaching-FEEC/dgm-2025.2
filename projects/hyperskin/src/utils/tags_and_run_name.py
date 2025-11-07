@@ -24,7 +24,7 @@ def add_tags_and_run_name_to_logger(self):
                 run_name = f"{stage_str}_{run_name}"
             self.trainer.logger.experiment.name = run_name
             if data_run_name:
-                self.trainer.logger.experiment.name += f"{data_run_name}"
+                self.trainer.logger.experiment.name += f"_{data_run_name}"
                     # Add unique ID suffix
             self.trainer.logger.experiment.name += f"_{secrets.randbits(24)}"
         if data_tags:
