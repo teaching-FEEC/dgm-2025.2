@@ -42,10 +42,12 @@ class MILK10kDataset(Dataset):
         transform: A.Compose | None = None,
         task=MILK10kTask.MULTILABEL,
         return_metadata=False,
+        images_only: bool = False,
     ):
         self.root_dir = Path(root_dir)
         self.transform = transform
         self.task = task
+        self.images_only = images_only
         self.return_metadata = return_metadata
 
         # Load metadata and ground truth
@@ -209,6 +211,9 @@ class MILK10kDataset(Dataset):
             else:
                 image = torch.tensor(image).permute(2, 0, 1)
 
+            if self.images_only:
+                return image.float()
+
             return (
                 image.float(),
                 torch.as_tensor(combined_mask, dtype=torch.long),
@@ -228,8 +233,12 @@ class MILK10kDataset(Dataset):
                 "sex": row.get("sex"),
                 "site": row.get("site"),
             }
+            if self.images_only:
+                return image.float()
             return image.float(), torch.tensor(label, dtype=torch.long), metadata
 
+        if self.images_only:
+            return image.float()
         return image.float(), torch.tensor(label, dtype=torch.long)
 
 if __name__ == "__main__":

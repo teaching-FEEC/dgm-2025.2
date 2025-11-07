@@ -39,6 +39,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
         synthetic_data_dir: Optional[str] = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
+        images_only: bool = False,
         **kwargs,
     ):
         self.save_hyperparameters()
@@ -65,7 +66,8 @@ class HSIDermoscopyDataModule(BaseDataModule):
                                    "pin_memory": pin_memory,
                                    "sample_size": sample_size,
                                    "allowed_labels": allowed_labels,
-                                    "task": task
+                                    "task": task,
+                                    "images_only": images_only
                                    })
 
         self.batch_size = batch_size
@@ -102,6 +104,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
+                images_only=self.hparams.images_only,
             )
             self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
 
@@ -111,6 +114,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                     task=self.hparams.task,
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
+                    images_only=self.hparams.images_only,
                 )
 
                 # Use all samples from synthetic dataset
@@ -134,6 +138,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_val,
+                images_only=self.hparams.images_only,
             )
             self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
@@ -143,6 +148,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_test,
+                images_only=self.hparams.images_only,
             )
             self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
@@ -299,7 +305,6 @@ class HSIDermoscopyDataModule(BaseDataModule):
             else:
                 run_name += "cls_"
 
-            run_name += f"{getattr(hparams, 'task').name.lower()}_"
             tags.append(getattr(hparams, 'task').name.lower())
 
         if getattr(hparams, "synthetic_data_dir", None):

@@ -1,0 +1,290 @@
+# pytorch_lightning==2.5.5
+seed_everything: 114514
+trainer:
+  accelerator: gpu
+  strategy: auto
+  devices: 1
+  num_nodes: 1
+  precision: 32-true
+  logger: false
+  callbacks:
+  - class_path: callbacks.FixedModelCheckpoint
+    init_args:
+      dirpath: null
+      filename: step={global_step}-val_FID={val/FID:.4f}
+      monitor: val/FID
+      verbose: true
+      save_last: true
+      save_top_k: 1
+      save_on_exception: false
+      save_weights_only: false
+      mode: min
+      auto_insert_metric_name: false
+      every_n_train_steps: 800
+      train_time_interval: null
+      every_n_epochs: null
+      save_on_train_epoch_end: null
+      enable_version_counter: true
+  fast_dev_run: false
+  max_epochs: -1
+  min_epochs: null
+  max_steps: 100000
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: null
+  num_sanity_val_steps: 2
+  log_every_n_steps: 100
+  enable_checkpointing: true
+  enable_progress_bar: true
+  enable_model_summary: true
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  deterministic: false
+  benchmark: null
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: null
+  model_registry: null
+model:
+  class_path: modules.CycleGANModule
+  init_args:
+    rgb_channels: 3
+    hsi_channels: 16
+    image_size: 256
+    lambda_cycle: 10.0
+    lambda_perceptual: 0.5
+    lr: 0.0002
+    log_images_on_step_n: 100
+    val_check_interval: 100
+    num_val_batches: 8
+    pred_output_dir: generated_samples
+    pred_num_samples: 100
+    pred_hyperspectral: true
+    pred_global_min:
+    - 0.00028473
+    - 0.0043945
+    - 0.00149752
+    - 0.00167517
+    - 0.00190101
+    - 0.0028114
+    - 0.00394378
+    - 0.00488099
+    - 0.00257091
+    - 0.00215704
+    - 0.00797662
+    - 0.01205248
+    - 0.01310135
+    - 0.01476806
+    - 0.01932094
+    - 0.02020744
+    pred_global_max:
+    - 0.6203158
+    - 0.6172642
+    - 0.46794897
+    - 0.4325111
+    - 0.4996644
+    - 0.61997396
+    - 0.7382196
+    - 0.86097705
+    - 0.88304037
+    - 0.9397393
+    - 1.1892519
+    - 1.5035477
+    - 1.4947973
+    - 1.4737314
+    - 1.6318618
+    - 1.7226081
+    label_smoothing: 0.2
+    noise_std_start: 0.05
+    noise_std_end: 0.0
+    noise_std: null
+    noise_decay_steps: 12000
+data:
+  class_path: data_modules.JointRGBHSIDataModule
+  init_args:
+    hsi_config:
+      task: GENERATION
+      train_val_test_split:
+      - 0.7
+      - 0.15
+      - 0.15
+      image_size: 256
+      batch_size: 9
+      num_workers: 8
+      pin_memory: true
+      data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
+      google_drive_id: 1PNk7Eyv7YfKGCabyC2OkIO7blZcmYJqw
+      balanced_sampling: false
+      global_max:
+      - 0.6203158
+      - 0.6172642
+      - 0.46794897
+      - 0.4325111
+      - 0.4996644
+      - 0.61997396
+      - 0.7382196
+      - 0.86097705
+      - 0.88304037
+      - 0.9397393
+      - 1.1892519
+      - 1.5035477
+      - 1.4947973
+      - 1.4737314
+      - 1.6318618
+      - 1.7226081
+      global_min:
+      - 0.00028473
+      - 0.0043945
+      - 0.00149752
+      - 0.00167517
+      - 0.00190101
+      - 0.0028114
+      - 0.00394378
+      - 0.00488099
+      - 0.00257091
+      - 0.00215704
+      - 0.00797662
+      - 0.01205248
+      - 0.01310135
+      - 0.01476806
+      - 0.01932094
+      - 0.02020744
+      range_mode: '-1_1'
+      infinite_train: true
+      normalize_mask_tanh: true
+      allowed_labels:
+      - melanoma
+      images_only: true
+      transforms:
+        train:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: ToTensorV2
+          init_args: {}
+        val:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: ToTensorV2
+          init_args: {}
+        test:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: ToTensorV2
+          init_args: {}
+    milk10k_config:
+      task: GENERATION_MELANOMA_VS_NEVUS
+      train_val_test_split:
+      - 1
+      - 0
+      - 0
+      image_size: 256
+      batch_size: 9
+      num_workers: 8
+      pin_memory: true
+      data_dir: data/milk10k_melanoma_cropped_256
+      allowed_labels:
+      - melanoma
+      infinite_train: true
+      google_drive_id: 1xOkWxJnSKNdDMRa0EsOrCnHsQV9JJ4al
+      images_only: true
+      transforms:
+        train:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: Normalize
+          init_args:
+            mean:
+            - 0.5
+            - 0.5
+            - 0.5
+            std:
+            - 0.5
+            - 0.5
+            - 0.5
+            max_pixel_value: 255
+        - class_path: ToTensorV2
+          init_args: {}
+        val:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: Normalize
+          init_args:
+            mean:
+            - 0.5
+            - 0.5
+            - 0.5
+            std:
+            - 0.5
+            - 0.5
+            - 0.5
+            max_pixel_value: 255
+        - class_path: ToTensorV2
+          init_args: {}
+        test:
+        - class_path: SmallestMaxSize
+          init_args:
+            max_size: 256
+        - class_path: CenterCrop
+          init_args:
+            height: 256
+            width: 256
+        - class_path: Normalize
+          init_args:
+            mean:
+            - 0.5
+            - 0.5
+            - 0.5
+            std:
+            - 0.5
+            - 0.5
+            - 0.5
+            max_pixel_value: 255
+        - class_path: ToTensorV2
+          init_args: {}
+    num_workers: 8
+    pin_memory: false
+ignore_warnings: false
+git_commit_before_fit: false
+test_after_fit: false
+optimizer: null
+lr_scheduler: null
+return_predictions: null
+ckpt_path: logs/hypersynth/busyswlg/checkpoints/step=0-val_FID=107.5922.ckpt

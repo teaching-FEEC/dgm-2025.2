@@ -13,6 +13,7 @@ import os
 from tqdm import tqdm
 from scipy.io import savemat
 import warnings
+from pytorch_lightning.trainer.states import TrainerFn
 
 from torchmetrics.image import (
     SpectralAngleMapper,
@@ -137,7 +138,7 @@ class Generator(nn.Module):
         return nn.Sequential(
             nn.ReflectionPad2d(padding=3),
             nn.Conv2d(in_channels, out_channels, kernel_size=7),
-            # nn.Tanh(),
+            nn.Tanh(),
         )
 
     def forward(self, x):
@@ -197,7 +198,7 @@ def load_cyclegan_params(G_AB, G_BA, avg_params):
 
 class CycleGANModule(pl.LightningModule):
     """
-    CycleGAN with perceptual identity + perceptual reconstruction (LPIPS) losses
+    CycleGAN with perceptual reconstruction (LPIPS) losses
     and hinge-style discriminator losses.
     """
 
@@ -206,10 +207,8 @@ class CycleGANModule(pl.LightningModule):
         rgb_channels: int = 3,
         hsi_channels: int = 16,
         image_size: int = 256,
-        lambda_identity: float = 0.5,
         lambda_cycle: float = 10.0,
         lambda_perceptual: float = 1.0,
-        lambda_l1: float = 0.5,
         lr: float = 0.0002,
         log_images_on_step_n: int = 1,
         val_check_interval: int = 500,
@@ -219,6 +218,11 @@ class CycleGANModule(pl.LightningModule):
         pred_hyperspectral: bool = True,
         pred_global_min: float | list[float] | None = None,
         pred_global_max: float | list[float] | None = None,
+        label_smoothing: float = 0.0,
+        noise_std_start: float = 0.05,
+        noise_std_end: float = 0.0,
+        noise_std: float | None = None,
+        noise_decay_steps: int = 100000,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -233,15 +237,15 @@ class CycleGANModule(pl.LightningModule):
         self.avg_param_G = None
 
         # ------------------ Perceptual modules ------------------
-        self.percept_rgb = PerceptualLoss(
+        self.percept_A = PerceptualLoss(
             model="net-lin", net="vgg", use_gpu=True, in_chans=rgb_channels
         )
-        self.percept_hsi = PerceptualLoss(
+        self.percept_B = PerceptualLoss(
             model="net-lin", net="vgg", use_gpu=True, in_chans=hsi_channels
         )
 
         # ------------------ Logging and buffers ------------------
-        self.register_buffer("fixed_rgb", torch.zeros(8, rgb_channels,
+        self.register_buffer("fixed_A", torch.zeros(8, rgb_channels,
                                                       self.hparams.image_size,
                                                       self.hparams.image_size))
 
@@ -284,15 +288,11 @@ class CycleGANModule(pl.LightningModule):
         tags.append(f"imsize_{hparams.image_size}")
         tags.append(f"rgbch_{hparams.rgb_channels}")
         tags.append(f"hsich_{hparams.hsi_channels}")
-        tags.append(f"lambda_id_{hparams.lambda_identity}")
-        tags.append(f"lambda_cycle_{hparams.lambda_cycle}")
-        tags.append(f"lambda_percept_{hparams.lambda_perceptual}")
-        tags.append(f"lambda_l1_{hparams.lambda_l1}")
 
         # append learning rate using scientific notation
         tags.append(f"lr_{hparams.lr:.0e}")
 
-        return tags, run_name
+        return tags, run_name.rstrip("_")
 
     def setup(self, stage: str) -> None:
         add_tags_and_run_name_to_logger(self)
@@ -378,11 +378,20 @@ class CycleGANModule(pl.LightningModule):
 
     def process_batch(self, batch):
         """Extract RGB and HSI from batch dict"""
-        if not isinstance(batch, dict):
+        if not isinstance(batch, dict) and self.trainer.state.stage == TrainerFn.PREDICTING:
+            return batch
+        else:
             raise ValueError("Batch must be a dict with 'rgb' and 'hsi' keys")
 
-        rgb_image, rgb_mask, rgb_label = batch["rgb"]
-        hsi_image, hsi_mask, hsi_label = batch["hsi"]
+        if isinstance(batch["rgb"], torch.Tensor):
+            rgb_image = batch["rgb"]
+        else:
+            rgb_image = batch["rgb"][0]
+
+        if isinstance(batch["hsi"], torch.Tensor):
+            hsi_image = batch["hsi"]
+        else:
+            hsi_image = batch["hsi"][0]
 
         return rgb_image, hsi_image
 
@@ -392,74 +401,123 @@ class CycleGANModule(pl.LightningModule):
         """
         Compute the generator loss with:
           - Hinge-style adversarial loss
-          - Perceptual + L1 identity loss
           - Perceptual + L1 cycle reconstruction loss
         """
         # ------------------ (1) Adversarial hinge loss ------------------
         logits_fake_A = self.D_A(fake_A)
         logits_fake_B = self.D_B(fake_B)
 
-        adv_loss_A = -logits_fake_A.mean()
-        adv_loss_B = -logits_fake_B.mean()
+        adv_loss_A = bce_with_logits(logits_fake_A, torch.ones_like(logits_fake_A))
+        adv_loss_B = bce_with_logits(logits_fake_B, torch.ones_like(logits_fake_B))
+
         adv_loss = adv_loss_A + adv_loss_B
 
-        # ------------------ (2) Identity perceptual + L1 ------------------
-        # identity_A = self.G_BA(real_B)
-        # identity_B = self.G_AB(real_A)
-        # l1_identity = F.l1_loss(identity_A, real_A) + F.l1_loss(identity_B, real_B)
-        # percept_identity_rgb = self.percept_rgb(identity_A, real_A).sum()
-        # percept_identity_hsi = self.percept_hsi(identity_B, real_B).sum()
-        # identity_loss = l1_identity * self.hparams.lambda_l1 + self.hparams.lambda_perceptual * (
-        #     percept_identity_rgb + percept_identity_hsi
-        # )
+        cycle_loss_A = F.l1_loss(rec_A, real_A)
+        cycle_loss_B = F.l1_loss(rec_B, real_B)
+        cycle_loss = cycle_loss_A + cycle_loss_B
 
-        # ------------------ (3) Cycle perceptual + L1 ------------------
-        l1_cycle = F.l1_loss(rec_A, real_A) + F.l1_loss(rec_B, real_B)
-        percept_cycle_rgb = self.percept_rgb(rec_A, real_A).sum()
-        percept_cycle_hsi = self.percept_hsi(rec_B, real_B).sum()
-        cycle_loss = l1_cycle * self.hparams.lambda_l1 + self.hparams.lambda_perceptual * (
-            percept_cycle_rgb + percept_cycle_hsi
-        )
+        if self.hparams.lambda_perceptual > 0:
+            cycle_loss_percept_A = self.percept_A(rec_A, real_A).sum()
+            cycle_loss_percept_B = self.percept_B(rec_B, real_B).sum()
+            cycle_loss_percept = cycle_loss_percept_A + cycle_loss_percept_B
+        else:
+            cycle_loss_percept_A = torch.tensor(0.0, device=self.device)
+            cycle_loss_percept_B = torch.tensor(0.0, device=self.device)
+            cycle_loss_percept = torch.tensor(0.0, device=self.device)
 
         # ------------------ (4) Total generator loss ------------------
         g_loss = (
             adv_loss
-            # + self.hparams.lambda_identity * identity_loss
             + self.hparams.lambda_cycle * cycle_loss
+            + self.hparams.lambda_perceptual * cycle_loss_percept
         )
 
         return {
+            "adv_loss_A": adv_loss_A,
+            "adv_loss_B": adv_loss_B,
+            "cycle_loss_percept_A": cycle_loss_percept_A,
+            "cycle_loss_percept_B": cycle_loss_percept_B,
+            "cycle_loss_A": cycle_loss_A,
+            "cycle_loss_B": cycle_loss_B,
+            "cycle_loss_percept": cycle_loss_percept,
             "adv_loss": adv_loss,
-            # "identity_loss": identity_loss,
             "cycle_loss": cycle_loss,
             "g_loss": g_loss,
         }
 
+    def get_current_noise_std(self) -> float:
+        """Compute linearly decayed noise_std based on training progress."""
+        start = getattr(self.hparams, "noise_std_start", 0.0)
+        end = getattr(self.hparams, "noise_std_end", 0.0)
+        decay_steps = getattr(self.hparams, "noise_decay_steps", 100000)
+
+        if self.hparams.noise_std is not None:
+            return self.hparams.noise_std
+
+        if start == end or decay_steps <= 0:
+            return start
+
+        # Compute proportion of training completed
+        step = float(self.global_step)
+        progress = min(step / decay_steps, 1.0)
+
+        # Linear decay schedule: interpolate between start and end
+        return start + (end - start) * progress
+
     def _calculate_d_loss(self, real_A, real_B, fake_A, fake_B) -> dict:
         """
-        Hinge-style discriminator loss:
-          D_loss = E[max(0, 1 - D(real))] + E[max(0, 1 + D(fake))]
+        Binary cross-entropy discriminator loss with optional
+        Gaussian input noise and one-sided label smoothing.
         """
-        # --- Domain A ---
+
+        noise_std = self.get_current_noise_std()
+        label_smoothing = getattr(self.hparams, "label_smoothing", 0.0)
+
+        # ---- (1) Add Gaussian noise to discriminator inputs ----
+        if noise_std > 0:
+            real_A = real_A + torch.randn_like(real_A) * noise_std
+            fake_A = fake_A + torch.randn_like(fake_A) * noise_std
+            real_B = real_B + torch.randn_like(real_B) * noise_std
+            fake_B = fake_B + torch.randn_like(fake_B) * noise_std
+
+        # ---- (2) Create soft labels for "real" samples ----
+        if label_smoothing > 0:
+            real_label_A = torch.empty_like(self.D_A(real_A)).uniform_(
+                1.0 - label_smoothing, 1.0
+            )
+            real_label_B = torch.empty_like(self.D_B(real_B)).uniform_(
+                1.0 - label_smoothing, 1.0
+            )
+        else:
+            real_label_A = torch.ones_like(self.D_A(real_A))
+            real_label_B = torch.ones_like(self.D_B(real_B))
+
+        fake_label_A = torch.zeros_like(real_label_A)
+        fake_label_B = torch.zeros_like(real_label_B)
+
+        # ---- (3) Compute discriminator losses ----
         logits_real_A = self.D_A(real_A)
         logits_fake_A = self.D_A(fake_A.detach())
-        d_loss_real_A = F.relu(1.0 - logits_real_A).mean()
-        d_loss_fake_A = F.relu(1.0 + logits_fake_A).mean()
+        d_loss_real_A = bce_with_logits(logits_real_A, real_label_A)
+        d_loss_fake_A = bce_with_logits(logits_fake_A, fake_label_A)
         d_loss_A = 0.5 * (d_loss_real_A + d_loss_fake_A)
 
-        # --- Domain B ---
         logits_real_B = self.D_B(real_B)
         logits_fake_B = self.D_B(fake_B.detach())
-        d_loss_real_B = F.relu(1.0 - logits_real_B).mean()
-        d_loss_fake_B = F.relu(1.0 + logits_fake_B).mean()
+        d_loss_real_B = bce_with_logits(logits_real_B, real_label_B)
+        d_loss_fake_B = bce_with_logits(logits_fake_B, fake_label_B)
         d_loss_B = 0.5 * (d_loss_real_B + d_loss_fake_B)
 
         d_loss = d_loss_A + d_loss_B
 
         return {
-            "d_loss": d_loss,
+            "d_loss_real_A": d_loss_real_A,
+            "d_loss_fake_A": d_loss_fake_A,
             "d_loss_A": d_loss_A,
+            "d_loss_real_B": d_loss_real_B,
+            "d_loss_fake_B": d_loss_fake_B,
             "d_loss_B": d_loss_B,
+            "d_loss": d_loss,
         }
 
     # ----------------------------------------------------------------------
@@ -476,6 +534,28 @@ class CycleGANModule(pl.LightningModule):
         d_loss_dict = self._calculate_d_loss(
             real_A=real_rgb, real_B=real_hsi, fake_A=fake_rgb, fake_B=fake_hsi
         )
+
+        # Compute discriminator accuracy
+        with torch.no_grad():
+            logits_real_A = self.D_A(real_rgb)
+            logits_fake_A = self.D_A(fake_rgb.detach())
+            logits_real_B = self.D_B(real_hsi)
+            logits_fake_B = self.D_B(fake_hsi.detach())
+
+            pred_real_A = (torch.sigmoid(logits_real_A) > 0.5).float()
+            pred_fake_A = (torch.sigmoid(logits_fake_A) <= 0.5).float()
+            pred_real_B = (torch.sigmoid(logits_real_B) > 0.5).float()
+            pred_fake_B = (torch.sigmoid(logits_fake_B) <= 0.5).float()
+
+            acc_real_A = pred_real_A.mean()
+            acc_fake_A = pred_fake_A.mean()
+            acc_real_B = pred_real_B.mean()
+            acc_fake_B = pred_fake_B.mean()
+
+            d_acc_A = 0.5 * (acc_real_A + acc_fake_A)
+            d_acc_B = 0.5 * (acc_real_B + acc_fake_B)
+            d_acc_mean = 0.5 * (d_acc_A + d_acc_B)
+
         d_optim.zero_grad(set_to_none=True)
         self.manual_backward(d_loss_dict["d_loss"])
         d_optim.step()
@@ -502,12 +582,21 @@ class CycleGANModule(pl.LightningModule):
 
         # --- Logging ---
         log_dict = {f"train/{k}": v for k, v in {**d_loss_dict, **g_loss_dict}.items()}
+        log_dict.update(
+            {
+                "train/D_acc_A": d_acc_A,
+                "train/D_acc_B": d_acc_B,
+                "train/D_acc_mean": d_acc_mean,
+            }
+        )
+
         self.log_dict(
             log_dict,
             prog_bar=True,
             logger=True,
             sync_dist=torch.cuda.device_count() > 1,
         )
+        self.log("train/noise_std", self.get_current_noise_std(), prog_bar=False, logger=True)
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
         rgb_image, _ = self.process_batch(batch)
@@ -528,17 +617,17 @@ class CycleGANModule(pl.LightningModule):
             self.global_step // 2
         ) % self.hparams.log_images_on_step_n == 0:
             # Store fixed RGB input on first log
-            if torch.all(self.fixed_rgb == 0):
+            if torch.all(self.fixed_A == 0):
                 real_rgb, _ = self.process_batch(batch)
-                self.fixed_rgb = real_rgb[:8].clone().detach()
+                self.fixed_A = real_rgb[:8].clone().detach()
 
             with torch.no_grad():
                 # RGB -> HSI -> RGB cycle
-                fake_hsi = self.G_AB(self.fixed_rgb)
+                fake_hsi = self.G_AB(self.fixed_A)
                 rec_rgb = self.G_BA(fake_hsi)
 
                 # Denormalize for visualization
-                fixed_rgb_vis = self.fixed_rgb.add(1).mul(0.5).clamp(0, 1)
+                fixed_A_vis = self.fixed_A.add(1).mul(0.5).clamp(0, 1)
                 rec_rgb_vis = rec_rgb.add(1).mul(0.5).clamp(0, 1)
 
                 # For HSI, convert to 3-channel visualization
@@ -555,7 +644,7 @@ class CycleGANModule(pl.LightningModule):
 
                 # Concatenate: original RGB | fake HSI | reconstructed RGB
                 vis_combined = torch.cat(
-                    [fixed_rgb_vis, fake_hsi_vis, rec_rgb_vis], dim=0
+                    [fixed_A_vis, fake_hsi_vis, rec_rgb_vis], dim=0
                 )
 
                 sample_grid = (
@@ -836,11 +925,11 @@ class CycleGANModule(pl.LightningModule):
         gmax = getattr(self.hparams, "pred_global_max", None)
 
         with torch.no_grad():
-            real_rgb, _ = self.process_batch(batch)
+            real_rgb = self.process_batch(batch)
             real_rgb = real_rgb.to(self.device)
 
             # Generate HSI from RGB
-            fake_hsi = self.G_AB(real_rgb).cpu()
+            fake_hsi = self.G_AB(real_rgb)
 
             for i in tqdm(
                 range(fake_hsi.size(0)), desc="Generating HSI samples"
@@ -867,13 +956,13 @@ class CycleGANModule(pl.LightningModule):
                                 fake_denorm * (gmax_arr - gmin_arr) + gmin_arr
                             )
                         else:
-                            gmin_t = torch.tensor(gmin_arr).view(1, -1, 1, 1)
-                            gmax_t = torch.tensor(gmax_arr).view(1, -1, 1, 1)
+                            gmin_t = torch.tensor(gmin_arr, device=self.device).view(1, -1, 1, 1)
+                            gmax_t = torch.tensor(gmax_arr, device=self.device).view(1, -1, 1, 1)
                             fake_denorm = (
                                 fake_denorm * (gmax_t - gmin_t) + gmin_t
                             )
 
-                    fake_np = fake_denorm.squeeze().numpy()
+                    fake_np = fake_denorm.squeeze().cpu().numpy()
                     fake_np = np.transpose(fake_np, (1, 2, 0))
                     mat_path = os.path.join(
                         self.hparams.pred_output_dir,

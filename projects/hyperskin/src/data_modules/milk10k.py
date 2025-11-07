@@ -42,6 +42,7 @@ class MILK10kDataModule(BaseDataModule):
         sample_size: Optional[int] = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
+        images_only: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -66,6 +67,7 @@ class MILK10kDataModule(BaseDataModule):
                 "allowed_labels": allowed_labels,
                 "infinite_train": infinite_train,
                 "sample_size": sample_size,
+                "images_only": images_only,
             }
         )
 
@@ -89,6 +91,7 @@ class MILK10kDataModule(BaseDataModule):
         self.full_dataset = MILK10kDataset(
             root_dir=self.hparams.data_dir,
             task=self.hparams.task,
+            images_only=self.hparams.images_only,
         )
         self.ensure_splits_exist()
 
@@ -125,6 +128,7 @@ class MILK10kDataModule(BaseDataModule):
                 root_dir=self.hparams.data_dir,
                 task=self.hparams.task,
                 transform=self.transforms_train,
+                images_only=self.hparams.images_only,
             )
             self.data_train = torch.utils.data.Subset(
                 self.data_train, self.train_indices
@@ -135,20 +139,22 @@ class MILK10kDataModule(BaseDataModule):
                     root_dir=self.hparams.data_dir,
                     task=self.hparams.task,
                     transform=self.transforms_val,
+                    images_only=self.hparams.images_only,
                 )
                 self.data_val = torch.utils.data.Subset(
                     self.data_val, self.val_indices
                 )
-        elif stage in ["test", "predict"] or stage is None and self.data_test is None:
+        elif stage == "test" or stage is None and self.data_test is None:
             self.data_test = MILK10kDataset(
                 root_dir=self.hparams.data_dir,
                 task=self.hparams.task,
                 transform=self.transforms_test,
+                images_only=self.hparams.images_only,
             )
             self.data_test = torch.utils.data.Subset(
                 self.data_test, self.test_indices
             )
-        else:
+        elif stage in ["all", "predict"] or stage is None:
             # Apply filtering if specified
             self.full_indices = np.arange(len(self.full_dataset))
             if self.hparams.allowed_labels is not None:
@@ -199,7 +205,7 @@ class MILK10kDataModule(BaseDataModule):
         )
 
     def predict_dataloader(self):
-        return self.test_dataloader()
+        return self.all_dataloader()
 
     def all_dataloader(self):
         return DataLoader(
