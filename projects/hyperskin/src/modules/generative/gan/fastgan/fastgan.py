@@ -10,7 +10,7 @@ import random
 import pytorch_lightning as pl
 
 import warnings
-from skimage import filters, morphology
+from skimage import filters
 import torchvision
 from tqdm import tqdm
 
@@ -25,7 +25,6 @@ from src.models.fastgan.fastgan import Generator, Discriminator
 from src.models.fastgan.spade_fastgan import GeneratorSPADE, DiscriminatorSPADE
 from src.transforms.diffaug import DiffAugment
 import os
-import torchvision.utils as vutils
 import wandb
 from torchmetrics.image import (
     SpectralAngleMapper,
@@ -81,7 +80,6 @@ class FastGANModule(pl.LightningModule):
         # SPADE configuration
         use_spade: bool = False,
         spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
-        log_reconstructions: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()

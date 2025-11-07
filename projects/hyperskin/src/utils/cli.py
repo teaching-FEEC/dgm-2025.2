@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import sys
 import warnings
 from typing import Any, Optional
 import secrets
@@ -20,6 +22,24 @@ import torch
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyTask
 torch.serialization.add_safe_globals([HSIDermoscopyTask])
 
+
+def safe_parse_ckpt_path(self):
+    """Same as original, but silently continue on parse failure."""
+    if not self.config.get("subcommand"):
+        return
+    ckpt_path = self.config[self.config.subcommand].get("ckpt_path")
+    if ckpt_path and Path(ckpt_path).is_file():
+        ckpt = torch.load(ckpt_path, weights_only=True, map_location="cpu")
+        hparams = ckpt.get("hyper_parameters", {})
+        hparams.pop("_instantiator", None)
+        if not hparams:
+            return
+        hparams = {self.config.subcommand: {"model": hparams}}
+        try:
+            self.config = self.parser.parse_object(hparams, self.config)
+        except SystemExit:
+            sys.stderr.write("Warning: Failed to parse ckpt_path hyperparameters. Continuing as-is.\n")
+            # just continue instead of raising
 
 class WandbSaveConfigCallback(SaveConfigCallback):
 
@@ -253,7 +273,12 @@ class CustomLightningCLI(LightningCLI):
         if os.environ.get("WANDB_MODE", "online") != "disabled" and save_config_callback is None:
                 save_config_callback = WandbSaveConfigCallback
 
-        super().__init__(save_config_callback=save_config_callback, parser_kwargs=new_parser_kwargs, **kwargs)
+        original = LightningCLI._parse_ckpt_path
+        LightningCLI._parse_ckpt_path = safe_parse_ckpt_path
+        try:
+            super().__init__(save_config_callback=save_config_callback, parser_kwargs=new_parser_kwargs, **kwargs)
+        finally:
+            LightningCLI._parse_ckpt_path = original
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_argument("--ignore_warnings", default=False, type=bool, help="Ignore warnings")

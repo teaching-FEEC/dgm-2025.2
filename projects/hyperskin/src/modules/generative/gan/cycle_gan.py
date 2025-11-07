@@ -628,10 +628,10 @@ class CycleGANModule(pl.LightningModule):
 
         gmin = getattr(self.hparams, "pred_global_min", None)
         gmax = getattr(self.hparams, "pred_global_max", None)
-        gmin = torch.tensor(gmin).to(self.device) if gmin is not None else None
-        gmax = torch.tensor(gmax).to(self.device) if gmax is not None else None
+        gmin = torch.tensor(gmin).to(self.device).view(1, -1, 1, 1) if gmin is not None else None
+        gmax = torch.tensor(gmax).to(self.device).view(1, -1, 1, 1) if gmax is not None else None
 
-        if dataloader_idx == 1:
+        if dataloader_idx == 0:
             # compute real spectra from HSI dataloader
             masks = None
             if isinstance(batch, tuple) or isinstance(batch, list):
@@ -682,7 +682,7 @@ class CycleGANModule(pl.LightningModule):
 
                     self.spectra_metric.update(
                         fake_denorm,
-                        fake_denorm,
+                        is_fake=True,
                         masks=masks[i : i + 1, :, :, :] if masks is not None else None
                     )
                     fake_np = fake_denorm.squeeze().cpu().numpy()
@@ -740,3 +740,41 @@ class CycleGANModule(pl.LightningModule):
             print("Warning: avg_param_G not found in checkpoint.")
         del checkpoint["hyper_parameters"]
         del checkpoint["datamodule_hyper_parameters"]
+
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path,
+        map_location=None,
+        hparams_file=None,
+        strict=True,
+        **kwargs,
+    ):
+        try:
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=strict,
+                **kwargs,
+            )
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            print("Attempting to load with strict=False")
+            model = super().load_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                map_location=map_location,
+                hparams_file=hparams_file,
+                strict=False,
+                **kwargs,
+            )
+
+        return model
+
+    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
+        try:
+            super().load_state_dict(state_dict, strict)
+        except Exception as e:
+            print(f"Error loading state_dict: {e}")
+            print("Attempting to load with strict=False")
+            super().load_state_dict(state_dict, strict=False)
