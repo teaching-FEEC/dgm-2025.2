@@ -4,9 +4,6 @@ from typing import Optional
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, SubsetRandomSampler
-
-from src.samplers.finite import FiniteSampler
-from src.samplers.infinite import InfiniteSamplerWrapper
 import pytorch_lightning as pl
 
 if __name__ == "__main__":
@@ -18,6 +15,7 @@ if __name__ == "__main__":
 
 
 from src.samplers.infinite import InfiniteSamplerWrapper
+from src.samplers.finite import FiniteSampler
 from src.data_modules.base import BaseDataModule
 from src.data_modules.datasets.milk10k_dataset import (
     MILK10kDataset,
