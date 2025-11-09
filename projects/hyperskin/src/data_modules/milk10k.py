@@ -14,6 +14,7 @@ if __name__ == "__main__":
     )
 
 
+from src.data_modules.datasets.task_config import TaskConfig
 from src.samplers.infinite import InfiniteSamplerWrapper
 from src.samplers.finite import FiniteSampler
 from src.data_modules.base import BaseDataModule
@@ -26,7 +27,7 @@ from src.data_modules.datasets.milk10k_dataset import (
 class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str,
+        task: str | TaskConfig,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
@@ -71,7 +72,11 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
                 f"Unknown task: {task}. "
                 f"Available: {list(MILK10K_TASK_CONFIGS.keys())}"
             )
-        self.task_config = MILK10K_TASK_CONFIGS[task]
+
+        if isinstance(task, str):
+            self.task_config = MILK10K_TASK_CONFIGS[task]
+        else:
+            self.task_config = task
 
         # Initialize dataset attributes
         self.data_train = None

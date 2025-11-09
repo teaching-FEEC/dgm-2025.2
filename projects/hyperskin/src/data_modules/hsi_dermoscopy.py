@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from src.data_modules.datasets.task_config import TaskConfig
 from src.samplers.finite import FiniteSampler
 
 if __name__ == "__main__":
@@ -23,7 +24,7 @@ import pytorch_lightning as pl
 class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str,
+        task: str | TaskConfig,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
@@ -40,7 +41,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         synthetic_data_dir: Optional[str] = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
-        images_only: bool = False,
         pred_num_samples: Optional[int] = None,
         **kwargs,
     ):
@@ -72,7 +72,11 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 f"Unknown task: {task}. "
                 f"Available: {list(HSI_TASK_CONFIGS.keys())}"
             )
-        self.task_config = HSI_TASK_CONFIGS[task]
+
+        if isinstance(task, str):
+            self.task_config = HSI_TASK_CONFIGS[task]
+        else:
+            self.task_config = task
 
         self.data_train = None
         self.data_val = None
@@ -101,7 +105,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
-                images_only=self.hparams.images_only,
             )
             self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
 
@@ -111,7 +114,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                     task=self.hparams.task,
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
-                    images_only=self.hparams.images_only,
                 )
 
                 # Use all samples from synthetic dataset
@@ -135,7 +137,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_val,
-                images_only=self.hparams.images_only,
             )
             self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
 
@@ -145,7 +146,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_test,
-                images_only=self.hparams.images_only,
             )
             self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
 
@@ -224,7 +224,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     def all_dataloader(self):
         full_dataset = HSIDermoscopyDataset(
             task=self.hparams.task, data_dir=self.hparams.data_dir, transform=self.transforms_test,
-            images_only=self.hparams.images_only
         )
 
         # use _filter_and_remap_indices to filter the full dataset

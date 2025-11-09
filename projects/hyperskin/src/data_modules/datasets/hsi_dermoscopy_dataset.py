@@ -38,7 +38,7 @@ HSI_TASK_CONFIGS = {
         return_label=True, label_mapping=FULL_LABELS_MAP
     ),
     "classification_melanoma_vs_others": TaskConfig(
-        return_label=True, label_mapping={"melanoma": 0, "others": 1}
+        return_label=True, label_mapping={"melanoma": 0, "others": 1}, binary_classification=True
     ),
     "classification_melanoma_vs_dysplastic_vs_others": TaskConfig(
         return_label=True,
@@ -47,6 +47,7 @@ HSI_TASK_CONFIGS = {
     "classification_melanoma_vs_dysplastic_nevi": TaskConfig(
         return_label=True,
         label_mapping={"melanoma": 0, "dysplastic_nevi": 1},
+        binary_classification=True,
         filter_classes=["melanoma", "dysplastic_nevi"],
     ),
     # Segmentation task
@@ -65,6 +66,10 @@ HSI_TASK_CONFIGS = {
         return_mask=True,
         label_mapping=FULL_LABELS_MAP,
     ),
+    "generation": TaskConfig(return_image=True,
+                             binary_classification=True,
+                             label_type="binary"
+                             ),
 }
 
 

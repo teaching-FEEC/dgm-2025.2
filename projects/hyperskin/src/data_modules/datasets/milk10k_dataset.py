@@ -22,6 +22,9 @@ MILK10K_TASK_CONFIGS = {
     "generation_conditional_full": TaskConfig(
         return_image=True, return_label=True, return_mask=True, label_type="multilabel"
     ),
+    "generation_melanoma_vs_nevus": TaskConfig(
+        return_image=True, binary_classification=True, label_type="binary"
+    ),
 }
 
 class MILK10kDataset(Dataset):

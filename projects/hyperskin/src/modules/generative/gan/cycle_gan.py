@@ -83,7 +83,7 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         noise_std_end: float = 0.0,
         noise_std: float | None = None,
         noise_decay_steps: int = 100000,
-        model_opt: Optional[dict] = None,
+        model_opt: dict | None = None,
     ):
         super().__init__()
         self.save_hyperparameters()
