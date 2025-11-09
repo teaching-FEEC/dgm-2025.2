@@ -65,6 +65,8 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
+        task = task.lower()
+
         if task not in HSI_TASK_CONFIGS:
             raise ValueError(
                 f"Unknown task: {task}. "

@@ -61,7 +61,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
             self.hsi_dm.prepare_data()
         self.rgb_dm.prepare_data()
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         """Setup both datamodules."""
         if not self.hparams.rgb_only:
             self.hsi_dm.setup(stage)
@@ -131,7 +131,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
                     dataloaders.append(dm.predict_dataloader())
             return dataloaders
 
-    def teardown(self, stage: Optional[str] = None):
+    def teardown(self, stage: str | None = None):
         """Teardown both datamodules."""
         if not self.hparams.rgb_only:
             self.hsi_dm.teardown(stage)

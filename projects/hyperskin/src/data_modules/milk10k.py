@@ -63,6 +63,8 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
+        task = task.lower()
+
         # Validate task
         if task not in MILK10K_TASK_CONFIGS:
             raise ValueError(
