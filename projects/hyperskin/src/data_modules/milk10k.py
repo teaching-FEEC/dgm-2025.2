@@ -18,32 +18,31 @@ from src.samplers.infinite import InfiniteSamplerWrapper
 from src.samplers.finite import FiniteSampler
 from src.data_modules.base import BaseDataModule
 from src.data_modules.datasets.milk10k_dataset import (
+    MILK10K_TASK_CONFIGS,
     MILK10kDataset,
-    MILK10kTask,
 )
 
 
 class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str | MILK10kTask,
+        task: str,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
         pin_memory: bool = False,
         data_dir: str = "data/MILK10k",
-        transforms: Optional[dict] = None,
-        allowed_labels: Optional[list[int | str]] = None,
+        transforms: dict | None = None,
+        allowed_labels: list[int | str] | None = None,
         image_size: int = 224,
-        global_max: Optional[float | list[float]] = None,
-        global_min: Optional[float | list[float]] = None,
-        google_drive_id: Optional[str] = "183BASdfQ55TgtRFSdfQ6k3qaSeeNOMp1",
+        global_max: float | list[float] | None = None,
+        global_min: float | list[float] | None = None,
+        google_drive_id: str | None = "183BASdfQ55TgtRFSdfQ6k3qaSeeNOMp1",
         infinite_train: bool = False,
-        sample_size: Optional[int] = None,
+        sample_size: int | None = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
-        images_only: bool = False,
-        pred_num_samples: Optional[int] = None,
+        pred_num_samples: int | None = None,
         dermoscopic_only: bool = False,
         **kwargs,
     ):
@@ -64,8 +63,13 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        if isinstance(task, str):
-            self.hparams.task = MILK10kTask[task.upper()]
+        # Validate task
+        if task not in MILK10K_TASK_CONFIGS:
+            raise ValueError(
+                f"Unknown task: {task}. "
+                f"Available: {list(MILK10K_TASK_CONFIGS.keys())}"
+            )
+        self.task_config = MILK10K_TASK_CONFIGS[task]
 
         # Initialize dataset attributes
         self.data_train = None
@@ -80,7 +84,6 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
         self.full_dataset = MILK10kDataset(
             root_dir=self.hparams.data_dir,
             task=self.hparams.task,
-            images_only=self.hparams.images_only,
             transform=self.transforms_test,
             dermoscopic_only=self.hparams.dermoscopic_only,
         )
@@ -93,18 +96,13 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
 
         indices = np.arange(len(self.full_dataset))
 
-        if self.hparams.task == MILK10kTask.MULTILABEL or \
-            self.hparams.task == MILK10kTask.SEGMENTATION or \
-            self.hparams.task == MILK10kTask.GENERATION:
+        if not self.task_config.binary_classification:
             # For multilabel, use first positive class index for stratification
             label_matrix = self.full_dataset.data[self.full_dataset.class_codes].values
             labels = np.argmax(label_matrix, axis=1)
-        elif self.hparams.task == MILK10kTask.MELANOMA_VS_NEVUS or \
-            self.hparams.task == MILK10kTask.GENERATION_MELANOMA_VS_NEVUS:
+        else:
             # For binary: melanoma=0, nevus=1
             labels = self.full_dataset.data["NV"].to_numpy()
-        else:
-            raise ValueError(f"Unknown task: {self.hparams.task}")
 
         return indices, labels
 
@@ -119,7 +117,6 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
                 root_dir=self.hparams.data_dir,
                 task=self.hparams.task,
                 transform=self.transforms_train,
-                images_only=self.hparams.images_only,
                 dermoscopic_only=self.hparams.dermoscopic_only,
             )
             self.data_train = torch.utils.data.Subset(
@@ -131,7 +128,6 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
                     root_dir=self.hparams.data_dir,
                     task=self.hparams.task,
                     transform=self.transforms_val,
-                    images_only=self.hparams.images_only,
                     dermoscopic_only=self.hparams.dermoscopic_only,
                 )
                 self.data_val = torch.utils.data.Subset(
@@ -142,7 +138,6 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
                 root_dir=self.hparams.data_dir,
                 task=self.hparams.task,
                 transform=self.transforms_test,
-                images_only=self.hparams.images_only,
                 dermoscopic_only=self.hparams.dermoscopic_only,
             )
             self.data_test = torch.utils.data.Subset(
@@ -152,7 +147,7 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
             # Apply filtering if specified
             self.full_indices = np.arange(len(self.full_dataset))
             if self.hparams.allowed_labels is not None:
-                if self.hparams.task == MILK10kTask.MULTILABEL:
+                if not self.task_config.binary_classification:
                     label_matrix = self.full_dataset.data[self.full_dataset.class_codes].values
                     labels = np.argmax(label_matrix, axis=1)
                 else:
@@ -327,7 +322,7 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/milk10k_melanoma_nevus_cropped_256",
+        output_dir="export/milk10k_melanoma_nevus_cropped_256_testies",
         crop_with_mask=True,
         bbox_scale=2,
         structure="original",

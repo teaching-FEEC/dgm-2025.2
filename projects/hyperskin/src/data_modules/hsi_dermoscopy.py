@@ -17,13 +17,13 @@ if __name__ == "__main__":
 from src.data_modules.base import BaseDataModule
 from src.samplers.infinite import InfiniteSamplerWrapper
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
-from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
+from src.data_modules.datasets.hsi_dermoscopy_dataset import HSI_TASK_CONFIGS, HSIDermoscopyDataset
 import pytorch_lightning as pl
 
 class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str | HSIDermoscopyTask,
+        task: str,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
@@ -65,8 +65,12 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        if isinstance(task, str):
-            self.hparams.task = HSIDermoscopyTask[task.upper()]
+        if task not in HSI_TASK_CONFIGS:
+            raise ValueError(
+                f"Unknown task: {task}. "
+                f"Available: {list(HSI_TASK_CONFIGS.keys())}"
+            )
+        self.task_config = HSI_TASK_CONFIGS[task]
 
         self.data_train = None
         self.data_val = None
@@ -147,11 +151,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         sampler = None
 
         if (
-            self.hparams.task
-            in [
-                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
-                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
-            ]
+            self.task_config.binary_classification
             and self.hparams.balanced_sampling
         ):
             # Handle both Subset and ConcatDataset

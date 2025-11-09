@@ -19,9 +19,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
 import torch
-from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyTask
-torch.serialization.add_safe_globals([HSIDermoscopyTask])
-
 
 def safe_parse_ckpt_path(self):
     """Same as original, but silently continue on parse failure."""
