@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 
 from src.samplers.finite import FiniteSampler
 from src.samplers.infinite import InfiniteSamplerWrapper
+import pytorch_lightning as pl
 
 if __name__ == "__main__":
     import pyrootutils
@@ -16,6 +17,7 @@ if __name__ == "__main__":
     )
 
 
+from src.samplers.infinite import InfiniteSamplerWrapper
 from src.data_modules.base import BaseDataModule
 from src.data_modules.datasets.milk10k_dataset import (
     MILK10kDataset,
@@ -23,7 +25,7 @@ from src.data_modules.datasets.milk10k_dataset import (
 )
 
 
-class MILK10kDataModule(BaseDataModule):
+class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
         task: str | MILK10kTask,
@@ -44,6 +46,7 @@ class MILK10kDataModule(BaseDataModule):
         normalize_mask_tanh: bool = False,
         images_only: bool = False,
         pred_num_samples: Optional[int] = None,
+        dermoscopic_only: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -58,21 +61,7 @@ class MILK10kDataModule(BaseDataModule):
             range_mode = range_mode,
             normalize_mask_tanh=normalize_mask_tanh,
         )
-        self.save_hyperparameters(
-            {
-                "data_dir": data_dir,
-                "task": task,
-                "batch_size": batch_size,
-                "num_workers": num_workers,
-                "pin_memory": pin_memory,
-                "allowed_labels": allowed_labels,
-                "infinite_train": infinite_train,
-                "sample_size": sample_size,
-                "images_only": images_only,
-                "pred_num_samples": pred_num_samples,
-            }
-        )
-
+        self.save_hyperparameters()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
@@ -94,7 +83,8 @@ class MILK10kDataModule(BaseDataModule):
             root_dir=self.hparams.data_dir,
             task=self.hparams.task,
             images_only=self.hparams.images_only,
-            transform=self.transforms_test
+            transform=self.transforms_test,
+            dermoscopic_only=self.hparams.dermoscopic_only,
         )
         self.ensure_splits_exist()
 
@@ -132,6 +122,7 @@ class MILK10kDataModule(BaseDataModule):
                 task=self.hparams.task,
                 transform=self.transforms_train,
                 images_only=self.hparams.images_only,
+                dermoscopic_only=self.hparams.dermoscopic_only,
             )
             self.data_train = torch.utils.data.Subset(
                 self.data_train, self.train_indices
@@ -143,6 +134,7 @@ class MILK10kDataModule(BaseDataModule):
                     task=self.hparams.task,
                     transform=self.transforms_val,
                     images_only=self.hparams.images_only,
+                    dermoscopic_only=self.hparams.dermoscopic_only,
                 )
                 self.data_val = torch.utils.data.Subset(
                     self.data_val, self.val_indices
@@ -153,6 +145,7 @@ class MILK10kDataModule(BaseDataModule):
                 task=self.hparams.task,
                 transform=self.transforms_test,
                 images_only=self.hparams.images_only,
+                dermoscopic_only=self.hparams.dermoscopic_only,
             )
             self.data_test = torch.utils.data.Subset(
                 self.data_test, self.test_indices
@@ -309,6 +302,7 @@ if __name__ == "__main__":
         train_val_test_split=(0.7, 0.15, 0.15),
         batch_size=8,
         data_dir="data/MILK10k",
+        # dermoscopic_only=True,
         image_size=image_size,
         transforms={
             "train": [
@@ -335,14 +329,14 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/milk10k_melanoma_cropped_256",
+        output_dir="export/milk10k_melanoma_nevus_cropped_256",
         crop_with_mask=True,
         bbox_scale=2,
         structure="original",
         image_size=image_size,
         allowed_labels=[
                         "melanoma",
-                        # "melanocytic_nevus"
+                        "melanocytic_nevus"
                         ],
         global_normalization=False,
         export_cropped_masks=True,

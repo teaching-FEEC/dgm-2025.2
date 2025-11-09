@@ -11,7 +11,7 @@ import pytorch_lightning as pl
 import torch
 
 
-class BaseDataModule(pl.LightningDataModule):
+class BaseDataModule:
     """
     Base class for PyTorch Lightning DataModules that provides:
 

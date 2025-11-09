@@ -43,12 +43,14 @@ class MILK10kDataset(Dataset):
         task=MILK10kTask.MULTILABEL,
         return_metadata=False,
         images_only: bool = False,
+        dermoscopic_only: bool = False,
     ):
         self.root_dir = Path(root_dir)
         self.transform = transform
         self.task = task
         self.images_only = images_only
         self.return_metadata = return_metadata
+        self.dermoscopic_only = dermoscopic_only
 
         # Load metadata and ground truth
         gt_path = self.root_dir / "MILK10k_Training_GroundTruth.csv"
@@ -59,6 +61,11 @@ class MILK10kDataset(Dataset):
 
         # Merge into single dataframe
         self.data = pd.merge(self.meta_df, self.gt_df, on="lesion_id")
+
+        # filter dermoscopic images only if specified image_type=='dermoscopic'
+        if self.dermoscopic_only:
+            dermo_mask = self.data["image_type"] == "dermoscopic"
+            self.data = self.data.loc[dermo_mask].reset_index(drop=True)
 
         # Construct absolute image paths and expand dataset for multiple crops
         expanded_rows = []

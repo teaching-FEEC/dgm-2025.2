@@ -18,8 +18,9 @@ from src.data_modules.base import BaseDataModule
 from src.samplers.infinite import InfiniteSamplerWrapper
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
+import pytorch_lightning as pl
 
-class HSIDermoscopyDataModule(BaseDataModule):
+class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
         task: str | HSIDermoscopyTask,
@@ -58,18 +59,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
         )
 
         # save data_dir to hyperparams for access in setup
-        self.save_hyperparameters({"data_dir": data_dir,
-                                   "synthetic_data_dir": synthetic_data_dir,
-                                   "balanced_sampling": balanced_sampling,
-                                   "infinite_train": infinite_train,
-                                   "batch_size": batch_size,
-                                   "num_workers": num_workers,
-                                   "pin_memory": pin_memory,
-                                   "allowed_labels": allowed_labels,
-                                    "task": task,
-                                    "images_only": images_only,
-                                    "pred_num_samples": pred_num_samples
-                                   })
+        self.save_hyperparameters()
 
         self.batch_size = batch_size
         self.num_workers = num_workers
