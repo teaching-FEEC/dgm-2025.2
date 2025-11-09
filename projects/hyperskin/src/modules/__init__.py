@@ -5,7 +5,6 @@ from src.modules.hsi_segmentation_module import HSISegmentationModule
 from src.modules.generative.gan.wgan import WGANModule
 from src.modules.vae_module import VAE
 from src.modules.generative.gan.fastgan.fastgan import FastGANModule
-from src.modules.generative.gan.fastgan.cycle_fastgan import CycleFastGANModule
 from src.modules.generative.gan.cycle_gan import CycleGANModule
 __all__ = [
     "SimpleNetModule",
@@ -14,6 +13,5 @@ __all__ = [
     "HSISegmentationModule",
     "WGANModule",
     'VAE'
-    "FastGANModule",
-    "CycleFastGANModule",
+    "FastGANModule"
 ]

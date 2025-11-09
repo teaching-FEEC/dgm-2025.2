@@ -15,6 +15,7 @@ from tqdm import tqdm
 from scipy.io import savemat
 import warnings
 from pytorch_lightning.trainer.states import TrainerFn
+from PIL import Image
 
 from torchmetrics.image import (
     SpectralAngleMapper,
@@ -28,10 +29,12 @@ from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from skimage import filters
 
+from src.modules.generative.base_predictor import BasePredictorMixin
 from src.models.fastgan.unet_generator import define_D, define_G
 from src.models.cycle_gan.cycle_gan import Generator, Discriminator
 from src.utils.spectra_plot import MeanSpectraMetric
 from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
+from src.utils.utils import _iterate_val_loaders
 
 
 def copy_cyclegan_params(G_AB, G_BA):
@@ -54,7 +57,7 @@ def load_cyclegan_params(G_AB, G_BA, avg_params):
         p.data.copy_(avg_p)
 
 
-class CycleGANModule(pl.LightningModule):
+class CycleGANModule(BasePredictorMixin, pl.LightningModule):
     """
     CycleGAN with perceptual reconstruction (LPIPS) losses
     and hinge-style discriminator losses.
@@ -72,7 +75,6 @@ class CycleGANModule(pl.LightningModule):
         val_check_interval: int = 500,
         num_val_batches: int = 8,
         pred_output_dir: str = "generated_samples",
-        pred_num_samples: int = 100,
         pred_hyperspectral: bool = True,
         pred_global_min: float | list[float] | None = None,
         pred_global_max: float | list[float] | None = None,
@@ -507,26 +509,6 @@ class CycleGANModule(pl.LightningModule):
         self.G_AB.train()
         self.G_BA.train()
 
-    def _iterate_val_loaders(self, val_loader):
-        """Handle both dict of dataloaders or single dataloader cases."""
-        if isinstance(val_loader, dict):
-            iterators = {k: iter(v) for k, v in val_loader.items()}
-            while True:
-                batch_dict = {}
-                exhausted = False
-                for name, it in iterators.items():
-                    try:
-                        batch_dict[name] = next(it)
-                    except StopIteration:
-                        exhausted = True
-                        break
-                if exhausted:
-                    break
-                yield batch_dict
-        else:
-            yield from val_loader
-
-
     def _run_validation(self):
         """Run validation metrics on multiple batches"""
         self.fid.reset()
@@ -544,7 +526,7 @@ class CycleGANModule(pl.LightningModule):
         count = 0
 
         with torch.no_grad():
-            for i, batch in enumerate(self._iterate_val_loaders(val_loader)):
+            for i, batch in enumerate(_iterate_val_loaders(val_loader)):
                 if i >= self.hparams.num_val_batches:
                     break
 
@@ -593,7 +575,8 @@ class CycleGANModule(pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
-                self.spectra_metric.update(real_hsi, fake_hsi)
+                self.spectra_metric.update(real_hsi, is_fake=False)
+                self.spectra_metric.update(fake_hsi, is_fake=True)
 
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
@@ -622,95 +605,24 @@ class CycleGANModule(pl.LightningModule):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def predict_step(self, batch, batch_idx, dataloader_idx):
-        """Generate HSI from RGB samples"""
-        os.makedirs(self.hparams.pred_output_dir, exist_ok=True)
-
-        gmin = getattr(self.hparams, "pred_global_min", None)
-        gmax = getattr(self.hparams, "pred_global_max", None)
-        gmin = torch.tensor(gmin).to(self.device).view(1, -1, 1, 1) if gmin is not None else None
-        gmax = torch.tensor(gmax).to(self.device).view(1, -1, 1, 1) if gmax is not None else None
-
-        if dataloader_idx == 0:
-            # compute real spectra from HSI dataloader
-            masks = None
-            if isinstance(batch, tuple) or isinstance(batch, list):
-                real_hsi, masks = batch
-            else:
-                real_hsi = batch
-            real_hsi_denorm = real_hsi.add(1).div(2)
-
-            if gmin is not None and gmax is not None:
-                real_hsi_denorm = real_hsi_denorm * (gmax - gmin) + gmin
-            self.spectra_metric.update(
-                real_hsi_denorm,
-                is_fake=False,
-                masks=masks,
-            )
-            return
-
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        real_rgb = batch[0] if isinstance(batch, (list, tuple)) else batch
         backup_para = copy_cyclegan_params(self.G_AB, self.G_BA)
-        if self.avg_param_G is None:
-            load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
+        load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
         self.G_AB.eval()
 
-
         with torch.no_grad():
-            batch = self.process_batch(batch)
-            masks = None
-            if isinstance(batch, tuple):
-                real_rgb = batch[0]
-                masks = batch[1] if len(batch) > 2 else None
-            else:
-                real_rgb = batch
-
-            real_rgb = real_rgb.to(self.device)
             fake_hsi = self.G_AB(real_rgb)
 
-            for i in tqdm(
-                range(fake_hsi.size(0)), desc="Generating HSI samples"
-            ):
-                fake_img = fake_hsi[i : i + 1, :, :, :]
-
-                if self.hparams.pred_hyperspectral:
-                    fake_denorm = fake_img.add(1).div(2)
-
-                    if gmin is not None and gmax is not None:
-                        fake_denorm = (
-                            fake_denorm * (gmax - gmin) + gmin
-                        )
-
-                    self.spectra_metric.update(
-                        fake_denorm,
-                        is_fake=True,
-                        masks=masks[i : i + 1, :, :, :] if masks is not None else None
-                    )
-                    fake_np = fake_denorm.squeeze().cpu().numpy()
-                    fake_np = np.transpose(fake_np, (1, 2, 0))
-                    mat_path = os.path.join(
-                        self.hparams.pred_output_dir,
-                        f"sample_{batch_idx}_{i:04d}.mat",
-                    )
-                    savemat(mat_path, {"cube": fake_np})
-                else:
-                    fake_rgb = (fake_img + 1) / 2
-                    mean_band = fake_rgb.mean(dim=1, keepdim=True)
-                    rgb = mean_band.repeat(1, 3, 1, 1).clamp(0, 1)
-
-                    save_path = os.path.join(
-                        self.hparams.pred_output_dir,
-                        f"sample_{batch_idx}_{i:04d}.png",
-                    )
-                    torchvision.utils.save_image(rgb, save_path)
+        self._save_generated_batch(
+            fake_batch=fake_hsi,
+            batch_idx=batch_idx,
+            pred_hyperspectral=self.hparams.pred_hyperspectral,
+        )
 
         load_cyclegan_params(self.G_AB, self.G_BA, backup_para)
         self.G_AB.train()
 
-    def on_predict_end(self) -> None:
-        fig = self.spectra_metric.plot()
-        if fig is not None:
-            fig.savefig("predicted_mean_spectra.png")
-        self.spectra_metric.reset()
     def configure_optimizers(self):
         d_optim = Adam(
             list(self.D_A.parameters()) + list(self.D_B.parameters()),
@@ -740,41 +652,3 @@ class CycleGANModule(pl.LightningModule):
             print("Warning: avg_param_G not found in checkpoint.")
         del checkpoint["hyper_parameters"]
         del checkpoint["datamodule_hyper_parameters"]
-
-    @classmethod
-    def load_from_checkpoint(
-        cls,
-        checkpoint_path,
-        map_location=None,
-        hparams_file=None,
-        strict=True,
-        **kwargs,
-    ):
-        try:
-            model = super().load_from_checkpoint(
-                checkpoint_path=checkpoint_path,
-                map_location=map_location,
-                hparams_file=hparams_file,
-                strict=strict,
-                **kwargs,
-            )
-        except Exception as e:
-            print(f"Error loading checkpoint: {e}")
-            print("Attempting to load with strict=False")
-            model = super().load_from_checkpoint(
-                checkpoint_path=checkpoint_path,
-                map_location=map_location,
-                hparams_file=hparams_file,
-                strict=False,
-                **kwargs,
-            )
-
-        return model
-
-    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
-        try:
-            super().load_state_dict(state_dict, strict)
-        except Exception as e:
-            print(f"Error loading state_dict: {e}")
-            print("Attempting to load with strict=False")
-            super().load_state_dict(state_dict, strict=False)

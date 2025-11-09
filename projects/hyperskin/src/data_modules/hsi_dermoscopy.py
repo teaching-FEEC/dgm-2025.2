@@ -3,7 +3,9 @@ from pathlib import Path
 from git import Optional
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader
+
+from src.samplers.finite import FiniteSampler
 
 if __name__ == "__main__":
     import pyrootutils
@@ -14,7 +16,6 @@ if __name__ == "__main__":
 
 from src.data_modules.base import BaseDataModule
 from src.samplers.infinite import InfiniteSamplerWrapper
-from src.utils.transform import smallest_maxsize_and_centercrop
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
 
@@ -35,11 +36,11 @@ class HSIDermoscopyDataModule(BaseDataModule):
         global_min: Optional[float | list[float]] = None,
         balanced_sampling: bool = False,
         infinite_train:  bool = False,
-        sample_size: Optional[int] = None,
         synthetic_data_dir: Optional[str] = None,
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
         images_only: bool = False,
+        pred_num_samples: Optional[int] = None,
         **kwargs,
     ):
         self.save_hyperparameters()
@@ -64,10 +65,10 @@ class HSIDermoscopyDataModule(BaseDataModule):
                                    "batch_size": batch_size,
                                    "num_workers": num_workers,
                                    "pin_memory": pin_memory,
-                                   "sample_size": sample_size,
                                    "allowed_labels": allowed_labels,
                                     "task": task,
-                                    "images_only": images_only
+                                    "images_only": images_only,
+                                    "pred_num_samples": pred_num_samples
                                    })
 
         self.batch_size = batch_size
@@ -186,11 +187,7 @@ class HSIDermoscopyDataModule(BaseDataModule):
             )
 
         if self.hparams.infinite_train:
-            if self.hparams.sample_size and self.hparams.sample_size > 0 and \
-                self.hparams.sample_size < len(self.data_train):
-                sampler = InfiniteSamplerWrapper(SubsetRandomSampler(torch.arange(self.hparams.sample_size)))
-            else:
-                sampler = InfiniteSamplerWrapper(self.data_train)
+            sampler = InfiniteSamplerWrapper(self.data_train)
         return DataLoader(
             self.data_train,
             batch_size=self.hparams.batch_size,
@@ -219,7 +216,18 @@ class HSIDermoscopyDataModule(BaseDataModule):
         )
 
     def predict_dataloader(self):
-        return self.all_dataloader()
+        if not self.hparams.pred_num_samples:
+            return self.all_dataloader()
+        else:
+            dataloader = self.all_dataloader()
+            sampler = FiniteSampler(dataloader.dataset, self.hparams.pred_num_samples)
+            return DataLoader(
+                dataloader.dataset,
+                batch_size=self.hparams.batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                sampler=sampler,
+            )
 
     def all_dataloader(self):
         full_dataset = HSIDermoscopyDataset(

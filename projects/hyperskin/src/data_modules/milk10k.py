@@ -3,9 +3,9 @@ from typing import Optional
 
 import numpy as np
 import torch
-import pytorch_lightning as pl
 from torch.utils.data import DataLoader, SubsetRandomSampler
 
+from src.samplers.finite import FiniteSampler
 from src.samplers.infinite import InfiniteSamplerWrapper
 
 if __name__ == "__main__":
@@ -43,6 +43,7 @@ class MILK10kDataModule(BaseDataModule):
         range_mode: str = '-1_1',
         normalize_mask_tanh: bool = False,
         images_only: bool = False,
+        pred_num_samples: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -68,6 +69,7 @@ class MILK10kDataModule(BaseDataModule):
                 "infinite_train": infinite_train,
                 "sample_size": sample_size,
                 "images_only": images_only,
+                "pred_num_samples": pred_num_samples,
             }
         )
 
@@ -206,7 +208,18 @@ class MILK10kDataModule(BaseDataModule):
         )
 
     def predict_dataloader(self):
-        return self.all_dataloader()
+        if not self.hparams.pred_num_samples:
+            return self.all_dataloader()
+        else:
+            dataloader = self.all_dataloader()
+            sampler = FiniteSampler(dataloader.dataset, self.hparams.pred_num_samples)
+            return DataLoader(
+                dataloader.dataset,
+                batch_size=self.hparams.batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                sampler=sampler,
+            )
 
     def all_dataloader(self):
         return DataLoader(
