@@ -78,7 +78,7 @@ class HSIDermoscopyDataset(Dataset):
     Flexible HSI dermoscopy dataset supporting multiple tasks.
 
     Args:
-        root_dir: Root directory containing the dataset
+        data_dir: Root directory containing the dataset
         transform: Albumentations transform
         task: TaskConfig or string key from HSI_TASK_CONFIGS
         force_create_df: Force recreation of metadata CSV
@@ -87,25 +87,25 @@ class HSIDermoscopyDataset(Dataset):
 
     def __init__(
         self,
-        root_dir: str = "data/hsi_dermoscopy",
+        data_dir: str = "data/hsi_dermoscopy",
         transform: A.Compose | None = None,
         task: TaskConfig | str = "classification_all_classes",
         force_create_df: bool = False,
         save_labels_df: bool = True,
     ):
-        self.root_dir = Path(root_dir)
+        self.data_dir = Path(data_dir)
         self.transform = transform
 
         # Handle task config
         if isinstance(task, str):
             if task not in HSI_TASK_CONFIGS:
                 raise ValueError(f"Unknown task: {task}. Available: {list(HSI_TASK_CONFIGS.keys())}")
-            self.task = HSI_TASK_CONFIGS[task]
+            self.task_config = HSI_TASK_CONFIGS[task]
         else:
             self.task_config = task
 
         # Load or create metadata
-        self.metadata_path = self.root_dir / "metadata.csv"
+        self.metadata_path = self.data_dir / "metadata.csv"
         self._load_or_create_metadata(force_create_df, save_labels_df)
 
         # Setup labels and filtering based on task
@@ -114,15 +114,15 @@ class HSIDermoscopyDataset(Dataset):
     def _load_or_create_metadata(self, force_create: bool, save: bool):
         """Load existing metadata or create new."""
         if self.metadata_path.exists() and not force_create:
-            self.data = pd.read_csv(self.metadata_path)
+            self.labels_df = pd.read_csv(self.metadata_path)
         else:
-            self.data = self._create_metadata()
+            self.labels_df = self._create_metadata()
             if save:
-                self.data.to_csv(self.metadata_path, index=False)
+                self.labels_df.to_csv(self.metadata_path, index=False)
 
     def _create_metadata(self) -> pd.DataFrame:
         """Create metadata DataFrame by scanning directory structure."""
-        images_dir = self.root_dir / "images"
+        images_dir = self.data_dir / "images"
 
         paths = {
             "dysplastic_nevi": images_dir / "DNCube",
@@ -201,17 +201,17 @@ class HSIDermoscopyDataset(Dataset):
 
         # Filter classes if specified
         if self.task_config.filter_classes:
-            original_len = len(self.data)
-            self.data = self.data[self.data["label"].isin(self.task_config.filter_classes)].reset_index(drop=True)
-            filtered_count = original_len - len(self.data)
+            original_len = len(self.labels_df)
+            self.labels_df = self.labels_df[self.labels_df["label"].isin(self.task_config.filter_classes)].reset_index(drop=True)
+            filtered_count = original_len - len(self.labels_df)
             if filtered_count > 0:
                 print(f"Filtered out {filtered_count} samples not in {self.task_config.filter_classes}")
 
         # Filter samples without masks for segmentation tasks
         if self.task_config.return_mask:
-            original_len = len(self.data)
-            self.data = self.data.dropna(subset=["masks"]).reset_index(drop=True)
-            filtered_count = original_len - len(self.data)
+            original_len = len(self.labels_df)
+            self.labels_df = self.labels_df.dropna(subset=["masks"]).reset_index(drop=True)
+            filtered_count = original_len - len(self.labels_df)
             if filtered_count > 0:
                 print(f"Filtered out {filtered_count} samples without masks for segmentation/generation task")
 
@@ -223,11 +223,11 @@ class HSIDermoscopyDataset(Dataset):
             kept_classes = [k for k in self.task_config.label_mapping.keys() if k != "others"]
             return label if label in kept_classes else "others"
 
-        self.data["label"] = self.data["label"].apply(map_to_others)
+        self.labels_df["label"] = self.labels_df["label"].apply(map_to_others)
 
     def _load_image(self, idx: int) -> np.ndarray:
         """Load HSI image from .mat file."""
-        file_path = self.data.iloc[idx]["file_path"]
+        file_path = self.labels_df.iloc[idx]["file_path"]
         mat_data = loadmat(file_path)
         # loadmat returns dict, get the last item's value (the actual data)
         image = mat_data.popitem()[-1]
@@ -235,7 +235,7 @@ class HSIDermoscopyDataset(Dataset):
 
     def _load_mask(self, idx: int) -> np.ndarray | None:
         """Load and combine all masks for a sample."""
-        masks_str = self.data.iloc[idx]["masks"]
+        masks_str = self.labels_df.iloc[idx]["masks"]
         if pd.isna(masks_str):
             return None
 
@@ -255,18 +255,18 @@ class HSIDermoscopyDataset(Dataset):
 
     def _get_label(self, idx: int) -> int:
         """Get integer label for a sample."""
-        label_str = self.data.iloc[idx]["label"]
+        label_str = self.labels_df.iloc[idx]["label"]
         return self.labels_map[label_str]
 
     def get_masks_list(self, idx: int) -> list[str]:
         """Get list of mask paths for a given index."""
-        masks_str = self.data.iloc[idx]["masks"]
+        masks_str = self.labels_df.iloc[idx]["masks"]
         if pd.isna(masks_str):
             return []
         return masks_str.split(";")
 
     def __len__(self) -> int:
-        return len(self.data)
+        return len(self.labels_df)
 
     def __getitem__(self, idx: int) -> tuple:
         """
@@ -312,7 +312,11 @@ class HSIDermoscopyDataset(Dataset):
         if self.task_config.return_mask:
             sample.mask = mask
 
-        return sample.to_tuple()
+        return_sample = sample.to_tuple()
+
+        if len(return_sample) == 1:
+            return return_sample[0]
+        return return_sample
 
     @property
     def labels(self) -> np.ndarray:
@@ -333,7 +337,7 @@ class HSIDermoscopyDataset(Dataset):
 if __name__ == "__main__":
     # Example 1: Classification (all classes)
     dataset = HSIDermoscopyDataset(
-        root_dir="data/hsi_dermoscopy",
+        data_dir="data/hsi_dermoscopy",
         task_config="classification_all_classes",
         transform=A.Compose(
             [
@@ -349,7 +353,7 @@ if __name__ == "__main__":
 
     # Example 2: Melanoma vs Others
     dataset = HSIDermoscopyDataset(
-        root_dir="data/hsi_dermoscopy",
+        data_dir="data/hsi_dermoscopy",
         task_config="classification_melanoma_vs_others",
     )
     print(f"\nMelanoma vs Others: {len(dataset)} samples")
@@ -357,7 +361,7 @@ if __name__ == "__main__":
 
     # Example 3: Segmentation
     dataset = HSIDermoscopyDataset(
-        root_dir="data/hsi_dermoscopy_croppedv2_256_with_masks",
+        data_dir="data/hsi_dermoscopy_croppedv2_256_with_masks",
         task_config="segmentation",
     )
     print(f"\nSegmentation: {len(dataset)} samples")
@@ -366,7 +370,7 @@ if __name__ == "__main__":
 
     # Example 4: Unconditional Generation
     dataset = HSIDermoscopyDataset(
-        root_dir="data/hsi_dermoscopy",
+        data_dir="data/hsi_dermoscopy",
         task_config="generation_unconditional",
     )
     print(f"\nUnconditional generation: {len(dataset)} samples")
@@ -375,7 +379,7 @@ if __name__ == "__main__":
 
     # Example 5: Conditional Generation (full)
     dataset = HSIDermoscopyDataset(
-        root_dir="data/hsi_dermoscopy_croppedv2_256_with_masks",
+        data_dir="data/hsi_dermoscopy_croppedv2_256_with_masks",
         task_config="generation_conditional_full",
     )
     print(f"\nConditional generation (full): {len(dataset)} samples")

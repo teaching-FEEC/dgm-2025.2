@@ -238,7 +238,10 @@ class MILK10kDataset(Dataset):
         if self.task_config.return_mask:
             sample.mask = mask
 
-        return sample.to_tuple()
+        return_sample = sample.to_tuple()
+        if len(return_sample) == 1:
+            return return_sample[0]
+        return return_sample
 
     @property
     def labels(self) -> np.ndarray:

@@ -18,6 +18,7 @@ class DatasetSample:
             items.append(self.mask)
         if self.label is not None:
             items.append(self.label)
+        return tuple(items)
 
 
 @dataclass

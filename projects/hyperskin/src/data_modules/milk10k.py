@@ -27,7 +27,7 @@ from src.data_modules.datasets.milk10k_dataset import (
 class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str | TaskConfig,
+        task: str | TaskConfig | dict,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
@@ -59,24 +59,39 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
             range_mode = range_mode,
             normalize_mask_tanh=normalize_mask_tanh,
         )
-        self.save_hyperparameters()
+
+        # Normalize dict -> TaskConfig, accept str keys (case-insensitive) or TaskConfig
+        if isinstance(task, dict):
+            task = TaskConfig(**task)
+
+        if isinstance(task, str):
+            task_key = task.lower()
+            if task_key not in MILK10K_TASK_CONFIGS:
+                raise ValueError(
+                    f"Unknown task: {task}. "
+                    f"Available: {list(MILK10K_TASK_CONFIGS.keys())}"
+                )
+            self.task_config = MILK10K_TASK_CONFIGS[task_key]
+        elif isinstance(task, TaskConfig):
+            self.task_config = task
+        else:
+            raise TypeError("task must be a str, dict, or TaskConfig")
+
+        self.save_hyperparameters({
+            "task": task,
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+            "pin_memory": pin_memory,
+            "infinite_train": infinite_train,
+            "sample_size": sample_size,
+            "pred_num_samples": pred_num_samples,
+            "dermoscopic_only": dermoscopic_only,
+            "data_dir": data_dir,
+        })
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        task = task.lower()
-
-        # Validate task
-        if task not in MILK10K_TASK_CONFIGS:
-            raise ValueError(
-                f"Unknown task: {task}. "
-                f"Available: {list(MILK10K_TASK_CONFIGS.keys())}"
-            )
-
-        if isinstance(task, str):
-            self.task_config = MILK10K_TASK_CONFIGS[task]
-        else:
-            self.task_config = task
 
         # Initialize dataset attributes
         self.data_train = None

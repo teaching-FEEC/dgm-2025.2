@@ -1,6 +1,7 @@
+from enum import Enum
 from pathlib import Path
 
-from git import Optional
+from typing import Optional
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -44,7 +45,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         pred_num_samples: Optional[int] = None,
         **kwargs,
     ):
-        self.save_hyperparameters()
         super().__init__(
             train_val_test_split=train_val_test_split,
             data_dir=data_dir,
@@ -58,25 +58,39 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
             normalize_mask_tanh=normalize_mask_tanh,
         )
 
+        # Normalize dict -> TaskConfig, accept str keys (case-insensitive) or TaskConfig
+        if isinstance(task, dict):
+            task = TaskConfig(**task)
+
+        if isinstance(task, str):
+            task_key = task.lower()
+            if task_key not in HSI_TASK_CONFIGS:
+                raise ValueError(
+                    f"Unknown task: {task}. "
+                    f"Available: {list(HSI_TASK_CONFIGS.keys())}"
+                )
+            self.task_config = HSI_TASK_CONFIGS[task_key]
+        elif isinstance(task, TaskConfig):
+            self.task_config = task
+        else:
+            raise TypeError("task must be a str, dict, or TaskConfig")
+
         # save data_dir to hyperparams for access in setup
-        self.save_hyperparameters()
+        self.save_hyperparameters({
+            "task": task,
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+            "pin_memory": pin_memory,
+            "balanced_sampling": balanced_sampling,
+            "infinite_train": infinite_train,
+            "synthetic_data_dir": synthetic_data_dir,
+            "pred_num_samples": pred_num_samples,
+            "data_dir": data_dir,
+        })
 
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-
-        task = task.lower()
-
-        if task not in HSI_TASK_CONFIGS:
-            raise ValueError(
-                f"Unknown task: {task}. "
-                f"Available: {list(HSI_TASK_CONFIGS.keys())}"
-            )
-
-        if isinstance(task, str):
-            self.task_config = HSI_TASK_CONFIGS[task]
-        else:
-            self.task_config = task
 
         self.data_train = None
         self.data_val = None
@@ -286,16 +300,19 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 tags.append(label.lower())
 
         # Core metadata
-        if getattr(hparams, 'task', None):
-            task_name = getattr(hparams, 'task').name.lower()
-            if "segmentation" in task_name:
-                run_name += "seg_"
-            elif "generation" in task_name:
-                run_name += "gen_"
-            else:
-                run_name += "cls_"
+        # if getattr(hparams, 'task', None):
+        #     if isinstance(hparams.task, Enum):
+        #         task_name = hparams.task.name.lower()
+        #     else:
+        #         task_name = hparams.task.lower()
+        #     if "segmentation" in task_name:
+        #         run_name += "seg_"
+        #     elif "generation" in task_name:
+        #         run_name += "gen_"
+        #     else:
+        #         run_name += "cls_"
 
-            tags.append(getattr(hparams, 'task').name.lower())
+        #     tags.append(task_name)
 
         if getattr(hparams, "synthetic_data_dir", None):
             run_name += "synth_"
