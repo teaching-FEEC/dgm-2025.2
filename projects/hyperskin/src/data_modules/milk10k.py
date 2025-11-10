@@ -6,6 +6,8 @@ import torch
 from torch.utils.data import DataLoader, SubsetRandomSampler
 import pytorch_lightning as pl
 
+from src.samplers.balanced_batch_sampler import BalancedBatchSampler
+
 if __name__ == "__main__":
     import pyrootutils
 
@@ -15,7 +17,7 @@ if __name__ == "__main__":
 
 
 from src.data_modules.datasets.task_config import TaskConfig
-from src.samplers.infinite import InfiniteSamplerWrapper
+from src.samplers.infinite import InfiniteBalancedBatchSampler, InfiniteSamplerWrapper
 from src.samplers.finite import FiniteSampler
 from src.data_modules.base import BaseDataModule
 from src.data_modules.datasets.milk10k_dataset import (
@@ -65,13 +67,13 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
             task = TaskConfig(**task)
 
         if isinstance(task, str):
-            task_key = task.lower()
-            if task_key not in MILK10K_TASK_CONFIGS:
+            task = task.lower()
+            if task not in MILK10K_TASK_CONFIGS:
                 raise ValueError(
                     f"Unknown task: {task}. "
                     f"Available: {list(MILK10K_TASK_CONFIGS.keys())}"
                 )
-            self.task_config = MILK10K_TASK_CONFIGS[task_key]
+            self.task_config = MILK10K_TASK_CONFIGS[task]
         elif isinstance(task, TaskConfig):
             self.task_config = task
         else:
@@ -87,6 +89,7 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
             "pred_num_samples": pred_num_samples,
             "dermoscopic_only": dermoscopic_only,
             "data_dir": data_dir,
+            "allowed_labels": allowed_labels,
         })
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -182,19 +185,47 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
 
     def train_dataloader(self):
         sampler = None
+        labels = None
+        if isinstance(self.data_train, torch.utils.data.ConcatDataset):
+            # Extract labels from concatenated datasets
+            labels = []
+            for dataset in self.data_train.datasets:
+                if isinstance(dataset, torch.utils.data.Subset):
+                    labels.extend([dataset.dataset.labels[i] for i in dataset.indices])
+                else:
+                    labels.extend(dataset.labels)
+            labels = np.array(labels)
+        else:
+            labels = self.data_train.dataset.labels
+
         if self.hparams.infinite_train:
-            if self.hparams.sample_size and self.hparams.sample_size > 0 and \
-                self.hparams.sample_size < len(self.data_train):
-                sampler = InfiniteSamplerWrapper(SubsetRandomSampler(torch.arange(self.hparams.sample_size)))
-            else:
-                sampler = InfiniteSamplerWrapper(self.data_train)
+            sampler = InfiniteSamplerWrapper(self.data_train)
+        elif self.hparams.balanced_sampling and self.hparams.infinite_train:
+            sampler = InfiniteBalancedBatchSampler(
+                labels, batch_size=self.hparams.batch_size
+            )
+            return DataLoader(
+                self.data_train,
+                batch_sampler=sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+            )
+        elif self.hparams.balanced_sampling and not self.hparams.infinite_train:
+            sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
+
+            return DataLoader(
+                self.data_train,
+                batch_sampler=sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+            )
         return DataLoader(
             self.data_train,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=True if sampler is None else False,
             sampler=sampler,
+            shuffle=(sampler is None),
         )
 
     def val_dataloader(self):
@@ -280,14 +311,14 @@ class MILK10kDataModule(BaseDataModule, pl.LightningDataModule):
                 tags.append(label.lower())
 
         # Core metadata
-        if getattr(hparams, 'task', None):
-            task_name = getattr(hparams, 'task').name.lower()
-            if "segmentation" in task_name:
-                run_name += "seg_"
-            elif "generation" in task_name:
-                run_name += "gen_"
-            else:
-                run_name += "cls_"
+        # if getattr(hparams, 'task', None):
+        #     task_name = getattr(hparams, 'task').name.lower()
+        #     if "segmentation" in task_name:
+        #         run_name += "seg_"
+        #     elif "generation" in task_name:
+        #         run_name += "gen_"
+        #     else:
+        #         run_name += "cls_"
 
         if "train" in self.transforms_cfg:
             transforms = self.transforms_cfg["train"]

@@ -17,7 +17,7 @@ if __name__ == "__main__":
     )
 
 from src.data_modules.base import BaseDataModule
-from src.samplers.infinite import InfiniteSamplerWrapper
+from src.samplers.infinite import InfiniteBalancedBatchSampler, InfiniteSamplerWrapper
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
 from src.data_modules.datasets.hsi_dermoscopy_dataset import HSI_TASK_CONFIGS, HSIDermoscopyDataset
 import pytorch_lightning as pl
@@ -63,13 +63,13 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
             task = TaskConfig(**task)
 
         if isinstance(task, str):
-            task_key = task.lower()
-            if task_key not in HSI_TASK_CONFIGS:
+            task = task.lower()
+            if task not in HSI_TASK_CONFIGS:
                 raise ValueError(
                     f"Unknown task: {task}. "
                     f"Available: {list(HSI_TASK_CONFIGS.keys())}"
                 )
-            self.task_config = HSI_TASK_CONFIGS[task_key]
+            self.task_config = HSI_TASK_CONFIGS[task]
         elif isinstance(task, TaskConfig):
             self.task_config = task
         else:
@@ -86,6 +86,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
             "synthetic_data_dir": synthetic_data_dir,
             "pred_num_samples": pred_num_samples,
             "data_dir": data_dir,
+            "allowed_labels": allowed_labels,
         })
 
         self.batch_size = batch_size
@@ -165,42 +166,47 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
 
     def train_dataloader(self):
         sampler = None
+        labels = None
+        if isinstance(self.data_train, torch.utils.data.ConcatDataset):
+            # Extract labels from concatenated datasets
+            labels = []
+            for dataset in self.data_train.datasets:
+                if isinstance(dataset, torch.utils.data.Subset):
+                    labels.extend([dataset.dataset.labels[i] for i in dataset.indices])
+                else:
+                    labels.extend(dataset.labels)
+            labels = np.array(labels)
+        else:
+            labels = self.data_train.dataset.labels
 
-        if (
-            self.task_config.binary_classification
-            and self.hparams.balanced_sampling
-        ):
-            # Handle both Subset and ConcatDataset
-            if isinstance(self.data_train, torch.utils.data.ConcatDataset):
-                # Extract labels from concatenated datasets
-                labels = []
-                for dataset in self.data_train.datasets:
-                    if isinstance(dataset, torch.utils.data.Subset):
-                        labels.extend([dataset.dataset.labels[i] for i in dataset.indices])
-                    else:
-                        labels.extend(dataset.labels)
-                labels = np.array(labels)
-            else:
-                # Original Subset case
-                labels = np.array([self.data_train.dataset.labels[i] for i in self.data_train.indices])
-
-            sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
+        if self.hparams.infinite_train:
+            sampler = InfiniteSamplerWrapper(self.data_train)
+        elif self.hparams.balanced_sampling and self.hparams.infinite_train:
+            sampler = InfiniteBalancedBatchSampler(
+                labels, batch_size=self.hparams.batch_size
+            )
             return DataLoader(
                 self.data_train,
                 batch_sampler=sampler,
                 num_workers=self.hparams.num_workers,
                 pin_memory=self.hparams.pin_memory,
             )
+        elif self.hparams.balanced_sampling and not self.hparams.infinite_train:
+            sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
 
-        if self.hparams.infinite_train:
-            sampler = InfiniteSamplerWrapper(self.data_train)
+            return DataLoader(
+                self.data_train,
+                batch_sampler=sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+            )
         return DataLoader(
             self.data_train,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=True if sampler is None else False,
             sampler=sampler,
+            shuffle=(sampler is None),
         )
 
     def val_dataloader(self):

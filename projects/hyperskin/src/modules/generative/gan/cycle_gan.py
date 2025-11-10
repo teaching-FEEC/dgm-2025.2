@@ -79,11 +79,16 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         pred_global_min: float | list[float] | None = None,
         pred_global_max: float | list[float] | None = None,
         label_smoothing: float = 0.0,
-        noise_std_start: float = 0.05,
+        noise_std_start: float = 0.0,
         noise_std_end: float = 0.0,
         noise_std: float | None = None,
         noise_decay_steps: int = 100000,
         model_opt: dict | None = None,
+
+        # auxiliary classifier parameters
+        aux_num_classes: Optional[int] = None,
+        aux_loss_weight_d: float = 1.0,
+        aux_loss_weight_g: float = 1.0,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -98,10 +103,12 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
 
             self.D_A = define_D(rgb_channels, model_opt["ndf"], model_opt["netD"],
                                             model_opt["n_layers_D"], model_opt["norm"], model_opt["init_type"],
-                                            model_opt["init_gain"])
+                                            model_opt["init_gain"],
+                                            num_classes=aux_num_classes)
             self.D_B = define_D(hsi_channels, model_opt["ndf"], model_opt["netD"],
                                             model_opt["n_layers_D"], model_opt["norm"], model_opt["init_type"],
-                                            model_opt["init_gain"])
+                                            model_opt["init_gain"],
+                                            num_classes=aux_num_classes)
         else:
             self.G_AB = Generator(rgb_channels, hsi_channels)
             self.G_BA = Generator(hsi_channels, rgb_channels)
@@ -117,11 +124,6 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         self.percept_B = PerceptualLoss(
             model="net-lin", net="vgg", use_gpu=True, in_chans=hsi_channels
         )
-
-        # ------------------ Logging and buffers ------------------
-        self.register_buffer("fixed_A", torch.zeros(8, rgb_channels,
-                                                      self.hparams.image_size,
-                                                      self.hparams.image_size))
 
         # ------------------ Validation metrics ------------------
         self.sam = SpectralAngleMapper()
@@ -140,6 +142,14 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         self.fid.eval()
 
         self.spectra_metric = MeanSpectraMetric()
+        self.batch_size = None
+
+    @staticmethod
+    def _split_d_output(d_out):
+        """Handle D(x) that returns either logits or (logits, class_logits)."""
+        if isinstance(d_out, (tuple, list)) and len(d_out) == 2:
+            return d_out[0], d_out[1]
+        return d_out, None
 
     def _get_tags_and_run_name(self):
         """Automatically derive tags and a run name from FastGANModule hyperparameters."""
@@ -189,6 +199,15 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         ):
             self.hparams.pred_global_min = hsi_dm.global_min
             self.hparams.pred_global_max = hsi_dm.global_max
+        # get batch size
+        self.fixed_A_batch_size = min(8, hsi_dm.batch_size)
+
+            # ------------------ Logging and buffers ------------------
+        self.register_buffer("fixed_A", torch.zeros((self.fixed_A_batch_size,
+                                                     self.hparams.rgb_channels,
+                                                     self.hparams.image_size,
+                                                     self.hparams.image_size)))
+
 
     def on_train_start(self):
         """Initialize EMA params on correct device"""
@@ -198,6 +217,23 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             + list(self.G_BA.parameters())
         ]
 
+        # do a quick sanity check on the train_dataloader to see if both domains are present
+        # also if auxiliary classification is used, check labels are present
+        train_loader = self.trainer.train_dataloader
+        batch = next(_iterate_val_loaders(train_loader))
+        if "rgb" not in batch or "hsi" not in batch:
+            raise ValueError(
+                "Input batch must contain both 'rgb' and 'hsi' domains for CycleGAN."
+            )
+        if (
+            self.hparams.aux_num_classes is not None
+            and self.hparams.aux_loss_weight_d > 0.0
+        ):
+            if "label" not in batch["rgb"] or "label" not in batch["hsi"]:
+                raise ValueError(
+                    "Auxiliary classification enabled but label key not found in batch."
+                )
+
     def forward(self, real_A, real_B):
         fake_A = self.G_BA(real_B)
         fake_B = self.G_AB(real_A)
@@ -205,42 +241,10 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         rec_B = self.G_AB(fake_A)
         return fake_A, fake_B, rec_A, rec_B
 
-    def process_batch(self, batch):
-        """Extract RGB and HSI from batch dict"""
-        if not isinstance(batch, dict):
-            if isinstance(batch, list) or isinstance(batch, tuple):
-                return batch[0], batch[1]
-            if isinstance(batch, torch.Tensor):
-                return batch
-
-        rgb_mask = None
-        hsi_mask = None
-        if isinstance(batch["rgb"], list) or isinstance(batch["rgb"], tuple):
-            rgb_image = batch["rgb"][0]
-            rgb_mask = batch["rgb"][1] if len(batch["rgb"]) > 1 else None
-
-        if isinstance(batch["hsi"], list) or isinstance(batch["hsi"], tuple):
-            hsi_image = batch["hsi"][0]
-            hsi_mask = batch["hsi"][1] if len(batch["hsi"]) > 1 else None
-
-
-        if isinstance(batch["rgb"], torch.Tensor):
-            rgb_image = batch["rgb"]
-        else:
-            rgb_image = batch["rgb"][0]
-
-        if isinstance(batch["hsi"], torch.Tensor):
-            hsi_image = batch["hsi"]
-        else:
-            hsi_image = batch["hsi"][0]
-
-        if rgb_mask is not None and hsi_mask is not None:
-            return rgb_image, hsi_image, rgb_mask, hsi_mask
-        else:
-            return rgb_image, hsi_image
-
     def _calculate_g_loss(
-        self, real_A, real_B, fake_A, fake_B, rec_A, rec_B
+        self, real_A, real_B, fake_A, fake_B, rec_A, rec_B,
+        label_A: torch.Tensor | None = None,
+        label_B: torch.Tensor | None = None,
     ) -> dict:
         """
         Compute the generator loss with:
@@ -248,8 +252,10 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
           - Perceptual + L1 cycle reconstruction loss
         """
         # ------------------ (1) Adversarial hinge loss ------------------
-        logits_fake_A = self.D_A(fake_A)
-        logits_fake_B = self.D_B(fake_B)
+        d_out_fake_A = self.D_A(fake_A)
+        d_out_fake_B = self.D_B(fake_B)
+        logits_fake_A, cls_fake_A = self._split_d_output(d_out_fake_A)
+        logits_fake_B, cls_fake_B = self._split_d_output(d_out_fake_B)
 
         adv_loss_A = bce_with_logits(logits_fake_A, torch.ones_like(logits_fake_A))
         adv_loss_B = bce_with_logits(logits_fake_B, torch.ones_like(logits_fake_B))
@@ -269,11 +275,31 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             cycle_loss_percept_B = torch.tensor(0.0, device=self.device)
             cycle_loss_percept = torch.tensor(0.0, device=self.device)
 
+        # (4) Auxiliary classification loss (for generator)
+        aux_g_loss_A = torch.tensor(0.0, device=self.device)
+        aux_g_loss_B = torch.tensor(0.0, device=self.device)
+
+        if (
+            self.hparams.aux_num_classes is not None
+            and label_A is not None
+            and label_B is not None
+            and self.hparams.aux_loss_weight_g > 0.0
+        ):
+            # Re-run D or reuse, but here we assume d_out_fake_* from above:
+            if cls_fake_A is not None:
+                aux_g_loss_A = F.cross_entropy(cls_fake_A, label_A)
+            if cls_fake_B is not None:
+                aux_g_loss_B = F.cross_entropy(cls_fake_B, label_B)
+
+        aux_g_loss = aux_g_loss_A + aux_g_loss_B
+        aux_g_loss = self.hparams.aux_loss_weight_g * aux_g_loss
+
         # ------------------ (4) Total generator loss ------------------
         g_loss = (
             adv_loss
             + self.hparams.lambda_cycle * cycle_loss
             + self.hparams.lambda_perceptual * cycle_loss_percept
+            + aux_g_loss
         )
 
         return {
@@ -286,6 +312,9 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             "cycle_loss_percept": cycle_loss_percept,
             "adv_loss": adv_loss,
             "cycle_loss": cycle_loss,
+            "aux_g_loss_A": aux_g_loss_A,
+            "aux_g_loss_B": aux_g_loss_B,
+            "aux_g_loss": aux_g_loss,
             "g_loss": g_loss,
         }
 
@@ -308,51 +337,88 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         # Linear decay schedule: interpolate between start and end
         return start + (end - start) * progress
 
-    def _calculate_d_loss(self, real_A, real_B, fake_A, fake_B) -> dict:
+    def _calculate_d_loss(
+        self,
+        real_A,
+        real_B,
+        fake_A,
+        fake_B,
+        label_A: Optional[torch.Tensor] = None,
+        label_B: Optional[torch.Tensor] = None,
+    ) -> dict:
         """
-        Binary cross-entropy discriminator loss with optional
-        Gaussian input noise and one-sided label smoothing.
+        Discriminator loss:
+          - BCE real/fake (with noise + label smoothing)
+          - Optional auxiliary classification loss on real samples.
         """
-
         noise_std = self.get_current_noise_std()
         label_smoothing = getattr(self.hparams, "label_smoothing", 0.0)
 
-        # ---- (1) Add Gaussian noise to discriminator inputs ----
+        # (1) Add Gaussian noise
         if noise_std > 0:
             real_A = real_A + torch.randn_like(real_A) * noise_std
             fake_A = fake_A + torch.randn_like(fake_A) * noise_std
             real_B = real_B + torch.randn_like(real_B) * noise_std
             fake_B = fake_B + torch.randn_like(fake_B) * noise_std
 
-        # ---- (2) Create soft labels for "real" samples ----
+        # (2) Real labels with smoothing
+        # Use a forward pass to get label tensors with correct shape
+        logits_real_A, cls_real_A = self._split_d_output(self.D_A(real_A))
+        logits_real_B, cls_real_B = self._split_d_output(self.D_B(real_B))
+
         if label_smoothing > 0:
-            real_label_A = torch.empty_like(self.D_A(real_A)).uniform_(
-                1.0 - label_smoothing, 1.0
+            real_label_A = torch.empty_like(logits_real_A).uniform_(
+                1.0 - label_smoothing,
+                1.0,
             )
-            real_label_B = torch.empty_like(self.D_B(real_B)).uniform_(
-                1.0 - label_smoothing, 1.0
+            real_label_B = torch.empty_like(logits_real_B).uniform_(
+                1.0 - label_smoothing,
+                1.0,
             )
         else:
-            real_label_A = torch.ones_like(self.D_A(real_A))
-            real_label_B = torch.ones_like(self.D_B(real_B))
+            real_label_A = torch.ones_like(logits_real_A)
+            real_label_B = torch.ones_like(logits_real_B)
 
         fake_label_A = torch.zeros_like(real_label_A)
         fake_label_B = torch.zeros_like(real_label_B)
 
-        # ---- (3) Compute discriminator losses ----
-        logits_real_A = self.D_A(real_A)
-        logits_fake_A = self.D_A(fake_A.detach())
+        # (3) Real/fake losses for A
+        logits_fake_A, cls_fake_A = self._split_d_output(
+            self.D_A(fake_A.detach())
+        )
+
         d_loss_real_A = bce_with_logits(logits_real_A, real_label_A)
         d_loss_fake_A = bce_with_logits(logits_fake_A, fake_label_A)
         d_loss_A = 0.5 * (d_loss_real_A + d_loss_fake_A)
 
-        logits_real_B = self.D_B(real_B)
-        logits_fake_B = self.D_B(fake_B.detach())
+        # (4) Real/fake losses for B
+        logits_fake_B, cls_fake_B = self._split_d_output(
+            self.D_B(fake_B.detach())
+        )
+
         d_loss_real_B = bce_with_logits(logits_real_B, real_label_B)
         d_loss_fake_B = bce_with_logits(logits_fake_B, fake_label_B)
         d_loss_B = 0.5 * (d_loss_real_B + d_loss_fake_B)
 
-        d_loss = d_loss_A + d_loss_B
+        # (5) Auxiliary classification loss (on real samples)
+        aux_d_loss_A = torch.tensor(0.0, device=self.device)
+        aux_d_loss_B = torch.tensor(0.0, device=self.device)
+
+        if (
+            self.hparams.aux_num_classes is not None
+            and label_A is not None
+            and label_B is not None
+            and self.hparams.aux_loss_weight_d > 0.0
+        ):
+            if cls_real_A is not None:
+                aux_d_loss_A = F.cross_entropy(cls_real_A, label_A)
+            if cls_real_B is not None:
+                aux_d_loss_B = F.cross_entropy(cls_real_B, label_B)
+
+        aux_d_loss = aux_d_loss_A + aux_d_loss_B
+        aux_d_loss = self.hparams.aux_loss_weight_d * aux_d_loss
+
+        d_loss = d_loss_A + d_loss_B + aux_d_loss
 
         return {
             "d_loss_real_A": d_loss_real_A,
@@ -361,30 +427,44 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             "d_loss_real_B": d_loss_real_B,
             "d_loss_fake_B": d_loss_fake_B,
             "d_loss_B": d_loss_B,
+            "aux_d_loss_A": aux_d_loss_A,
+            "aux_d_loss_B": aux_d_loss_B,
+            "aux_d_loss": aux_d_loss,
             "d_loss": d_loss,
         }
 
     # ----------------------------------------------------------------------
     # Training step
     # ----------------------------------------------------------------------
-
     def training_step(self, batch, batch_idx):
-        real_rgb, real_hsi = self.process_batch(batch)
+        rgb_batch = batch["rgb"]
+        hsi_batch = batch["hsi"]
+
+        real_rgb = rgb_batch["image"]
+        real_hsi = hsi_batch["image"]
+        rgb_labels = rgb_batch.get("label", None)
+        hsi_labels = hsi_batch.get("label", None)
+
         fake_rgb, fake_hsi, rec_rgb, rec_hsi = self(real_rgb, real_hsi)
 
         d_optim, g_optim = self.optimizers()
 
         # --- Train Discriminator ---
         d_loss_dict = self._calculate_d_loss(
-            real_A=real_rgb, real_B=real_hsi, fake_A=fake_rgb, fake_B=fake_hsi
+            real_A=real_rgb,
+            real_B=real_hsi,
+            fake_A=fake_rgb,
+            fake_B=fake_hsi,
+            label_A=rgb_labels,
+            label_B=hsi_labels,
         )
 
-        # Compute discriminator accuracy
+        # discriminator accuracy (only uses rf logits)
         with torch.no_grad():
-            logits_real_A = self.D_A(real_rgb)
-            logits_fake_A = self.D_A(fake_rgb.detach())
-            logits_real_B = self.D_B(real_hsi)
-            logits_fake_B = self.D_B(fake_hsi.detach())
+            logits_real_A, _ = self._split_d_output(self.D_A(real_rgb))
+            logits_fake_A, _ = self._split_d_output(self.D_A(fake_rgb.detach()))
+            logits_real_B, _ = self._split_d_output(self.D_B(real_hsi))
+            logits_fake_B, _ = self._split_d_output(self.D_B(fake_hsi.detach()))
 
             pred_real_A = (torch.sigmoid(logits_real_A) > 0.5).float()
             pred_fake_A = (torch.sigmoid(logits_fake_A) <= 0.5).float()
@@ -412,19 +492,21 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             fake_B=fake_hsi,
             rec_A=rec_rgb,
             rec_B=rec_hsi,
+            label_A=rgb_labels,
+            label_B=hsi_labels,
         )
+
         g_optim.zero_grad(set_to_none=True)
         self.manual_backward(g_loss_dict["g_loss"])
         g_optim.step()
 
-        # --- EMA Update ---
+        # --- EMA and logging (unchanged, but includes new keys) ---
         for p, avg_p in zip(
             list(self.G_AB.parameters()) + list(self.G_BA.parameters()),
             self.avg_param_G,
         ):
             avg_p.mul_(0.999).add_(p.data, alpha=0.001)
 
-        # --- Logging ---
         log_dict = {f"train/{k}": v for k, v in {**d_loss_dict, **g_loss_dict}.items()}
         log_dict.update(
             {
@@ -440,10 +522,14 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             logger=True,
             sync_dist=torch.cuda.device_count() > 1,
         )
-        self.log("train/noise_std", self.get_current_noise_std(), prog_bar=False, logger=True)
+        self.log(
+            "train/noise_std",
+            self.get_current_noise_std(),
+            prog_bar=False,
+            logger=True,
+        )
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
-        rgb_image, _ = self.process_batch(batch)
         backup_para = copy_cyclegan_params(self.G_AB, self.G_BA)
         load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
         self.G_AB.eval()
@@ -462,8 +548,8 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         ) % self.hparams.log_images_on_step_n == 0:
             # Store fixed RGB input on first log
             if torch.all(self.fixed_A == 0):
-                real_rgb, _ = self.process_batch(batch)
-                self.fixed_A = real_rgb[:8].clone().detach()
+                real_rgb = batch["rgb"]["image"]
+                self.fixed_A = real_rgb[:self.fixed_A_batch_size].clone().detach()
 
             with torch.no_grad():
                 # RGB -> HSI -> RGB cycle
@@ -496,14 +582,16 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
                     .detach()
                     .cpu()
                 )
-                self.logger.experiment.log(
-                    {
-                        "generated_samples": wandb.Image(
-                            sample_grid,
-                            caption="RGB | Fake HSI | Reconstructed RGB",
-                        )
-                    }
-                )
+
+                if hasattr(self.logger, "experiment"):
+                    self.logger.experiment.log(
+                        {
+                            "generated_samples": wandb.Image(
+                                sample_grid,
+                                caption="RGB | Fake HSI | Reconstructed RGB",
+                            )
+                        }
+                    )
 
         load_cyclegan_params(self.G_AB, self.G_BA, backup_para)
         self.G_AB.train()
@@ -530,9 +618,12 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
                 if i >= self.hparams.num_val_batches:
                     break
 
-                real_rgb, real_hsi = self.process_batch(batch)
-                real_rgb = real_rgb.to(self.device, non_blocking=True)
-                real_hsi = real_hsi.to(self.device, non_blocking=True)
+                real_rgb = batch["rgb"]["image"]
+                real_hsi = batch["hsi"]["image"]
+                real_rgb = real_rgb.to(self.device)
+                real_hsi = real_hsi.to(self.device)
+                rgb_labels = batch["rgb"].get("label", None)
+                hsi_labels = batch["hsi"].get("label", None)
 
                 # Generate RGB -> HSI
                 fake_hsi = self.G_AB(real_rgb)
@@ -575,8 +666,8 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
-                self.spectra_metric.update(real_hsi, is_fake=False)
-                self.spectra_metric.update(fake_hsi, is_fake=True)
+                self.spectra_metric.update(real_norm, is_fake=False, labels=hsi_labels)
+                self.spectra_metric.update(fake_norm, is_fake=True, labels=rgb_labels)
 
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
@@ -598,15 +689,32 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             )
 
         fig = self.spectra_metric.plot()
-        if fig is not None:
+        if fig is not None and hasattr(self.logger, "experiment"):
             self.logger.experiment.log({"Mean Spectra": wandb.Image(fig)})
         self.spectra_metric.reset()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def on_predict_start(self) -> None:
+        datamodule = self.trainer.datamodule
+        predict_dataloader = datamodule.predict_dataloader()
+
+        if len(predict_dataloader) > 1:
+            print(
+                "WARNING: More than one predict dataloader detected. "
+                "Probably using JointRGBHSIDataModule, but CycleGAN predict only uses the rgb dataloader."
+                "All images with channels different than rgb_channels will be ignored."
+                "Use --data.init_args.rgb_only=True to avoid this warning."
+            )
+
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        real_rgb = batch[0] if isinstance(batch, (list, tuple)) else batch
+        real_rgb = batch['image']
+
+        if real_rgb.size(1) != self.hparams.rgb_channels:
+            return
+
+        labels = batch.get('label', None)
         backup_para = copy_cyclegan_params(self.G_AB, self.G_BA)
         load_cyclegan_params(self.G_AB, self.G_BA, self.avg_param_G)
         self.G_AB.eval()
@@ -618,6 +726,7 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             fake_batch=fake_hsi,
             batch_idx=batch_idx,
             pred_hyperspectral=self.hparams.pred_hyperspectral,
+            labels=labels.tolist() if labels is not None else None,
         )
 
         load_cyclegan_params(self.G_AB, self.G_BA, backup_para)
@@ -650,5 +759,3 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             ]
         else:
             print("Warning: avg_param_G not found in checkpoint.")
-        del checkpoint["hyper_parameters"]
-        del checkpoint["datamodule_hyper_parameters"]

@@ -107,7 +107,7 @@ class MILK10kDataset(Dataset):
             # Filter to melanoma vs nevus only
             mask = (self.data["MEL"] == 1) | (self.data["NV"] == 1)
             self.data = self.data[mask].reset_index(drop=True)
-            self.class_names = ["melanoma", "nevus"]
+            self.class_names = ["melanoma", "melanocytic_nevus"]
 
         if self.task_config.return_mask:
             # Remove samples without masks
@@ -238,10 +238,7 @@ class MILK10kDataset(Dataset):
         if self.task_config.return_mask:
             sample.mask = mask
 
-        return_sample = sample.to_tuple()
-        if len(return_sample) == 1:
-            return return_sample[0]
-        return return_sample
+        return sample.to_dict()
 
     @property
     def labels(self) -> np.ndarray:

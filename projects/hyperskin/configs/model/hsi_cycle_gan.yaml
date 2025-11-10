@@ -9,11 +9,12 @@ model:
     label_smoothing: 0.2
     noise_decay_steps: 12000
     # noise_std: 0.0
-    noise_std_start: 0
+    noise_std_start: 0.5
     noise_std_end: 0
     num_val_batches: 8
     log_images_on_step_n: 100
     val_check_interval: 100
+    aux_num_classes: 2
     model_opt:
       netG: "unet_256"
       netD: "basic"

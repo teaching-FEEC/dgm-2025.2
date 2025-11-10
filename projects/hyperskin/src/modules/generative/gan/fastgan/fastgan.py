@@ -200,24 +200,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         """Properly initialize EMA params on correct device."""
         self.avg_param_G = [p.data.clone().detach().to(self.device) for p in self.netG.parameters()]
 
-    def get_conditioning(self, batch):
-        """Extract conditioning from batch based on configuration"""
-        if not self.hparams.use_spade:
-            return None
-
-        if self.hparams.spade_conditioning == "rgb_mask":
-            _, rgb_mask, _ = self.process_batch(batch, "rgb")
-            rgb_mask = rgb_mask.to(self.device)
-            if rgb_mask.ndim == 3: # (B, H, W)
-                rgb_mask = rgb_mask.unsqueeze(1)  # (B, 1, H, W)
-            return rgb_mask.float()
-        elif self.hparams.spade_conditioning == "rgb_image":
-            rgb_image, _, _ = self.process_batch(batch, "rgb")
-            rgb_image = rgb_image.to(self.device)
-            return rgb_image
-        else:
-            raise ValueError(f"Invalid conditioning: {self.hparams.spade_conditioning}")
-
     def train_d_step(self, real_image, fake_images, seg, label="real"):
         """Discriminator step with optional SPADE conditioning"""
         if label == "real":
@@ -246,29 +228,29 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
             return err, pred.mean()
 
-    def process_batch(self, batch, key: Optional[str] = None):
-        if not isinstance(batch, dict) and key is not None:
-            raise ValueError("Batch is not a dict, but key was provided.")
-
-        if isinstance(batch, dict) and key is not None:
-            image, mask, label = batch[key]
-            return image, mask, label
+    def get_real_image(self, batch):
+        if "hsi" in batch:
+            real_image = batch["hsi"]["image"]
         else:
-            real_image, real_mask, label = batch
-            return real_image, real_mask, label
+            real_image = batch["image"]
+        return real_image
+
+    def get_conditioning(self, batch):
+        seg = None
+        if self.hparams.use_spade:
+            if self.hparams.spade_conditioning == "rgb_mask":
+                seg = batch["mask"]
+                if seg.ndim == 3:  # (B, H, W)
+                    seg = seg.unsqueeze(1)  # (B, 1, H, W)
+            elif self.hparams.spade_conditioning == "rgb_image":
+                seg = batch["image"]
+            else:
+                raise ValueError(f"Invalid spade_conditioning: {self.hparams.spade_conditioning}")
+        return seg
 
     def training_step(self, batch, batch_idx):
-        if isinstance(batch, dict):
-            real_image, real_mask, label = self.process_batch(batch, "hsi")
-        elif len(batch) == 3:
-            real_image, real_mask, label = batch
-        elif len(batch) == 2:
-            real_image, label = batch
-        else:
-            raise ValueError("Batch format not recognized.")
-
-        # Get conditioning if using SPADE
-        seg = self.get_conditioning(batch) if self.hparams.use_spade else None
+        real_image = self.get_real_image(batch)
+        seg = self.get_conditioning(batch)
 
         batch_size = real_image.size(0)
         noise = torch.randn(batch_size, self.hparams.nz, device=self.device, dtype=torch.float32)
@@ -394,17 +376,8 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 if i >= self.hparams.num_val_batches:
                     break
 
-                if isinstance(batch, dict):
-                    real_image, real_mask, label = self.process_batch(batch, "hsi")
-                    seg = self.get_conditioning(batch)
-                else:
-                    if len(batch) == 3:
-                        real_image, real_mask, label = batch
-                    elif len(batch) == 2:
-                        real_image, label = batch
-                    else:
-                        raise ValueError("Batch format not recognized.")
-                    seg = None
+                real_image = self.get_real_image(batch)
+                seg = self.get_conditioning(batch)
 
                 real_image = real_image.to(self.device, non_blocking=True)
                 batch_size = real_image.size(0)
@@ -472,18 +445,36 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def on_predict_start(self) -> None:
+        datamodule = self.trainer.datamodule
+        predict_dataloader = datamodule.predict_dataloader()
+
+        if len(predict_dataloader) > 1:
+            print(
+                "WARNING: More than one predict dataloader detected. "
+                "Probably using JointRGBHSIDataModule, but CycleGAN predict only uses the rgb dataloader."
+                "All images with channels different than rgb_channels will be ignored."
+                "Use --data.init_args.rgb_only=True to avoid this warning."
+            )
+
+
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        batch_size = batch["image"].size(0)
+
+        if batch["image"].size(1) != 3:
+            return  # Skip non-RGB images
+
         backup_para = copy_G_params(self.netG)
         load_params(self.netG, self.avg_param_G)
         self.netG.eval()
 
         seg = None
         if self.hparams.use_spade:
-            masks = batch[1] if isinstance(batch, list) and len(batch) > 1 else None
-            seg = batch[0] if self.hparams.spade_conditioning == "rgb_image" else masks
+            masks = batch.get("mask", None)
+            seg = batch.get("image", None) if self.hparams.spade_conditioning == "rgb_image" else masks
 
         with torch.no_grad():
-            noise = torch.randn(len(batch[0]), self.hparams.nz, device=self.device)
+            noise = torch.randn(batch_size, self.hparams.nz, device=self.device)
             fake_imgs = self(noise, seg)
             fake = fake_imgs[0]
 

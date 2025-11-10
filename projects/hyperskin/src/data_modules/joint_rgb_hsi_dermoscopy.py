@@ -35,7 +35,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
         num_workers: int = 8,
         pin_memory: bool = False,
         rgb_only: bool = False,
-        pred_num_samples: int | None = None,
+        pred_num_samples: int | None = 100,
     ):
         super().__init__()  # Ensure Lightning internal hooks exist
 
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         task="GENERATION_MELANOMA_VS_NEVUS",
         train_val_test_split=(1, 0, 0),
         batch_size=8,
-        data_dir="data/milk10k_melanoma_cropped_256",
+        data_dir="data/milk10k_melanoma_nevus_cropped_256",
         image_size=image_size,
         transforms=transforms,
         allowed_labels=["melanoma"]

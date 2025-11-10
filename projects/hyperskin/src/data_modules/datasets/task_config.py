@@ -19,6 +19,15 @@ class DatasetSample:
         if self.label is not None:
             items.append(self.label)
         return tuple(items)
+    def to_dict(self):
+        """Convert to dict."""
+        result = {}
+        result["image"] = self.image
+        if self.mask is not None:
+            result["mask"] = self.mask
+        if self.label is not None:
+            result["label"] = self.label
+        return result
 
 
 @dataclass

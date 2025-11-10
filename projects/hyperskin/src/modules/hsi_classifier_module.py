@@ -194,7 +194,11 @@ class HSIClassifierModule(pl.LightningModule):
 
 
     def model_step(self, batch: Any):
-        x, y = batch
+        if isinstance(batch, dict):
+            x = batch["image"]
+            y = batch["label"]
+        else:
+            x, y = batch
         logits = self.forward(x)
         loss = self.criterion(logits, y)
         preds = torch.argmax(logits, dim=1)

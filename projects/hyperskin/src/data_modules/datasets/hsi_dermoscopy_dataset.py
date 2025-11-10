@@ -68,7 +68,8 @@ HSI_TASK_CONFIGS = {
     ),
     "generation": TaskConfig(return_image=True,
                              binary_classification=True,
-                             label_type="binary"
+                             label_mapping={"melanoma": 0, "dysplastic_nevi": 1},
+                             filter_classes=["melanoma", "dysplastic_nevi"]
                              ),
 }
 
@@ -140,7 +141,7 @@ class HSIDermoscopyDataset(Dataset):
         # Process dysplastic nevi and melanoma
         for label in ["dysplastic_nevi", "melanoma"]:
             for mat_file in paths[label].glob("*.mat"):
-                masks = self._find_masks(mat_file)
+                masks = self.find_masks(mat_file)
                 data.append({"file_path": str(mat_file), "label": label, "masks": masks, "filename": mat_file.stem})
 
         # Process other lesions
@@ -202,7 +203,9 @@ class HSIDermoscopyDataset(Dataset):
         # Filter classes if specified
         if self.task_config.filter_classes:
             original_len = len(self.labels_df)
-            self.labels_df = self.labels_df[self.labels_df["label"].isin(self.task_config.filter_classes)].reset_index(drop=True)
+            self.labels_df = self.labels_df[self.labels_df["label"].isin(self.task_config.filter_classes)].reset_index(
+                drop=True
+            )
             filtered_count = original_len - len(self.labels_df)
             if filtered_count > 0:
                 print(f"Filtered out {filtered_count} samples not in {self.task_config.filter_classes}")
@@ -312,11 +315,7 @@ class HSIDermoscopyDataset(Dataset):
         if self.task_config.return_mask:
             sample.mask = mask
 
-        return_sample = sample.to_tuple()
-
-        if len(return_sample) == 1:
-            return return_sample[0]
-        return return_sample
+        return sample.to_dict()
 
     @property
     def labels(self) -> np.ndarray:
