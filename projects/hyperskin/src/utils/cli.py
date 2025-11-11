@@ -26,7 +26,7 @@ def safe_parse_ckpt_path(self):
         return
     ckpt_path = self.config[self.config.subcommand].get("ckpt_path")
     if ckpt_path and Path(ckpt_path).is_file():
-        ckpt = torch.load(ckpt_path, weights_only=True, map_location="cpu")
+        ckpt = torch.load(ckpt_path, weights_only=False, map_location="cpu")
         hparams = ckpt.get("hyper_parameters", {})
         hparams.pop("_instantiator", None)
         if not hparams:
