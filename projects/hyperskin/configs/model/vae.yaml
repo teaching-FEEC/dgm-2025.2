@@ -24,24 +24,24 @@ trainer:
       log_model: false
 
   callbacks:
-    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
-      init_args:
-        filename: epoch={epoch:02d}-val_loss={val_loss:.4f}
-        monitor: val_loss          # <-- VAE key
-        verbose: true
-        save_last: true
-        mode: min
-        auto_insert_metric_name: false
+    # - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+    #   init_args:
+    #     filename: epoch={epoch:02d}-val_loss={val_loss:.4f}
+    #     monitor: val_loss          # <-- VAE key
+    #     verbose: true
+    #     save_last: true
+    #     mode: min
+    #     auto_insert_metric_name: false
 
-    - class_path: pytorch_lightning.callbacks.EarlyStopping
-      init_args:
-        monitor: val_loss          # <-- VAE key
-        min_delta: 0.00001
-        patience: 50
-        verbose: true
-        mode: min
-        strict: true
+    # - class_path: pytorch_lightning.callbacks.EarlyStopping
+    #   init_args:
+    #     monitor: val_loss          # <-- VAE key
+    #     min_delta: 0.00001
+    #     patience: 50
+    #     verbose: true
+    #     mode: min
+    #     strict: true
 
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
-      init_args:
-        logging_interval: epoch
+    # - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+    #   init_args:
+    #     logging_interval: epoch

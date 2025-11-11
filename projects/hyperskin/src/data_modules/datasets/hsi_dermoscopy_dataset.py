@@ -91,7 +91,7 @@ class HSIDermoscopyDataset(Dataset):
         data_dir: str = "data/hsi_dermoscopy",
         transform: A.Compose | None = None,
         task: TaskConfig | str = "classification_all_classes",
-        force_create_df: bool = False,
+        force_create_df: bool = True,
         save_labels_df: bool = True,
     ):
         self.data_dir = Path(data_dir)
