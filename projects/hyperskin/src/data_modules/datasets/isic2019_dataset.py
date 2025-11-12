@@ -7,35 +7,59 @@ from torch.utils.data import Dataset
 from PIL import Image
 import albumentations as A
 
+if __name__ == "__main__":
+    import pyrootutils
+
+    pyrootutils.setup_root(
+        Path(__file__).parent.parent.parent,
+        project_root_env_var=True,
+        dotenv=True,
+        pythonpath=True,
+        cwd=False,
+    )
+
 from src.data_modules.datasets.task_config import DatasetSample, TaskConfig
 
 
 # Predefined task configs
-MILK10K_TASK_CONFIGS = {
-    "multilabel_classification": TaskConfig(return_label=True, label_type="multilabel"),
-    "binary_classification": TaskConfig(return_label=True, binary_classification=True, label_type="binary"),
-    "segmentation": TaskConfig(return_label=True, return_mask=True, label_type="multilabel"),
-    "generation":  TaskConfig(return_image=True),
+ISIC2019_TASK_CONFIGS = {
+    "multilabel_classification": TaskConfig(
+        return_label=True, label_type="multilabel"
+    ),
+    "binary_classification": TaskConfig(
+        return_label=True, binary_classification=True, label_type="binary"
+    ),
+    "segmentation": TaskConfig(
+        return_label=True, return_mask=True, label_type="multilabel"
+    ),
+    "generation": TaskConfig(return_image=True),
     "generation_unconditional": TaskConfig(return_image=True),
-    "generation_conditional_label": TaskConfig(return_image=True, return_label=True, label_type="multilabel"),
-    "generation_conditional_mask": TaskConfig(return_image=True, return_mask=True),
+    "generation_conditional_label": TaskConfig(
+        return_image=True, return_label=True, label_type="multilabel"
+    ),
+    "generation_conditional_mask": TaskConfig(
+        return_image=True, return_mask=True
+    ),
     "generation_conditional_full": TaskConfig(
-        return_image=True, return_label=True, return_mask=True, label_type="multilabel"
+        return_image=True,
+        return_label=True,
+        return_mask=True,
+        label_type="multilabel",
     ),
     "generation_melanoma_vs_nevus": TaskConfig(
         return_image=True, binary_classification=True, label_type="binary"
     ),
 }
 
-class MILK10kDataset(Dataset):
+
+class ISIC2019Dataset(Dataset):
     """
-    Flexible MILK10k dataset supporting multiple tasks.
+    Flexible ISIC2019 dataset supporting multiple tasks.
 
     Args:
         root_dir: Root directory containing the dataset
         transform: Albumentations transform
-        task: TaskConfig or string key from TASK_CONFIGS
-        dermoscopic_only: Filter to dermoscopic images only
+        task: TaskConfig or string key from ISIC2019_TASK_CONFIGS
     """
 
     def __init__(
@@ -43,17 +67,18 @@ class MILK10kDataset(Dataset):
         root_dir: str,
         transform: A.Compose | None = None,
         task: TaskConfig | str = "multilabel_classification",
-        dermoscopic_only: bool = False,
     ):
         self.root_dir = Path(root_dir)
         self.transform = transform
-        self.dermoscopic_only = dermoscopic_only
 
         # Handle task config
         if isinstance(task, str):
-            if task not in MILK10K_TASK_CONFIGS:
-                raise ValueError(f"Unknown task: {task}. Available: {list(MILK10K_TASK_CONFIGS.keys())}")
-            self.task_config = MILK10K_TASK_CONFIGS[task]
+            if task not in ISIC2019_TASK_CONFIGS:
+                raise ValueError(
+                    f"Unknown task: {task}. "
+                    f"Available: {list(ISIC2019_TASK_CONFIGS.keys())}"
+                )
+            self.task_config = ISIC2019_TASK_CONFIGS[task]
         else:
             self.task_config = task
 
@@ -64,43 +89,39 @@ class MILK10kDataset(Dataset):
 
     def _load_data(self):
         """Load metadata and ground truth CSVs."""
-        gt_path = self.root_dir / "MILK10k_Training_GroundTruth.csv"
-        meta_path = self.root_dir / "MILK10k_Training_Metadata.csv"
+        gt_path = self.root_dir / "ISIC_2019_Training_GroundTruth.csv"
+        meta_path = self.root_dir / "ISIC_2019_Training_Metadata.csv"
 
         self.gt_df = pd.read_csv(gt_path)
         self.meta_df = pd.read_csv(meta_path)
-        self.data = pd.merge(self.meta_df, self.gt_df, on="lesion_id")
+        self.data = pd.merge(self.meta_df, self.gt_df, on="image")
 
     def _setup_classes(self):
         """Setup class mappings."""
         self.class_map = {
-            "AKIEC": "actinic_keratosis_intraepidermal_carcinoma",
-            "BCC": "basal_cell_carcinoma",
-            "BEN_OTH": "other_benign_proliferations",
-            "BKL": "benign_keratinocytic_lesion",
-            "DF": "dermatofibroma",
-            "INF": "inflammatory_infectious_conditions",
-            "MAL_OTH": "other_malignant_proliferations",
             "MEL": "melanoma",
             "NV": "melanocytic_nevus",
-            "SCCKA": "squamous_cell_carcinoma_keratoacanthoma",
-            "VASC": "vascular_lesions_hemorrhage",
+            "BCC": "basal_cell_carcinoma",
+            "AK": "actinic_keratosis",
+            "BKL": "benign_keratinocytic_lesion",
+            "DF": "dermatofibroma",
+            "VASC": "vascular_lesions",
+            "SCC": "squamous_cell_carcinoma",
+            "UNK": "unknown",
         }
         self.class_codes = list(self.class_map.keys())
         self.class_names = [self.class_map[c] for c in self.class_codes]
 
     def _filter_data(self):
         """Filter dataset based on task requirements."""
-        # Filter dermoscopic images
-        if self.dermoscopic_only:
-            self.data = self.data[self.data["image_type"] == "dermoscopic"].reset_index(drop=True)
-
-        # Expand for multiple crops per lesion
+        # Expand for multiple crops per image
         self._expand_crops()
 
-        # Add masks column
-            # used in DatasetExporter
-        self.data["masks"] = self.data["image_path"].apply(self.find_masks)
+        # Preload masks efficiently
+        self._index_masks()
+
+        # Add mask information if available
+        self.data["masks"] = self.data["image"].map(self.mask_index).fillna(np.nan)
 
         # Task-specific filtering
         if self.task_config.binary_classification:
@@ -113,29 +134,60 @@ class MILK10kDataset(Dataset):
             # Remove samples without masks
             self.data = self.data.dropna(subset=["masks"]).reset_index(drop=True)
 
+
+    def _index_masks(self):
+        """Build a map of image_id → semicolon-separated mask paths."""
+        masks_dir = self.root_dir / "masks"
+        self.mask_index = {}
+
+        if not masks_dir.exists():
+            return
+
+        # Scan all mask files once
+        for mask_file in masks_dir.glob("*_mask.png"):
+            stem = mask_file.stem  # e.g., "ISIC_12345_crop2_mask"
+            # Remove the '_mask' suffix
+            base_id = stem.replace("_mask", "")
+            # Some may be cropped variants like ISIC_12345_crop2
+            self.mask_index.setdefault(base_id.split("_crop")[0], [])
+            # Use the exact base_id to differentiate crop-level masks
+            self.mask_index[base_id.split("_crop")[0]].append(str(mask_file))
+
+        # Merge variants into image_id level
+        clean_index = {}
+        for key, paths in self.mask_index.items():
+            clean_index[key] = ";".join(sorted(paths)) if paths else None
+
+        self.mask_index = clean_index
+
     def _expand_crops(self):
-        """Expand dataset to include all cropped variants."""
+        """Efficiently expand dataset to include all cropped variants."""
+        images_dir = self.root_dir / "images"
+        if not images_dir.exists():
+            raise FileNotFoundError(f"Images directory not found: {images_dir}")
+
+        # Index all image files once
+        all_images = list(images_dir.glob("*.jpg"))
+        image_map = {}
+
+        for img_path in all_images:
+            stem = img_path.stem  # e.g. ISIC_12345_crop1 or ISIC_12345
+            base_id = stem.split("_crop")[0]
+            image_map.setdefault(base_id, []).append(str(img_path))
+
+        # Prepare expanded rows
         expanded_rows = []
-
         for _, row in self.data.iterrows():
-            lesion_dir = self.root_dir / "images" / row["lesion_id"]
-            crop_matches = sorted(lesion_dir.glob(f"{row['isic_id']}_crop*.jpg"))
-
-            if not crop_matches:
-                unsuffixed = lesion_dir / f"{row['isic_id']}.jpg"
-                if unsuffixed.exists():
-                    row["image_path"] = str(unsuffixed)
-                    expanded_rows.append(row.copy())
+            image_id = row["image"]
+            if image_id not in image_map:
                 continue
-
-            for crop_img in crop_matches:
+            for img_path in image_map[image_id]:
                 new_row = row.copy()
-                new_row["image_path"] = str(crop_img)
+                new_row["image_path"] = img_path
                 expanded_rows.append(new_row)
 
         self.data = pd.DataFrame(expanded_rows).reset_index(drop=True)
 
-    # used in DatasetExporter
     def find_masks(self, image_path: str) -> str | None:
         """Find associated mask files for an image."""
         masks_dir = self.root_dir / "masks"
@@ -143,12 +195,13 @@ class MILK10kDataset(Dataset):
             return None
 
         image_path = Path(image_path)
-        isic_id = image_path.stem.split("_crop")[0]
-        base_path = masks_dir / image_path.parent.name
+        image_id = image_path.stem.split("_crop")[0]
 
-        masks = sorted(base_path.glob(f"{isic_id}_crop*_mask.png"))
+        # Look for crop-specific masks
+        masks = sorted(masks_dir.glob(f"{image_id}_crop*_mask.png"))
         if not masks:
-            plain_mask = base_path / f"{isic_id}_mask.png"
+            # Look for plain mask
+            plain_mask = masks_dir / f"{image_id}_mask.png"
             if plain_mask.exists():
                 masks = [plain_mask]
 
@@ -173,7 +226,12 @@ class MILK10kDataset(Dataset):
             return None
 
         mask_paths = mask_str.split(";")
-        masks = [np.array(Image.open(p).convert("L"), dtype=np.uint8) for p in mask_paths]
+        if len(mask_paths) == 0:
+            return None
+        masks = [
+            np.array(Image.open(p).convert("L"), dtype=np.uint8)
+            for p in mask_paths
+        ]
 
         # Combine multiple masks
         combined = masks[0].copy()
@@ -194,12 +252,13 @@ class MILK10kDataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> tuple:
+    def __getitem__(self, idx: int) -> dict:
         """
         Get a sample from the dataset.
 
         Returns:
-            tuple: (image, [mask,] [label,])
+            dict: {"image": tensor, "mask": tensor (optional), "label":
+                   tensor (optional)}
         """
         # Load image
         image = self._load_image(idx)
@@ -209,7 +268,9 @@ class MILK10kDataset(Dataset):
         if self.task_config.return_mask:
             mask = self._load_mask(idx)
             if mask is None:
-                raise ValueError(f"Mask required but not found for idx {idx}")
+                raise ValueError(
+                    f"Mask required but not found for idx {idx}"
+                )
 
         # Apply transforms
         if self.transform:
@@ -232,7 +293,11 @@ class MILK10kDataset(Dataset):
 
         if self.task_config.return_label:
             label = self._get_label(idx)
-            dtype = torch.long if self.task_config.label_type == "binary" else torch.float
+            dtype = (
+                torch.long
+                if self.task_config.label_type == "binary"
+                else torch.float
+            )
             sample.label = torch.tensor(label, dtype=dtype)
 
         if self.task_config.return_mask:
@@ -244,3 +309,19 @@ class MILK10kDataset(Dataset):
     def labels(self) -> np.ndarray:
         """Get all labels as numpy array."""
         return np.array([self._get_label(i) for i in range(len(self))])
+
+if __name__ == "__main__":
+    # Simple test
+    dataset = ISIC2019Dataset(
+        root_dir="data/ISIC2019",
+        task="segmentation",
+    )
+    print(f"Dataset size: {len(dataset)}")
+    random_idx = np.random.randint(len(dataset))
+    sample = dataset[random_idx]
+    print(f"Sample keys: {sample.keys()}")
+    print(f"Image shape: {sample['image'].shape}")
+    if "label" in sample:
+        print(f"Label: {sample['label']}")
+    if "mask" in sample:
+        print(f"Mask shape: {sample['mask'].shape}")

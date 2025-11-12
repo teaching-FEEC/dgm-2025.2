@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Any
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 import gdown
 import albumentations as A
@@ -11,7 +12,7 @@ import pytorch_lightning as pl
 import torch
 
 
-class BaseDataModule(pl.LightningDataModule):
+class BaseDataModule:
     """
     Base class for PyTorch Lightning DataModules that provides:
 

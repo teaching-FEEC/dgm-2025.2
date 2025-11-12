@@ -21,6 +21,9 @@ Heavily commented for clarity.
 # ---------------------------
 from pdb import run
 from typing import Dict, List, Optional, Tuple
+import os
+from scipy.io import savemat
+from torchvision.utils import save_image
 
 # ---------------------------
 # Third-party imports
@@ -629,3 +632,110 @@ class VAE(pl.LightningModule):
             betas=tuple(self.hparams.betas),
             weight_decay=self.hparams.weight_decay
         )
+    #predict vae images 
+    def on_predict_start(self) -> None:
+        """Prepare output folder and counters for predict runs."""
+        self._pred_output_dir = getattr(self.hparams, "pred_output_dir", "generated_samples")
+        os.makedirs(self._pred_output_dir, exist_ok=True)
+        # total number of samples requested (0 or None -> generate per-batch without hard limit)
+        total = getattr(self.hparams, "pred_num_samples", None)
+        self._pred_total = int(total) if (total is not None and total != "") else 0
+        self._pred_count = 0
+
+        # optional global min/max for denormalization (for hyperspectral outputs)
+        self._pred_global_min = getattr(self.hparams, "pred_global_min", None)
+        self._pred_global_max = getattr(self.hparams, "pred_global_max", None)
+
+    def _denormalize_hsi(self, tensor: torch.Tensor) -> torch.Tensor:
+        """If pred_global_min/max provided and match channels, map [0,1]->[min,max]."""
+        if self._pred_global_min is None or self._pred_global_max is None:
+            return tensor
+        try:
+            gmin = torch.as_tensor(self._pred_global_min, device=tensor.device, dtype=tensor.dtype)
+            gmax = torch.as_tensor(self._pred_global_max, device=tensor.device, dtype=tensor.dtype)
+            # expect (C,) shapes
+            if gmin.ndim == 1 and gmin.numel() == tensor.size(1):
+                # tensor shape (N,C,H,W)
+                tensor = tensor * (gmax.view(1, -1, 1, 1) - gmin.view(1, -1, 1, 1)) + gmin.view(1, -1, 1, 1)
+        except Exception:
+            pass
+        return tensor
+
+    def _save_generated_batch(self, gen: torch.Tensor) -> None:
+        """Save generated batch to disk and optionally log a visualization to W&B.
+        gen: (N, C, H, W) in torch, decoder outputs ~[0,1] (sigmoid)."""
+        n = gen.size(0)
+        for i in range(n):
+            global_idx = self._pred_count + i
+            base = os.path.join(self._pred_output_dir, f"sample_{global_idx:06d}")
+            # save hyperspectral/full tensor (.mat)
+            if getattr(self.hparams, "pred_hyperspectral", False):
+                arr = gen[i].detach().cpu().numpy()  # (C,H,W)
+                try:
+                    savemat(base + ".mat", {"data": arr})
+                except Exception:
+                    # fallback to numpy save
+                    np.save(base + ".npy", arr)
+            # save visualization PNG (HSI -> mean->RGB)
+            vis = gen[i:i+1]  # keep batch dim
+            if vis.size(1) > 3:
+                vis = vis.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+            # ensure [0,1] range for png
+            try:
+                save_image(vis.clamp(0, 1), base + ".png", normalize=False)
+            except Exception:
+                # fallback: log warning
+                print(f"[VAE] failed saving image for {base}.png")
+
+            # Optionally log the image to wandb
+            if hasattr(self.logger, "experiment") and self.logger.experiment is not None:
+                try:
+                    img = make_grid(vis, nrow=1, normalize=False).cpu()
+                    self.logger.experiment.log({f"pred/sample_{global_idx:06d}": wandb.Image(img)})
+                except Exception:
+                    pass
+
+    def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
+        """Generate and save samples during a predict run.
+
+        Behavior:
+          - Respects model.hparams.pred_num_samples as a global cap (if set).
+          - Generates min(batch_size, remaining) samples per incoming batch.
+          - Saves full hyperspectral cubes (.mat/.npy) when pred_hyperspectral=True.
+          - Always saves a PNG visualization (HSI -> mean->RGB if channels>3).
+        """
+        # If user requested a limited total and we've finished, skip
+        if getattr(self, "_pred_total", 0) and getattr(self, "_pred_count", 0) >= self._pred_total:
+            return None
+
+        # Attempt to extract an image tensor from the incoming batch to get batch size.
+        try:
+            img = self._unwrap_image_from_batch(batch)
+            if torch.is_tensor(img):
+                batch_size = int(img.size(0))
+            else:
+                batch_size = 1
+        except Exception:
+            # fallback: assume batch of size 1
+            batch_size = 1
+
+        remaining = max(0, self._pred_total - self._pred_count) if self._pred_total else batch_size
+        n = min(batch_size, remaining) if self._pred_total else batch_size
+        if n <= 0:
+            return None
+
+        z = torch.randn(n, self.hparams.latent_dim, device=self.device, dtype=torch.float32)
+        with torch.no_grad():
+            gen = self.decoder(z).detach()  # (n, C, H, W)
+
+            # If global min/max provided, denormalize (VAE decoder outputs ~[0,1])
+            gen = self._denormalize_hsi(gen)
+
+        # Save and log
+        self._save_generated_batch(gen)
+
+        # update counters
+        self._pred_count = getattr(self, "_pred_count", 0) + n
+
+        # return generated for potential programmatic consumption
+        return gen

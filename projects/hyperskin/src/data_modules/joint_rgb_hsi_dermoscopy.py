@@ -1,8 +1,10 @@
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 import pytorch_lightning as pl
+
+from src.samplers.finite import FiniteSampler
 
 if __name__ == "__main__":
     import pyrootutils
@@ -16,10 +18,11 @@ if __name__ == "__main__":
     )
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.data_modules.milk10k import MILK10kDataModule
+from src.data_modules.isic2019 import ISIC2019DataModule
 
 
 class JointRGBHSIDataModule(pl.LightningDataModule):
-    """Parent DataModule that wraps both HSI Dermoscopy and RGB MILK10k DataModules.
+    """Parent DataModule that wraps both HSI Dermoscopy and RGB DataModules.
 
     It doesn't merge datasets; instead, it exposes a dictionary of dataloaders
     (HSI first, then RGB) for training, validation, and testing.
@@ -29,38 +32,54 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
     def __init__(
         self,
         hsi_config: dict,
-        milk10k_config: dict,
+        rgb_config: dict,
+        rgb_dataset: Literal["milk10k", "isic2019"] = "milk10k",
         num_workers: int = 8,
         pin_memory: bool = False,
+        rgb_only: bool = False,
+        pred_num_samples: int | None = 100,
     ):
         super().__init__()  # Ensure Lightning internal hooks exist
 
         # Saves configs for LightningCLI and adds `_log_hyperparams`
         self.save_hyperparameters({
             "hsi_config": hsi_config,
-            "milk10k_config": milk10k_config,
+            "rgb_config": rgb_config,
             "num_workers": num_workers,
             "pin_memory": pin_memory,
+            "rgb_only": rgb_only,
+            "pred_num_samples": pred_num_samples,
         })
 
         # Now safely build internal datamodules
         self.hsi_dm = HSIDermoscopyDataModule(**hsi_config)
-        self.rgb_dm = MILK10kDataModule(**milk10k_config)
+        if rgb_dataset == "milk10k":
+            self.rgb_dm = MILK10kDataModule(**rgb_config)
+        elif rgb_dataset == "isic2019":
+            self.rgb_dm = ISIC2019DataModule(**rgb_config)
+        else:
+            raise ValueError(f"Unsupported rgb_dataset: {rgb_dataset}")
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
     def prepare_data(self):
         """Prepare both datamodules."""
-        self.hsi_dm.prepare_data()
+        if not self.hparams.rgb_only:
+            self.hsi_dm.prepare_data()
         self.rgb_dm.prepare_data()
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         """Setup both datamodules."""
-        self.hsi_dm.setup(stage)
+        if not self.hparams.rgb_only:
+            self.hsi_dm.setup(stage)
         self.rgb_dm.setup(stage)
 
     def train_dataloader(self):
         """Return a dict of training dataloaders: {'hsi': ..., 'rgb': ...}."""
+        if self.hparams.rgb_only:
+            return {
+                "rgb": self.rgb_dm.train_dataloader(),
+            }
         return {
             "hsi": self.hsi_dm.train_dataloader(),
             "rgb": self.rgb_dm.train_dataloader(),
@@ -68,35 +87,71 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         """Return validation dataloaders dict."""
-        return {
-            "hsi": self.hsi_dm.val_dataloader(),
-            "rgb": self.rgb_dm.val_dataloader(),
-        }
+        if self.hparams.rgb_only:
+            return self.rgb_dm.val_dataloader()
+        return [
+            self.hsi_dm.val_dataloader(),
+            self.rgb_dm.val_dataloader()
+        ]
 
     def test_dataloader(self):
         """Return test dataloaders dict."""
-        return {
-            "hsi": self.hsi_dm.test_dataloader(),
-            "rgb": self.rgb_dm.test_dataloader(),
-        }
+        if self.hparams.rgb_only:
+            return self.rgb_dm.test_dataloader()
+        return [
+            self.hsi_dm.test_dataloader(),
+            self.rgb_dm.test_dataloader(),
+        ]
 
     def predict_dataloader(self):
         """Return both predict dataloaders (if needed)."""
-        return {
-            "hsi": self.hsi_dm.predict_dataloader(),
-            "rgb": self.rgb_dm.predict_dataloader(),
-        }
+        if self.hparams.rgb_only:
+            if self.hparams.pred_num_samples:
+                sampler = FiniteSampler(self.rgb_dm.predict_dataloader().dataset,
+                                        self.hparams.pred_num_samples)
+                return torch.utils.data.DataLoader(
+                    self.rgb_dm.predict_dataloader().dataset,
+                    batch_size=self.hparams.rgb_config.get("batch_size", 1),
+                    sampler=sampler,
+                    num_workers=self.num_workers,
+                    pin_memory=self.pin_memory,
+                )
+            else:
+                return self.rgb_dm.predict_dataloader()
+        else:
+            dataloaders = []
+            for dm in [self.hsi_dm, self.rgb_dm]:
+                if self.hparams.pred_num_samples:
+                    sampler = FiniteSampler(
+                        dm.predict_dataloader().dataset,
+                        self.hparams.pred_num_samples,
+                    )
+                    dl = torch.utils.data.DataLoader(
+                        dm.predict_dataloader().dataset,
+                        batch_size=dm.hparams.get("batch_size", 1),
+                        sampler=sampler,
+                        num_workers=self.num_workers,
+                        pin_memory=self.pin_memory,
+                    )
+                    dataloaders.append(dl)
+                else:
+                    dataloaders.append(dm.predict_dataloader())
+            return dataloaders
 
-    def teardown(self, stage: Optional[str] = None):
+    def teardown(self, stage: str | None = None):
         """Teardown both datamodules."""
-        self.hsi_dm.teardown(stage)
+        if not self.hparams.rgb_only:
+            self.hsi_dm.teardown(stage)
         self.rgb_dm.teardown(stage)
 
     def _get_tags_and_run_name(self):
         """Attach automatic tags and run name inferred from hparams."""
 
-        tags, run_name = self.hsi_dm._get_tags_and_run_name()
-        run_name = run_name.replace("hsi_", "hsi_rgb_")
+        if not self.hparams.rgb_only:
+            tags, run_name = self.hsi_dm._get_tags_and_run_name()
+            run_name = run_name.replace("hsi_", "hsi_rgb_")
+        else:
+            tags, run_name = self.rgb_dm._get_tags_and_run_name()
 
         return tags, run_name
 
@@ -137,13 +192,13 @@ if __name__ == "__main__":
         task="GENERATION_MELANOMA_VS_NEVUS",
         train_val_test_split=(1, 0, 0),
         batch_size=8,
-        data_dir="data/milk10k_melanoma_cropped_256",
+        data_dir="data/milk10k_melanoma_nevus_cropped_256",
         image_size=image_size,
         transforms=transforms,
         allowed_labels=["melanoma"]
     )
 
-    dm_joint = JointRGBHSIDataModule(hsi_config=hsi_cfg, milk10k_config=rgb_cfg)
+    dm_joint = JointRGBHSIDataModule(hsi_config=hsi_cfg, rgb_config=rgb_cfg)
 
     dm_joint.prepare_data()
     dm_joint.setup()

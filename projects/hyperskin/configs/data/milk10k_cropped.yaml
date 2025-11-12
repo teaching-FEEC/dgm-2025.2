@@ -8,12 +8,12 @@ data:
     num_workers: 8
     pin_memory: True
     allowed_labels: ['melanoma']
-    data_dir: data/milk10k_melanoma_cropped_256
+    data_dir: data/milk10k_melanoma_nevus_cropped_256
     global_max: [255, 255, 255]
     global_min: [0, 0, 0]
     range_mode: '-1_1'
     infinite_train: True
-    google_drive_id: 1xOkWxJnSKNdDMRa0EsOrCnHsQV9JJ4al
+    google_drive_id: 1SQbJ9lG-lG-MlunXfNeA86I6PJYzmf2L
     
     transforms:
       train:

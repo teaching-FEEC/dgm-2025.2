@@ -654,10 +654,11 @@ class HSIDatasetExporter(DatasetExporter):
 class RGBDatasetExporter(DatasetExporter):
     """Exporter for RGB datasets like MILK10k."""
 
-    def __init__(self, data_module, output_dir: str, **kwargs):
+    def __init__(self, data_module, output_dir: str, rgb_dataset_cls, **kwargs):
         # Override any hyperspectral-specific settings
         kwargs.pop("global_min", None)
         kwargs.pop("global_max", None)
+        self.rgb_dataset_cls = rgb_dataset_cls
         super().__init__(
             data_module,
             output_dir,
@@ -667,9 +668,7 @@ class RGBDatasetExporter(DatasetExporter):
         )
 
     def _get_full_dataset(self):
-        from src.data_modules.datasets.milk10k_dataset import MILK10kDataset
-
-        return MILK10kDataset(
+        return self.rgb_dataset_cls(
             root_dir=self.data_module.hparams.data_dir,
             task=self.data_module.hparams.task,
         )

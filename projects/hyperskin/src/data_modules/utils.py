@@ -1,5 +1,6 @@
 from typing import Optional
 import numpy as np
+import torch
 
 
 def _crop_with_bbox(img: np.ndarray, mask: np.ndarray, bbox_scale: float) -> Optional[np.ndarray]:

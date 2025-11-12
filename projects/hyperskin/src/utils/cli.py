@@ -19,9 +19,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
 import torch
-from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyTask
-torch.serialization.add_safe_globals([HSIDermoscopyTask])
-
 
 def safe_parse_ckpt_path(self):
     """Same as original, but silently continue on parse failure."""
@@ -29,7 +26,7 @@ def safe_parse_ckpt_path(self):
         return
     ckpt_path = self.config[self.config.subcommand].get("ckpt_path")
     if ckpt_path and Path(ckpt_path).is_file():
-        ckpt = torch.load(ckpt_path, weights_only=True, map_location="cpu")
+        ckpt = torch.load(ckpt_path, weights_only=False, map_location="cpu")
         hparams = ckpt.get("hyper_parameters", {})
         hparams.pop("_instantiator", None)
         if not hparams:
@@ -280,6 +277,7 @@ class CustomLightningCLI(LightningCLI):
         finally:
             LightningCLI._parse_ckpt_path = original
 
+
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_argument("--ignore_warnings", default=False, type=bool, help="Ignore warnings")
         parser.add_argument("--git_commit_before_fit", default=False, type=bool, help="Git commit before training")
@@ -290,6 +288,13 @@ class CustomLightningCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
         if self.config[self.subcommand].get("ignore_warnings"):
             warnings.filterwarnings("ignore")
+        override_config = self.parser.parse_args()
+
+        # override_config is Namespace
+        # use it to override self.config, which is also Namespace
+        for key, value in vars(override_config).items():
+            if value is not None:
+                setattr(self.config, key, value)
 
     def before_fit(self) -> None:
         if self.config.fit.get("git_commit_before_fit") and not os.environ.get("DEBUG", False):

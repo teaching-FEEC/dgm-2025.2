@@ -2,10 +2,19 @@ data:
   class_path: data_modules.JointRGBHSIDataModule
   init_args:
     hsi_config:
-      task: GENERATION
+      task: 
+        return_image: True
+        return_mask: False
+        return_label: False
+        binary_classification: True
+        label_mapping:
+          melanoma: 0
+          dysplastic_nevi: 1
+        filter_classes: [melanoma, dysplastic_nevi]
+
       train_val_test_split: [0.7, 0.15, 0.15]
       image_size: 256
-      batch_size: 30
+      batch_size: 4
       num_workers: 8
       pin_memory: True
       data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
@@ -20,8 +29,9 @@ data:
       range_mode: '-1_1'
       infinite_train: True
       normalize_mask_tanh: True
-      allowed_labels: [melanoma]
-      images_only: True
+      allowed_labels: [melanoma, 
+      # dysplastic_nevi
+      ]
 
       transforms:
         train:
@@ -55,20 +65,26 @@ data:
           - class_path: "ToTensorV2"
             init_args: {}
     milk10k_config:
-      task: GENERATION_MELANOMA_VS_NEVUS
+      task: 
+        return_image: True
+        return_mask: False
+        return_label: False
+        binary_classification: True
+        label_type: binary
       train_val_test_split: [1, 0, 0]
       image_size: ${data.init_args.hsi_config.image_size}
-      batch_size: 30
+      batch_size: 4
       num_workers: 8
       pin_memory: True
-      data_dir: data/milk10k_melanoma_cropped_256
-      allowed_labels: [melanoma]
+      data_dir: data/isic2019_cropped_256
+      allowed_labels: [melanoma, 
+      # melanocytic_nevus
+      ]
       # global_max: [255, 255, 255]
       # global_min: [0, 0, 0]
       # range_mode: '-1_1'
       infinite_train: True
-      google_drive_id: 1xOkWxJnSKNdDMRa0EsOrCnHsQV9JJ4al
-      images_only: True
+      google_drive_id: 1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP
 
       transforms:
         train:
