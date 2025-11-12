@@ -20,12 +20,14 @@ from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import weights_init
 from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
 from src.models.fastgan.fastgan import Generator, Discriminator
+from pytorch_lightning.trainer.trainer import TrainerFn
 
 # Import SPADE versions
 from src.models.fastgan.spade_fastgan import GeneratorSPADE, DiscriminatorSPADE
 from src.transforms.diffaug import DiffAugment
 import os
 import wandb
+from PIL import Image
 from torchmetrics.image import (
     SpectralAngleMapper,
     RelativeAverageSpectralError,
@@ -35,8 +37,10 @@ from torchmetrics.image import (
 from torchmetrics.image.fid import FrechetInceptionDistance
 from scipy.io import savemat
 
+from src.modules.generative.base_predictor import BasePredictorMixin
+from src.utils.spectra_plot import MeanSpectraMetric
 from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger
-
+from src.utils.utils import _iterate_val_loaders
 warnings.filterwarnings("ignore")
 
 
@@ -58,7 +62,7 @@ def crop_image_by_part(image, part):
 # -------------------
 # GAN Module
 # -------------------
-class FastGANModule(pl.LightningModule):
+class FastGANModule(BasePredictorMixin, pl.LightningModule):
     def __init__(
         self,
         im_size: int = 256,
@@ -73,7 +77,6 @@ class FastGANModule(pl.LightningModule):
         val_check_interval: int = 500,
         num_val_batches: int = 8,
         pred_output_dir: str = "generated_samples",
-        pred_num_samples: int = 100,
         pred_hyperspectral: bool = True,
         pred_global_min: Optional[float | list[float]] = None,
         pred_global_max: Optional[float | list[float]] = None,
@@ -130,9 +133,7 @@ class FastGANModule(pl.LightningModule):
         )
         self.fid.eval()
 
-        self.real_spectra = None
-        self.fake_spectra = None
-        self.lesion_class_name = None
+        self.spectra_metric = MeanSpectraMetric()
 
     def _get_tags_and_run_name(self):
         """Automatically derive tags and a run name from FastGANModule hyperparameters."""
@@ -141,13 +142,12 @@ class FastGANModule(pl.LightningModule):
             return
 
         tags = []
-        run_name = "fastgan_"
-
         if hparams.use_spade:
             tags.append("spade")
-            run_name += "spade_"
-            tags.append(f"cond_{hparams.spade_conditioning}")
-            run_name += f"{hparams.spade_conditioning}_"
+            run_name = "spade_fastgan_"
+        else:
+            run_name = "fastgan_"
+            tags.append("fastgan")
 
         # Core configuration flags
         tags.append(f"imsize_{hparams.im_size}")
@@ -174,58 +174,17 @@ class FastGANModule(pl.LightningModule):
                     "When use_spade=True, datamodule must be JointRGBHSIDataModule to provide RGB conditioning"
                 )
 
-            # Verify that datamodule returns dict batches
-            test_loader = datamodule.train_dataloader()
-            if not isinstance(test_loader, dict):
-                raise ValueError("When use_spade=True, datamodule must return dict batches with 'hsi' and 'rgb' keys")
-            if "rgb" not in test_loader or "hsi" not in test_loader:
-                raise ValueError("Datamodule dict must contain both 'hsi' and 'rgb' keys")
-
-        # Get HSI datamodule for metadata
         if isinstance(datamodule, JointRGBHSIDataModule):
-            hsi_dm = datamodule.hsi_dm
-        else:
-            hsi_dm = datamodule
-
-        if stage == "fit":
-            train_dataset = hsi_dm.data_train
-        elif stage == "validate":
-            train_dataset = hsi_dm.data_val
-        elif stage == "test" or stage == "predict":
-            train_dataset = hsi_dm.data_test
-        else:
-            raise ValueError(f"Unknown stage: {stage}")
-
-        if isinstance(train_dataset, torch.utils.data.ConcatDataset):
-            base_dataset = train_dataset.datasets[0]
-        else:
-            base_dataset = train_dataset
-
-        if isinstance(base_dataset, torch.utils.data.Subset):
-            base_dataset = base_dataset.dataset
-
-        train_indices = hsi_dm.train_indices
-        train_labels = np.array([base_dataset.labels[i] for i in train_indices])
-        unique_labels = np.unique(train_labels)
-
-        if len(unique_labels) == 1:
-            lesion_class_int = unique_labels[0]
-            inverse_labels_map = {v: k for k, v in base_dataset.labels_map.items()}
-            self.lesion_class_name = inverse_labels_map[lesion_class_int]
-
-        # Initialize spectra storage
-        self.real_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
-        self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []} if self.lesion_class_name else None
-
-        # Get global min/max from datamodule if available
+            datamodule = datamodule.hsi_dm
+        # Get global min/max from datamodule
         if (
-            hasattr(hsi_dm, "global_min")
-            and hasattr(hsi_dm, "global_max")
-            and (hsi_dm.global_min is not None)
-            and (hsi_dm.global_max is not None)
+            hasattr(datamodule, "global_min")
+            and hasattr(datamodule, "global_max")
+            and (datamodule.global_min is not None)
+            and (datamodule.global_max is not None)
         ):
-            self.hparams.pred_global_min = hsi_dm.global_min
-            self.hparams.pred_global_max = hsi_dm.global_max
+            self.hparams.pred_global_min = datamodule.global_min
+            self.hparams.pred_global_max = datamodule.global_max
 
     def forward(self, z, seg=None):
         """
@@ -240,24 +199,6 @@ class FastGANModule(pl.LightningModule):
     def on_train_start(self):
         """Properly initialize EMA params on correct device."""
         self.avg_param_G = [p.data.clone().detach().to(self.device) for p in self.netG.parameters()]
-
-    def get_conditioning(self, batch):
-        """Extract conditioning from batch based on configuration"""
-        if not self.hparams.use_spade:
-            return None
-
-        if self.hparams.spade_conditioning == "rgb_mask":
-            _, rgb_mask, _ = self.process_batch(batch, "rgb")
-            rgb_mask = rgb_mask.to(self.device)
-            if rgb_mask.ndim == 3: # (B, H, W)
-                rgb_mask = rgb_mask.unsqueeze(1)  # (B, 1, H, W)
-            return rgb_mask.float()
-        elif self.hparams.spade_conditioning == "rgb_image":
-            rgb_image, _, _ = self.process_batch(batch, "rgb")
-            rgb_image = rgb_image.to(self.device)
-            return rgb_image
-        else:
-            raise ValueError(f"Invalid conditioning: {self.hparams.spade_conditioning}")
 
     def train_d_step(self, real_image, fake_images, seg, label="real"):
         """Discriminator step with optional SPADE conditioning"""
@@ -287,29 +228,29 @@ class FastGANModule(pl.LightningModule):
             err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
             return err, pred.mean()
 
-    def process_batch(self, batch, key: Optional[str] = None):
-        if not isinstance(batch, dict) and key is not None:
-            raise ValueError("Batch is not a dict, but key was provided.")
-
-        if isinstance(batch, dict) and key is not None:
-            image, mask, label = batch[key]
-            return image, mask, label
+    def get_real_image(self, batch):
+        if "hsi" in batch:
+            real_image = batch["hsi"]["image"]
         else:
-            real_image, real_mask, label = batch
-            return real_image, real_mask, label
+            real_image = batch["image"]
+        return real_image
+
+    def get_conditioning(self, batch):
+        seg = None
+        if self.hparams.use_spade:
+            if self.hparams.spade_conditioning == "rgb_mask":
+                seg = batch["mask"]
+                if seg.ndim == 3:  # (B, H, W)
+                    seg = seg.unsqueeze(1)  # (B, 1, H, W)
+            elif self.hparams.spade_conditioning == "rgb_image":
+                seg = batch["image"]
+            else:
+                raise ValueError(f"Invalid spade_conditioning: {self.hparams.spade_conditioning}")
+        return seg
 
     def training_step(self, batch, batch_idx):
-        if isinstance(batch, dict):
-            real_image, real_mask, label = self.process_batch(batch, "hsi")
-        elif len(batch) == 3:
-            real_image, real_mask, label = batch
-        elif len(batch) == 2:
-            real_image, label = batch
-        else:
-            raise ValueError("Batch format not recognized.")
-
-        # Get conditioning if using SPADE
-        seg = self.get_conditioning(batch) if self.hparams.use_spade else None
+        real_image = self.get_real_image(batch)
+        seg = self.get_conditioning(batch)
 
         batch_size = real_image.size(0)
         noise = torch.randn(batch_size, self.hparams.nz, device=self.device, dtype=torch.float32)
@@ -414,25 +355,6 @@ class FastGANModule(pl.LightningModule):
         load_params(self.netG, backup_para)
         self.netG.train()
 
-    def _iterate_val_loaders(self, val_loader):
-        """Handle both dict of dataloaders or single dataloader cases."""
-        if isinstance(val_loader, dict):
-            iterators = {k: iter(v) for k, v in val_loader.items()}
-            while True:
-                batch_dict = {}
-                exhausted = False
-                for name, it in iterators.items():
-                    try:
-                        batch_dict[name] = next(it)
-                    except StopIteration:
-                        exhausted = True
-                        break
-                if exhausted:
-                    break
-                yield batch_dict
-        else:
-            yield from val_loader
-
     def _run_validation(self):
         """Run validation metrics on multiple batches"""
         self.fid.reset()
@@ -450,21 +372,12 @@ class FastGANModule(pl.LightningModule):
         count = 0
 
         with torch.no_grad():
-            for i, batch in enumerate(self._iterate_val_loaders(val_loader)):
+            for i, batch in enumerate(_iterate_val_loaders(val_loader)):
                 if i >= self.hparams.num_val_batches:
                     break
 
-                if isinstance(batch, dict):
-                    real_image, real_mask, label = self.process_batch(batch, "hsi")
-                    seg = self.get_conditioning(batch)
-                else:
-                    if len(batch) == 3:
-                        real_image, real_mask, label = batch
-                    elif len(batch) == 2:
-                        real_image, label = batch
-                    else:
-                        raise ValueError("Batch format not recognized.")
-                    seg = None
+                real_image = self.get_real_image(batch)
+                seg = self.get_conditioning(batch)
 
                 real_image = real_image.to(self.device, non_blocking=True)
                 batch_size = real_image.size(0)
@@ -502,8 +415,8 @@ class FastGANModule(pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
-                if self.lesion_class_name is not None:
-                    self.compute_spectra_statistics(real_norm_clamped, fake_norm_clamped)
+                self.spectra_metric.update(real_norm, is_fake=False)
+                self.spectra_metric.update(fake_norm, is_fake=True)
 
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
@@ -524,164 +437,52 @@ class FastGANModule(pl.LightningModule):
                 sync_dist=True,
             )
 
-            if self.lesion_class_name is not None and (self.real_spectra or self.fake_spectra):
-                self._plot_mean_spectra()
+        fig = self.spectra_metric.plot()
+        if fig is not None:
+            self.logger.experiment.log({"Mean Spectra": wandb.Image(fig)})
+        self.spectra_metric.reset()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def compute_spectra_statistics(self, real_norm, fake_norm):
-        for img, spectra_dict in [
-            (real_norm, self.real_spectra),
-            (fake_norm, self.fake_spectra),
-        ]:
-            for b in range(img.size(0)):
-                image_np = img[b].cpu().numpy().transpose(1, 2, 0)
-                mean_image = image_np.mean(axis=-1)
+    def on_predict_start(self) -> None:
+        datamodule = self.trainer.datamodule
+        predict_dataloader = datamodule.predict_dataloader()
 
-                try:
-                    otsu_thresh = filters.threshold_otsu(mean_image)
-                    binary_mask = mean_image < (otsu_thresh * 1)
+        if len(predict_dataloader) > 1:
+            print(
+                "WARNING: More than one predict dataloader detected. "
+                "Probably using JointRGBHSIDataModule, but CycleGAN predict only uses the rgb dataloader."
+                "All images with channels different than rgb_channels will be ignored."
+                "Use --data.init_args.rgb_only=True to avoid this warning."
+            )
 
-                    if np.any(binary_mask):
-                        spectrum = image_np[binary_mask].mean(axis=0)
-                        spectra_dict[self.lesion_class_name].append(spectrum)
 
-                    normal_skin_mask = ~binary_mask
-                    if np.any(normal_skin_mask):
-                        normal_spectrum = image_np[normal_skin_mask].mean(axis=0)
-                        spectra_dict["normal_skin"].append(normal_spectrum)
-                except Exception:
-                    continue
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        batch_size = batch["image"].size(0)
 
-    def _plot_mean_spectra(self):
-        """Plot mean spectra comparing real vs synthetic data."""
-        import matplotlib.pyplot as plt
-
-        labels = ["normal_skin", self.lesion_class_name]
-
-        real_stats = {}
-        fake_stats = {}
-
-        for label_name in labels:
-            if self.real_spectra.get(label_name):
-                arr = np.array(self.real_spectra[label_name])
-                real_stats[label_name] = {
-                    "mean": np.mean(arr, axis=0),
-                    "std": np.std(arr, axis=0),
-                }
-
-            if self.fake_spectra.get(label_name):
-                arr = np.array(self.fake_spectra[label_name])
-                fake_stats[label_name] = {
-                    "mean": np.mean(arr, axis=0),
-                    "std": np.std(arr, axis=0),
-                }
-
-        ref_stats = real_stats or fake_stats
-        ref_label = next((lbl for lbl in labels if ref_stats.get(lbl) is not None), None)
-        if ref_label is None:
-            print("No stats available for plotting mean spectra")
-            return
-
-        n_bands = len(ref_stats[ref_label]["mean"])
-        bands = np.arange(1, n_bands + 1)
-
-        fig, axes = plt.subplots(1, len(labels), figsize=(15, 5))
-        if len(labels) == 1:
-            axes = [axes]
-
-        for ax, lbl in zip(axes, labels):
-            rs = real_stats.get(lbl)
-            fs = fake_stats.get(lbl)
-
-            if rs is None and fs is None:
-                ax.text(0.5, 0.5, f"No data for {lbl}", ha="center", va="center", transform=ax.transAxes)
-                continue
-
-            if rs is not None:
-                ax.plot(bands, rs["mean"], linestyle="-", linewidth=2.5, color="C0", label="Real")
-                ax.fill_between(bands, rs["mean"] - rs["std"], rs["mean"] + rs["std"], color="C0", alpha=0.15)
-
-            if fs is not None:
-                ax.plot(bands, fs["mean"], linestyle="--", linewidth=2.0, color="C3", label="Synthetic")
-                ax.fill_between(bands, fs["mean"] - fs["std"], fs["mean"] + fs["std"], color="C3", alpha=0.15)
-
-            ax.set_title(f"{lbl.replace('_', ' ').title()}")
-            ax.set_xlabel("Spectral Band")
-            ax.set_ylabel("Reflectance")
-            ax.legend()
-            ax.grid(True, alpha=0.25)
-
-        plt.suptitle("Mean Spectra Comparison: Real vs Synthetic", fontsize=14, y=1.02)
-        plt.tight_layout()
-
-        self.logger.experiment.log({"val/mean_spectra": wandb.Image(fig)})
-        plt.close(fig)
-
-    def predict_step(self, batch, batch_idx):
-        """Generate and save new samples."""
-        os.makedirs(self.hparams.pred_output_dir, exist_ok=True)
-        self.netG.eval()
+        if batch["image"].size(1) != 3:
+            return  # Skip non-RGB images
 
         backup_para = copy_G_params(self.netG)
         load_params(self.netG, self.avg_param_G)
+        self.netG.eval()
 
-        device = self.device
-        nz = self.hparams.nz
-
-        gmin = gmax = None
-        if hasattr(self.hparams, "pred_global_min"):
-            gmin = getattr(self.hparams, "pred_global_min", None)
-            gmax = getattr(self.hparams, "pred_global_max", None)
+        seg = None
+        if self.hparams.use_spade:
+            masks = batch.get("mask", None)
+            seg = batch.get("image", None) if self.hparams.spade_conditioning == "rgb_image" else masks
 
         with torch.no_grad():
-            noise = torch.randn(self.hparams.pred_num_samples, nz, device=device)
-
-            # For SPADE, use conditioning from batch
-            seg = None
-            if self.hparams.use_spade:
-                seg = self.get_conditioning(batch)
-                # Repeat/expand to match number of samples
-                if seg.size(0) < self.hparams.pred_num_samples:
-                    repeats = (self.hparams.pred_num_samples + seg.size(0) - 1) // seg.size(0)
-                    seg = seg.repeat(repeats, 1, 1, 1)[: self.hparams.pred_num_samples]
+            noise = torch.randn(batch_size, self.hparams.nz, device=self.device)
             fake_imgs = self(noise, seg)
-            fake = fake_imgs[0].float().cpu()
+            fake = fake_imgs[0]
 
-            assert torch.min(fake) >= -1.0 and torch.max(fake) <= 1.0, (
-                "Generated images are out of expected range [-1, 1]"
-            )
-
-            for i in tqdm(range(self.hparams.pred_num_samples), desc="Generating samples"):
-                fake_img = fake[i : i + 1, :, :, :].to(device)
-
-                if self.hparams.pred_hyperspectral:
-                    fake_denorm = fake_img.add(1).div(2)
-
-                    if gmin is not None and gmax is not None:
-                        gmin_arr = torch.tensor(gmin, device=device) if isinstance(gmin, list) else np.array(gmin)
-                        gmax_arr = torch.tensor(gmax, device=device) if isinstance(gmax, list) else np.array(gmax)
-
-                        if gmin_arr.size == 1:
-                            fake_denorm = fake_denorm * (gmax_arr - gmin_arr) + gmin_arr
-                        else:
-                            gmin_t = torch.tensor(gmin_arr).view(1, -1, 1, 1)
-                            gmax_t = torch.tensor(gmax_arr).view(1, -1, 1, 1)
-                            fake_denorm = fake_denorm * (gmax_t - gmin_t) + gmin_t
-
-                    fake_np = fake_denorm.cpu().squeeze().numpy()
-                    fake_np = np.transpose(fake_np, (1, 2, 0))
-                    mat_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.mat")
-                    savemat(mat_path, {"cube": fake_np})
-                else:
-                    fake_rgb = (fake + 1) / 2
-                    mean_band = fake_rgb.mean(dim=1, keepdim=True)
-                    rgb = mean_band.repeat(1, 3, 1, 1).clamp(0, 1)
-                    rgb_uint8 = (rgb * 255).byte()
-
-                    save_path = os.path.join(self.hparams.pred_output_dir, f"sample_{i:04d}.png")
-                    torchvision.utils.save_image(rgb_uint8 / 255.0, save_path)
+        self._save_generated_batch(
+            fake_batch=fake,
+            batch_idx=batch_idx,
+            pred_hyperspectral=self.hparams.pred_hyperspectral,
+        )
 
         load_params(self.netG, backup_para)
         self.netG.train()
@@ -697,58 +498,6 @@ class FastGANModule(pl.LightningModule):
 
     def on_save_checkpoint(self, checkpoint):
         checkpoint["avg_param_G"] = [p.clone().cpu() for p in self.avg_param_G]
-
-    # ...existing code...
-    def on_load_checkpoint(self, checkpoint):
-        """
-        Robust checkpoint loader:
-        - restore avg_param_G if present
-        - attempt to load state_dict non-strictly, removing keys that don't match this model
-          (e.g. metric/net additions like 'mifid.*' that were removed from the codebase)
-        """
-        # restore EMA params if present
-        if "avg_param_G" in checkpoint:
-            self.avg_param_G = [p.to(self.device) for p in checkpoint["avg_param_G"]]
-        else:
-            print("Warning: avg_param_G not found in checkpoint.")
-
-    @classmethod
-    def load_from_checkpoint(
-        cls,
-        checkpoint_path,
-        map_location=None,
-        hparams_file=None,
-        strict=True,
-        **kwargs,
-    ):
-        try:
-            model = super().load_from_checkpoint(
-                checkpoint_path=checkpoint_path,
-                map_location=map_location,
-                hparams_file=hparams_file,
-                strict=strict,
-                **kwargs,
-            )
-        except Exception as e:
-            print(f"Error loading checkpoint: {e}")
-            print("Attempting to load with strict=False")
-            model = super().load_from_checkpoint(
-                checkpoint_path=checkpoint_path,
-                map_location=map_location,
-                hparams_file=hparams_file,
-                strict=False,
-                **kwargs,
-            )
-
-        return model
-
-    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
-        try:
-            super().load_state_dict(state_dict, strict)
-        except Exception as e:
-            print(f"Error loading state_dict: {e}")
-            print("Attempting to load with strict=False")
-            super().load_state_dict(state_dict, strict=False)
 
 if __name__ == "__main__":
     # Simple test to instantiate the module

@@ -152,7 +152,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
-def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[], 
+             num_classes=None):
     """Create a discriminator
 
     Parameters:
@@ -164,6 +165,7 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         init_type (str)    -- the name of the initialization method.
         init_gain (float)  -- scaling factor for normal, xavier and orthogonal.
         gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
+        num_classes (int) -- number of classes for a conditional discriminator
 
     Returns a discriminator
 
@@ -182,17 +184,40 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
 
     The discriminator has been initialized by <init_net>. It uses Leakly RELU for non-linearity.
     """
+    if gpu_ids is None:
+        gpu_ids = []
+
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
 
-    if netD == 'basic':  # default PatchGAN classifier
-        net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer)
-    elif netD == 'n_layers':  # more options
-        net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
-    elif netD == 'pixel':     # classify if each pixel is real or fake
-        net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
+    if netD == "basic":  # default PatchGAN classifier
+        net = NLayerDiscriminator(
+            input_nc,
+            ndf,
+            n_layers=3,
+            norm_layer=norm_layer,
+            num_classes=num_classes,
+        )
+    elif netD == "n_layers":
+        net = NLayerDiscriminator(
+            input_nc,
+            ndf,
+            n_layers=n_layers_D,
+            norm_layer=norm_layer,
+            num_classes=num_classes,
+        )
+    elif netD == "pixel":  # 1x1 PixelGAN
+        net = PixelDiscriminator(
+            input_nc,
+            ndf,
+            norm_layer=norm_layer,
+            num_classes=num_classes,
+        )
     else:
-        raise NotImplementedError('Discriminator model name [%s] is not recognized' % net)
+        raise NotImplementedError(
+            f"Discriminator model name [{netD}] is not recognized"
+        )
+
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -530,80 +555,206 @@ class UnetSkipConnectionBlock(nn.Module):
 
 
 class NLayerDiscriminator(nn.Module):
-    """Defines a PatchGAN discriminator"""
+    """PatchGAN discriminator with optional auxiliary classifier head (AC-GAN style)."""
 
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
-        """Construct a PatchGAN discriminator
-
+    def __init__(
+        self,
+        input_nc,
+        ndf=64,
+        n_layers=3,
+        norm_layer=nn.BatchNorm2d,
+        num_classes=None,
+    ):
+        """
         Parameters:
-            input_nc (int)  -- the number of channels in input images
-            ndf (int)       -- the number of filters in the last conv layer
-            n_layers (int)  -- the number of conv layers in the discriminator
-            norm_layer      -- normalization layer
+            input_nc (int)    -- input channels
+            ndf (int)         -- base number of filters
+            n_layers (int)    -- number of conv layers
+            norm_layer        -- normalization layer
+            num_classes (int) -- if not None, add aux classifier head that predicts
+                                 class labels from shared features.
         """
         super(NLayerDiscriminator, self).__init__()
-        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+        if isinstance(norm_layer, functools.partial):
             use_bias = norm_layer.func != nn.BatchNorm2d
         else:
             use_bias = norm_layer != nn.BatchNorm2d
 
+        self.num_classes = num_classes
+
         kw = 4
         padw = 1
-        sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
+        sequence = [
+            nn.Conv2d(
+                input_nc,
+                ndf,
+                kernel_size=kw,
+                stride=2,
+                padding=padw,
+            ),
+            nn.LeakyReLU(0.2, True),
+        ]
+
         nf_mult = 1
         nf_mult_prev = 1
-        for n in range(1, n_layers):  # gradually increase the number of filters
+        for n in range(1, n_layers):
             nf_mult_prev = nf_mult
             nf_mult = min(2 ** n, 8)
             sequence += [
-                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
+                nn.Conv2d(
+                    ndf * nf_mult_prev,
+                    ndf * nf_mult,
+                    kernel_size=kw,
+                    stride=2,
+                    padding=padw,
+                    bias=use_bias,
+                ),
                 norm_layer(ndf * nf_mult),
-                nn.LeakyReLU(0.2, True)
+                nn.LeakyReLU(0.2, True),
             ]
 
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** n_layers, 8)
+        # shared last conv feature block
         sequence += [
-            nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+            nn.Conv2d(
+                ndf * nf_mult_prev,
+                ndf * nf_mult,
+                kernel_size=kw,
+                stride=1,
+                padding=padw,
+                bias=use_bias,
+            ),
             norm_layer(ndf * nf_mult),
-            nn.LeakyReLU(0.2, True)
+            nn.LeakyReLU(0.2, True),
         ]
 
-        sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
-        self.model = nn.Sequential(*sequence)
+        self.feature_extractor = nn.Sequential(*sequence)
 
-    def forward(self, input):
-        """Standard forward."""
-        return self.model(input)
+        # real/fake head: standard PatchGAN map
+        self.rf_head = nn.Conv2d(
+            ndf * nf_mult,
+            1,
+            kernel_size=kw,
+            stride=1,
+            padding=padw,
+        )
 
+        # auxiliary classification head (if requested)
+        if self.num_classes is not None:
+            # Global pooling + linear classifier over channels.
+            # This yields class logits per image.
+            self.classifier = nn.Sequential(
+                nn.AdaptiveAvgPool2d(1),
+                nn.Flatten(),
+                nn.Linear(ndf * nf_mult, num_classes),
+            )
+        else:
+            self.classifier = None
+
+    def forward(self, x):
+        """
+        Returns:
+            If num_classes is None:
+                pred_rf
+            Else:
+                (pred_rf, pred_class)
+
+            pred_rf:     [B, 1, H', W'] PatchGAN real/fake logits
+            pred_class:  [B, num_classes] class logits
+        """
+        feat = self.feature_extractor(x)
+        pred_rf = self.rf_head(feat)
+
+        if self.classifier is not None:
+            pred_class = self.classifier(feat)
+            return pred_rf, pred_class
+
+        return pred_rf
 
 class PixelDiscriminator(nn.Module):
-    """Defines a 1x1 PatchGAN discriminator (pixelGAN)"""
+    """1x1 PatchGAN discriminator (PixelGAN) with optional aux classifier head."""
 
-    def __init__(self, input_nc, ndf=64, norm_layer=nn.BatchNorm2d):
-        """Construct a 1x1 PatchGAN discriminator
-
+    def __init__(
+        self,
+        input_nc,
+        ndf=64,
+        norm_layer=nn.BatchNorm2d,
+        num_classes=None,
+    ):
+        """
         Parameters:
-            input_nc (int)  -- the number of channels in input images
-            ndf (int)       -- the number of filters in the last conv layer
-            norm_layer      -- normalization layer
+            input_nc (int)    -- input channels
+            ndf (int)         -- base number of filters
+            norm_layer        -- normalization layer
+            num_classes (int) -- if not None, add aux classifier head
         """
         super(PixelDiscriminator, self).__init__()
-        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+        if isinstance(norm_layer, functools.partial):
             use_bias = norm_layer.func != nn.InstanceNorm2d
         else:
             use_bias = norm_layer != nn.InstanceNorm2d
 
-        self.net = [
-            nn.Conv2d(input_nc, ndf, kernel_size=1, stride=1, padding=0),
+        self.num_classes = num_classes
+
+        # shared feature extractor
+        self.features = nn.Sequential(
+            nn.Conv2d(
+                input_nc,
+                ndf,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            ),
             nn.LeakyReLU(0.2, True),
-            nn.Conv2d(ndf, ndf * 2, kernel_size=1, stride=1, padding=0, bias=use_bias),
+            nn.Conv2d(
+                ndf,
+                ndf * 2,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=use_bias,
+            ),
             norm_layer(ndf * 2),
             nn.LeakyReLU(0.2, True),
-            nn.Conv2d(ndf * 2, 1, kernel_size=1, stride=1, padding=0, bias=use_bias)]
+        )
 
-        self.net = nn.Sequential(*self.net)
+        # real/fake 1x1 conv head
+        self.rf_head = nn.Conv2d(
+            ndf * 2,
+            1,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=use_bias,
+        )
 
-    def forward(self, input):
-        """Standard forward."""
-        return self.net(input)
+        # optional auxiliary head: global pool over pixels then classify
+        if self.num_classes is not None:
+            self.classifier = nn.Sequential(
+                nn.AdaptiveAvgPool2d(1),
+                nn.Flatten(),
+                nn.Linear(ndf * 2, num_classes),
+            )
+        else:
+            self.classifier = None
+
+    def forward(self, x):
+        """
+        Returns:
+            If num_classes is None:
+                pred_rf
+            Else:
+                (pred_rf, pred_class)
+
+            pred_rf:    [B, 1, H, W] pixel-wise real/fake logits
+            pred_class: [B, num_classes] class logits
+        """
+        feat = self.features(x)
+        pred_rf = self.rf_head(feat)
+
+        if self.classifier is not None:
+            pred_class = self.classifier(feat)
+            return pred_rf, pred_class
+
+        return pred_rf
