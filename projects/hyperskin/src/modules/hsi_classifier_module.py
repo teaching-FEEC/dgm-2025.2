@@ -1,6 +1,7 @@
 # Adapted from: https://github.com/ashleve/lightning-hydra-template/blob/main/src/models/mnist_module.py
 import inspect
 from pathlib import Path
+from pdb import run
 from typing import Any, Optional
 import numpy as np
 
@@ -36,12 +37,13 @@ def load_class(path: str):
 class HSIClassifierModule(pl.LightningModule):
     def __init__(
         self,
-        model_name: str,
         num_classes: int,
-        pretrained: bool,
-        features_only: bool,
-        in_chans: int,
-        scriptable: bool,
+        pretrained: Optional[bool] = None,
+        in_chans: Optional[bool] = None,
+        features_only: Optional[bool] = None,
+        scriptable: Optional[bool] = None,
+        model_name: Optional[str] = None,
+        isic2019_model_path: Optional[str] = None,
         criterion: Optional[dict] = None,
         min_sensitivity: float = 0.95,
         freeze_backbone: bool = False,
@@ -64,17 +66,21 @@ class HSIClassifierModule(pl.LightningModule):
             print('We should have 2 or more classes')
             return AssertionError()
 
-        self.net = TIMMModel(model_name=self.hparams.model_name,
-                             num_classes=self.hparams.num_classes,
-                             pretrained=self.hparams.pretrained,
-                             features_only=self.hparams.features_only,
-                             in_chans=self.hparams.in_chans,
-                             scriptable=self.hparams.scriptable,
-                             freeze_backbone=self.hparams.freeze_backbone,
-                             freeze_layers=self.hparams.freeze_layers,
-                             unfreeze_layers=self.hparams.unfreeze_layers,
-                             custom_head=self.hparams.custom_head,
-                             unfreeze_norm=self.hparams.unfreeze_norm)
+        if self.hparams.isic2019_model_path is not None:
+            from src.models.isic2019 import ISIC2019Model
+            self.net = ISIC2019Model(model_path=self.hparams.isic2019_model_path)
+        else:
+            self.net = TIMMModel(model_name=self.hparams.model_name,
+                                num_classes=self.hparams.num_classes,
+                                pretrained=self.hparams.pretrained,
+                                features_only=self.hparams.features_only,
+                                in_chans=self.hparams.in_chans,
+                                scriptable=self.hparams.scriptable,
+                                freeze_backbone=self.hparams.freeze_backbone,
+                                freeze_layers=self.hparams.freeze_layers,
+                                unfreeze_layers=self.hparams.unfreeze_layers,
+                                custom_head=self.hparams.custom_head,
+                                unfreeze_norm=self.hparams.unfreeze_norm)
 
         if self.hparams.criterion is not None:
             if "class_path" not in self.hparams.criterion:
@@ -134,20 +140,38 @@ class HSIClassifierModule(pl.LightningModule):
             return
 
         tags = []
-        run_name = hparams.model_name
-        tags.append(hparams.model_name)
+        run_name = ""
 
-        # add pretrained tag
-        if hparams.pretrained:
-            tags.append("pretrained")
-            run_name += "_pt"
+        if self.hparams.isic2019_model_path is None:
+            run_name += hparams.model_name
+            tags.append(hparams.model_name)
+            # add pretrained tag
+            if hparams.pretrained:
+                tags.append("pretrained")
+                run_name += "_pt"
+            else:
+                tags.append("not_pretrained")
+
+            # add freeze_backbone tag
+            if hparams.freeze_backbone:
+                tags.append("frozen_backbone")
+                run_name += "_fb"
         else:
-            tags.append("not_pretrained")
+            isic2019_model_path = Path(hparams.isic2019_model_path)
+            model_filename = isic2019_model_path.stem  # get filename without extension
+            run_name += "isic2019_"
 
-        # add freeze_backbone tag
-        if hparams.freeze_backbone:
-            tags.append("frozen_backbone")
-            run_name += "_fb"
+            if "frozen_backbone" in model_filename:
+                tags.append("frozen_backbone")
+                run_name += "fb_"
+
+            if "clean_fc" in model_filename:
+                tags.append("clean_fc")
+                run_name += "clean_fc_"
+
+            if "adapted_fc" in model_filename:
+                tags.append("adapted_fc")
+                run_name += "adapted_fc_"
 
         # add criterion tag
         if hparams.criterion is not None:
