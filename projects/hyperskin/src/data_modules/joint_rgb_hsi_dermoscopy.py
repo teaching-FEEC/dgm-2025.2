@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 import pytorch_lightning as pl
@@ -18,10 +18,11 @@ if __name__ == "__main__":
     )
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.data_modules.milk10k import MILK10kDataModule
+from src.data_modules.isic2019 import ISIC2019DataModule
 
 
 class JointRGBHSIDataModule(pl.LightningDataModule):
-    """Parent DataModule that wraps both HSI Dermoscopy and RGB MILK10k DataModules.
+    """Parent DataModule that wraps both HSI Dermoscopy and RGB DataModules.
 
     It doesn't merge datasets; instead, it exposes a dictionary of dataloaders
     (HSI first, then RGB) for training, validation, and testing.
@@ -31,7 +32,8 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
     def __init__(
         self,
         hsi_config: dict,
-        milk10k_config: dict,
+        rgb_config: dict,
+        rgb_dataset: Literal["milk10k", "isic2019"] = "milk10k",
         num_workers: int = 8,
         pin_memory: bool = False,
         rgb_only: bool = False,
@@ -42,7 +44,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
         # Saves configs for LightningCLI and adds `_log_hyperparams`
         self.save_hyperparameters({
             "hsi_config": hsi_config,
-            "milk10k_config": milk10k_config,
+            "rgb_config": rgb_config,
             "num_workers": num_workers,
             "pin_memory": pin_memory,
             "rgb_only": rgb_only,
@@ -51,7 +53,12 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
 
         # Now safely build internal datamodules
         self.hsi_dm = HSIDermoscopyDataModule(**hsi_config)
-        self.rgb_dm = MILK10kDataModule(**milk10k_config)
+        if rgb_dataset == "milk10k":
+            self.rgb_dm = MILK10kDataModule(**rgb_config)
+        elif rgb_dataset == "isic2019":
+            self.rgb_dm = ISIC2019DataModule(**rgb_config)
+        else:
+            raise ValueError(f"Unsupported rgb_dataset: {rgb_dataset}")
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
@@ -104,7 +111,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
                                         self.hparams.pred_num_samples)
                 return torch.utils.data.DataLoader(
                     self.rgb_dm.predict_dataloader().dataset,
-                    batch_size=self.hparams.milk10k_config.get("batch_size", 1),
+                    batch_size=self.hparams.rgb_config.get("batch_size", 1),
                     sampler=sampler,
                     num_workers=self.num_workers,
                     pin_memory=self.pin_memory,
@@ -191,7 +198,7 @@ if __name__ == "__main__":
         allowed_labels=["melanoma"]
     )
 
-    dm_joint = JointRGBHSIDataModule(hsi_config=hsi_cfg, milk10k_config=rgb_cfg)
+    dm_joint = JointRGBHSIDataModule(hsi_config=hsi_cfg, rgb_config=rgb_cfg)
 
     dm_joint.prepare_data()
     dm_joint.setup()
