@@ -2,9 +2,10 @@ data:
   class_path: data_modules.HSIDermoscopyDataModule
   init_args:
     task: CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI
+    # oversample_strategy: minority
     train_val_test_split: [0.7, 0.15, 0.15]
     image_size: 512
-    batch_size: 4
+    batch_size: 3
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
@@ -19,6 +20,8 @@ data:
                   0.01310135, 0.01476806, 0.01932094, 0.02020744]
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_ac_cyclegan
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_spade_fsgan # concatena os datasets
+    # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_cyclegan
+    # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan # concatena os datasets
     
     transforms:
       train:

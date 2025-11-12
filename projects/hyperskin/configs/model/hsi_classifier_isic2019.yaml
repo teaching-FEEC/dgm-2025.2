@@ -1,12 +1,15 @@
 model:
   class_path: modules.HSIClassifierModule
   init_args:
-    isic2019_model_path: checkpoints/isic2019/EFFNET_039_VM-0.9644_in_chans_16_num_classes_2_adapted_fc_frozen.pt
+    isic2019_weights_path: checkpoints/EFFNET_039_VM-0.9644.PTH
     num_classes: 2
+    in_chans: 16
+    adapt_fc: false
+    freeze_backbone: false
     min_sensitivity: 0.95
 
 trainer:
-  precision: 16-mixed
+  # precision: 16-mixed
   log_every_n_steps: 1
   max_epochs: 400
 
