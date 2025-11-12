@@ -84,7 +84,7 @@ data:
       # global_min: [0, 0, 0]
       # range_mode: '-1_1'
       infinite_train: True
-      google_drive_id: 1SQbJ9lG-lG-1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP
+      google_drive_id: 1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP
 
       transforms:
         train:
