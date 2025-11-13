@@ -698,40 +698,108 @@ class VAE(pl.LightningModule):
             pass
         return tensor
 
+    # ...existing code...
     def _save_generated_batch(self, gen: torch.Tensor, pred=False) -> None:
         """Save generated batch to disk and optionally log a visualization to W&B.
-        gen: (N, C, H, W) in torch, decoder outputs ~[0,1] (sigmoid)."""
-        n = gen.size(0)
+        Ensures saved hyperspectral cubes have `target_bands` channels (default 16)
+        by downsampling/resampling/padding the decoder output so downstream
+        transforms (e.g. NormalizeByMinMax) expecting 16 channels do not fail.
+
+        Saved .mat/.npy now contain channel-last arrays with shape (H, W, C) and
+        spatial size forced to hparams.img_size (default 256) when possible.
+        """
+        from skimage.transform import resize as sk_resize
+
+        n, C, H, W = gen.size()
+        target_bands = int(getattr(self.hparams, "pred_save_bands", 16))
+        target_size = int(getattr(self.hparams, "img_size", 256))
+
         for i in range(n):
             global_idx = self._pred_count + i
             base = os.path.join(self._pred_output_dir, f"sample_{global_idx:06d}")
-            # save hyperspectral/full tensor (.mat)
-            if pred==True:
-                arr = gen[i].detach().cpu().numpy()  # (C,H,W)
+
+            # detach + numpy conversion -> (C, H, W)
+            arr = gen[i].detach().cpu().numpy()
+
+            # --- ensure target number of bands (C -> target_bands) ---
+            if arr.shape[0] == target_bands:
+                out_arr_c_h_w = arr
+            elif arr.shape[0] > target_bands:
+                # Prefer simple averaging if divisible, otherwise sample evenly
+                if arr.shape[0] % target_bands == 0:
+                    factor = arr.shape[0] // target_bands
+                    out_arr_c_h_w = arr.reshape(target_bands, factor, H, W).mean(axis=1)
+                else:
+                    idxs = np.linspace(0, arr.shape[0] - 1, target_bands).astype(int)
+                    out_arr_c_h_w = arr[idxs]
+            else:
+                # arr has fewer bands than required -> pad with zeros
+                pad = np.zeros((target_bands - arr.shape[0], H, W), dtype=arr.dtype)
+                out_arr_c_h_w = np.concatenate([arr, pad], axis=0)
+
+            # Convert to channel-last (H, W, C) and float32
+            out_arr_h_w_c = out_arr_c_h_w.transpose(1, 2, 0).astype(np.float32)
+
+            # Resize spatially to (target_size, target_size) if needed
+            if (out_arr_h_w_c.shape[0] != target_size) or (out_arr_h_w_c.shape[1] != target_size):
                 try:
-                    savemat(base + ".mat", {"data": arr})
+                    out_arr_h_w_c = sk_resize(
+                        out_arr_h_w_c,
+                        (target_size, target_size, out_arr_h_w_c.shape[2]),
+                        preserve_range=True,
+                        anti_aliasing=True,
+                        order=1,
+                    ).astype(np.float32)
                 except Exception:
-                    # fallback to numpy save
-                    np.save(base + ".npy", arr)
-            # save visualization PNG (HSI -> mean->RGB)
-            vis = gen[i:i+1]  # keep batch dim
-            if vis.size(1) > 3:
-                vis = vis.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+                    # fallback: center-crop or pad to target_size
+                    h, w, c = out_arr_h_w_c.shape
+                    tgt = target_size
+                    if h > tgt or w > tgt:
+                        # center crop
+                        start_h = max(0, (h - tgt) // 2)
+                        start_w = max(0, (w - tgt) // 2)
+                        out_arr_h_w_c = out_arr_h_w_c[start_h : start_h + tgt, start_w : start_w + tgt, :]
+                    else:
+                        # pad with zeros
+                        pad_h = max(0, tgt - h)
+                        pad_w = max(0, tgt - w)
+                        pad_top = pad_h // 2
+                        pad_left = pad_w // 2
+                        out = np.zeros((tgt, tgt, c), dtype=out_arr_h_w_c.dtype)
+                        out[pad_top : pad_top + h, pad_left : pad_left + w, :] = out_arr_h_w_c
+                        out_arr_h_w_c = out
+
+            # save hyperspectral/full tensor (.mat/.npy) only when pred=True
+            if pred:
+                try:
+                    savemat(base + ".mat", {"data": out_arr_h_w_c})
+                except Exception:
+                    np.save(base + ".npy", out_arr_h_w_c)
+
+            # --- build visualization tensor for PNG/W&B (convert back to CHW) ---
+            vis_chw = out_arr_h_w_c.transpose(2, 0, 1)  # (C, H, W)
+            vis_tensor = torch.from_numpy(vis_chw).unsqueeze(0)  # (1, C, H, W)
+
+            if vis_tensor.size(1) > 3:
+                vis_img = vis_tensor.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+            else:
+                vis_img = vis_tensor
             '''
-            # ensure [0,1] range for png
+            # Optionally save small preview PNG
             try:
-                save_image(vis.clamp(0, 1), base + ".png", normalize=False)
+                save_image(vis_img.clamp(0, 1), base + ".png", normalize=False)
             except Exception:
-                # fallback: log warning
-                print(f"[VAE] failed saving image for {base}.png")
+                pass
             '''
+
             # Optionally log the image to wandb
             if hasattr(self.logger, "experiment") and self.logger.experiment is not None:
                 try:
-                    img = make_grid(vis, nrow=1, normalize=False).cpu()
+                    img = make_grid(vis_img, nrow=1, normalize=False).cpu()
                     self.logger.experiment.log({f"pred/sample_{global_idx:06d}": wandb.Image(img)})
                 except Exception:
                     pass
+# ...existing code...
 
     def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
         """Generate and save samples during a predict run.
