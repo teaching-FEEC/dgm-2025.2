@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple
 import os
 from scipy.io import savemat
 from torchvision.utils import save_image
+from pytorch_lightning.utilities.exceptions import MisconfigurationException
 
 # ---------------------------
 # Third-party imports
@@ -633,8 +634,46 @@ class VAE(pl.LightningModule):
             weight_decay=self.hparams.weight_decay
         )
     #predict vae images 
+    def predict_dataloader(self):
+        """
+        Provide a predict dataloader hook so Trainer.predict() does not call the
+        LightningModule default (which raises). Prefer the datamodule.predict_dataloader
+        if available, otherwise fall back to test/val dataloaders as a best-effort.
+        """
+        dm = getattr(self, "trainer", None)
+        if dm is None:
+            raise MisconfigurationException("Trainer not attached yet; cannot build predict_dataloader")
+
+        dm = getattr(self.trainer, "datamodule", None)
+        if dm is None:
+            print(dm)
+            raise MisconfigurationException(
+                "No datamodule available. To use Trainer.predict() provide a DataModule or "
+                "implement VAE.predict_dataloader() to return a DataLoader."
+            )
+
+        # Prefer explicit predict_dataloader implemented on the datamodule
+        try:
+            if hasattr(dm, "test_dataloader"):
+                return dm.test_dataloader()
+            if hasattr(dm, "val_dataloader"):
+                return dm.val_dataloader()
+            if not hasattr(dm,"predict_dataloader"):
+                dm.predict_dataloader = lambda : dm.val_dataloader()
+                return dm.predict_dataloader()
+        except Exception as e:
+            # Avoid failing hard here; wrap into MisconfigurationException for clearer error message
+            raise MisconfigurationException(f"Failed to obtain dataloader from datamodule: {e}")
+
+        raise MisconfigurationException(
+            "Datamodule does not provide predict/test/val dataloaders. "
+            "Please implement predict_dataloader() in your DataModule or in this LightningModule."
+        )
     def on_predict_start(self) -> None:
         """Prepare output folder and counters for predict runs."""
+        datamodule = self.trainer.datamodule
+        #predict_dataloader = dm.val_dataloader() if hasattr(dm, "val_dataloader") else None
+
         self._pred_output_dir = getattr(self.hparams, "pred_output_dir", "generated_samples")
         os.makedirs(self._pred_output_dir, exist_ok=True)
         # total number of samples requested (0 or None -> generate per-batch without hard limit)

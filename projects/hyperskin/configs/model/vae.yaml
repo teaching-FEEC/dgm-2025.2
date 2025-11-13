@@ -12,7 +12,7 @@ model:
 
 trainer:
   log_every_n_steps: 10
-  max_epochs: 1000
+  max_epochs: 350
 
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
