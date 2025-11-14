@@ -11,7 +11,8 @@ import albumentations as A
 import pytorch_lightning as pl
 import torch
 
-
+#logica de setar as transformadas, obtém os índices de treino teste e validação (train_test_split), baixa automaticamente 
+#responsável por val_indices, train_indices, test_indices, transforms_train, transforms_val, transforms_test
 class BaseDataModule:
     """
     Base class for PyTorch Lightning DataModules that provides:
@@ -177,7 +178,7 @@ class BaseDataModule:
     def get_split_dir(self) -> Path:
         return self.data_dir.parent / "splits"
 
-    def _filter_and_remap_indices(
+    def _filter_and_remap_indices( #recebe indices e allowed labels e filtra só a labels que queremos 
         self,
         dataset_indices: np.ndarray,
         dataset_labels: np.ndarray,
@@ -204,10 +205,10 @@ class BaseDataModule:
 
     def setup_splits(self, seed: int = 42) -> None:
         """Generate stratified train/val/test splits, allowing up to two zero-sized splits."""
-        indices, labels = self.get_dataset_indices_and_labels()
-        indices, labels = self._filter_and_remap_indices(indices, labels, self.allowed_labels)
+        indices, labels = self.get_dataset_indices_and_labels() #filtra apenas as labels que queremos usar
+        indices, labels = self._filter_and_remap_indices(indices, labels, self.allowed_labels) #filtra apenas as labels que queremos usar
 
-        unique_labels, counts = np.unique(labels, return_counts=True)
+        unique_labels, counts = np.unique(labels, return_counts=True) #estratificar os dados -tentar manter a proporção
         valid_labels = unique_labels[counts >= 3]
         if len(valid_labels) < len(unique_labels):
             mask = np.isin(labels, valid_labels)

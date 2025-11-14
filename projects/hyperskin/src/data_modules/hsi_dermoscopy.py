@@ -19,7 +19,7 @@ if __name__ == "__main__":
         dotenv=True,
         pythonpath=True,
         cwd=False,
-    )
+    ) #mudar o caminho raiz do projeto
 
 from src.data_modules.base import BaseDataModule
 from src.samplers.infinite import (
@@ -58,6 +58,8 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         undersample_strategy: Optional[str] = None,
         oversample_strategy: Optional[str] = None,
         sampling_random_state: int = 42,
+        synth_mode: Optional[str] ='mixed_train', #full_train, full_val, mixed_train, None
+        synth_ratio: float = 1.0,  # only used if synth_mode is mixed_train
         **kwargs,
     ):
         """
@@ -72,6 +74,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 - None: No oversampling
             sampling_random_state: Random seed for sampling operations
         """
+        #iniciando a BaseDataModule e o LightningDataModule
         super().__init__(
             train_val_test_split=train_val_test_split,
             data_dir=data_dir,
@@ -117,6 +120,8 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 "undersample_strategy": undersample_strategy,
                 "oversample_strategy": oversample_strategy,
                 "sampling_random_state": sampling_random_state,
+                "synth_mode": synth_mode,
+                "synth_ratio": synth_ratio,
             }
         )
 
@@ -127,6 +132,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         self.data_train = None
         self.data_val = None
         self.data_test = None
+
 
     def get_dataset_indices_and_labels(
         self,
@@ -355,19 +361,28 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
             )
-            self.data_train = torch.utils.data.Subset(
+            self.data_train = torch.utils.data.Subset( #aqui acontece a subdivisão dos dados só de treino 
                 self.data_train, self.train_indices
+            ) 
+
+            self.data_val = HSIDermoscopyDataset(
+                task=self.hparams.task,
+                data_dir=self.hparams.data_dir,
+                transform=self.transforms_val,
+            )
+            self.data_val = torch.utils.data.Subset(
+                self.data_val, self.val_indices
             )
 
             # Add synthetic data to training set if provided
             if self.hparams.synthetic_data_dir is not None:
-                synthetic_dataset = HSIDermoscopyDataset(
+                synthetic_dataset = HSIDermoscopyDataset( #dataset sintético inteiro
                     task=self.hparams.task,
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
                 )
-
-                synthetic_indices = np.arange(len(synthetic_dataset))
+                indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio) #quantos dados sintéticos vamos usar NÃO COLOCAR 0 
+                synthetic_indices = np.arange(indices_ratio)
 
                 if self.hparams.allowed_labels is not None:
                     synthetic_labels = (
@@ -375,7 +390,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                         .map(synthetic_dataset.labels_map)
                         .to_numpy()
                     )
-                    synthetic_indices, _ = self._filter_and_remap_indices(
+                    synthetic_indices, _ = self._filter_and_remap_indices( #filtra apenas as labels que queremos usar
                         synthetic_indices,
                         synthetic_labels,
                         self.hparams.allowed_labels,
@@ -384,10 +399,14 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 synthetic_subset = torch.utils.data.Subset(
                     synthetic_dataset, synthetic_indices
                 )
-
-                self.data_train = torch.utils.data.ConcatDataset(
-                    [self.data_train, synthetic_subset]
-                )
+                if self.hparams.synth_mode == 'full_train':  #usa só sintético no treino
+                    self.data_train = synthetic_subset
+                elif self.hparams.synth_mode == 'full_val': #usa só sintético na validação
+                    self.data_val = synthetic_subset
+                elif self.hparams.synth_mode == 'mixed_train':  #usa uma mistura de real e sintético no treino
+                    self.data_train = torch.utils.data.ConcatDataset(
+                        [self.data_train, synthetic_subset]
+                    )
 
                 print(
                     f"Added {len(synthetic_subset)} synthetic samples "
@@ -399,15 +418,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 self.data_train, split_name="train"
             )
 
-            self.data_val = HSIDermoscopyDataset(
-                task=self.hparams.task,
-                data_dir=self.hparams.data_dir,
-                transform=self.transforms_val,
-            )
-            self.data_val = torch.utils.data.Subset(
-                self.data_val, self.val_indices
-            )
-
+           
         if stage in ["test", "predict"] or stage is None and (
             self.data_test is None
         ):
