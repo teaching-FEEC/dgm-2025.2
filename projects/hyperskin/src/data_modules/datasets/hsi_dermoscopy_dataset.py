@@ -1,3 +1,4 @@
+from enum import IntEnum, auto
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,14 @@ from PIL import Image
 import albumentations as A
 
 from src.data_modules.datasets.task_config import DatasetSample, TaskConfig
+
+class HSIDermoscopyTask(IntEnum):
+    CLASSIFICATION_ALL_CLASSES = auto()
+    CLASSIFICATION_MELANOMA_VS_OTHERS = auto()
+    CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_VS_OTHERS = auto()
+    CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI = auto()
+    SEGMENTATION = auto()
+    GENERATION = auto()
 
 # Base label mappings
 FULL_LABELS_MAP = {

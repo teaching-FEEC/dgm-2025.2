@@ -18,6 +18,7 @@ from src.data_modules.joint_rgb_hsi_dermoscopy import JointRGBHSIDataModule
 from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import weights_init
+from src.models.timm import TIMMModel
 from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
 from src.models.fastgan.fastgan import Generator, Discriminator
 from pytorch_lightning.trainer.trainer import TrainerFn
@@ -82,7 +83,13 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         pred_global_max: Optional[float | list[float]] = None,
         # SPADE configuration
         use_spade: bool = False,
-        spade_conditioning: str = "rgb_mask",  # "rgb_mask" or "rgb_image"
+        spade_conditioning: str = "rgb_mask",
+        # Adversarial classifier configuration
+        use_adversarial_classifier: bool = False,
+        classifier_config: Optional[dict] = None,
+        classifier_weights_path: Optional[str] = None,
+        adversarial_loss_weight: float = 0.1,
+        classifier_loss_type: str = "confidence",  # or "entropy"
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -96,9 +103,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         # --- model setup ---
         if self.hparams.use_spade:
-            # Determine label_nc based on conditioning type
             label_nc = 1 if self.hparams.spade_conditioning == "rgb_mask" else 3
-
             self.netG = GeneratorSPADE(ngf=ngf, nz=nz, im_size=im_size, nc=nc, label_nc=label_nc)
             self.netD = DiscriminatorSPADE(ndf=ndf, im_size=im_size, nc=nc, label_nc=label_nc)
         else:
@@ -115,9 +120,42 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         self.register_buffer("fixed_noise", torch.FloatTensor(8, self.hparams.nz).normal_(0, 1))
 
-        # Store fixed conditioning for validation visualization
+
         if self.hparams.use_spade:
             self.fixed_conditioning = None
+
+        # --- Adversarial Classifier Setup ---
+        if self.hparams.use_adversarial_classifier:
+            assert self.hparams.classifier_config is not None, (
+                "classifier_config must be provided when use_adversarial_classifier=True"
+            )
+
+            self.classifier = TIMMModel(**self.hparams.classifier_config)
+
+            if self.hparams.classifier_weights_path is not None:
+                checkpoint = torch.load(
+                    self.hparams.classifier_weights_path,
+                    map_location='cpu',
+                    weights_only=False,
+                )
+                if 'state_dict' in checkpoint:
+                    state_dict = checkpoint['state_dict']
+                    # Remove 'model.' prefix if present from Lightning checkpoint
+                    state_dict = {
+                        k.replace('net.', ''): v
+                        for k, v in state_dict.items()
+                    }
+                else:
+                    state_dict = checkpoint
+                self.classifier.load_state_dict(state_dict)
+                print(f"Loaded adversarial classifier weights from {self.hparams.classifier_weights_path}")
+
+            # Freeze classifier and set to eval mode
+            for param in self.classifier.parameters():
+                param.requires_grad = False
+            self.classifier.eval()
+        else:
+            self.classifier = None
 
         # Validation metrics
         self.sam = SpectralAngleMapper()
@@ -239,15 +277,23 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         seg = None
         if self.hparams.use_spade:
             if self.hparams.spade_conditioning == "rgb_mask":
-                seg = batch["mask"]
+                if "rgb" in batch:
+                    seg = batch["rgb"]["mask"]
+                else:
+                    seg = batch["mask"]
+
                 if seg.ndim == 3:  # (B, H, W)
                     seg = seg.unsqueeze(1)  # (B, 1, H, W)
             elif self.hparams.spade_conditioning == "rgb_image":
-                seg = batch["image"]
+                if "rgb" in batch:
+                    seg = batch["rgb"]["image"]
+                else:
+                    seg = batch["image"]
             else:
                 raise ValueError(f"Invalid spade_conditioning: {self.hparams.spade_conditioning}")
         return seg
 
+    # Update the training_step method to include adversarial loss:
     def training_step(self, batch, batch_idx):
         real_image = self.get_real_image(batch)
         seg = self.get_conditioning(batch)
@@ -257,14 +303,12 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         opt_g, opt_d = self.optimizers()
 
-        # Generate with conditioning
         fake_images = self(noise, seg)
 
         fake_images = [fi.float() for fi in fake_images]
         real_image = DiffAugment(real_image, policy=policy)
         fake_images_aug = [DiffAugment(fake, policy=policy) for fake in fake_images]
 
-        # Apply augmentation to conditioning as well
         seg_aug = DiffAugment(seg, policy=policy) if seg is not None else None
 
         # --------- Train D ---------
@@ -276,7 +320,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         )
         self.manual_backward(err_dr)
 
-        err_df, pred_fake = self.train_d_step(real_image, [fi.detach() for fi in fake_images_aug], seg_aug, "fake")
+        err_df, pred_fake = self.train_d_step(
+            real_image, [fi.detach() for fi in fake_images_aug], seg_aug, "fake"
+        )
         self.manual_backward(err_df)
 
         opt_d.step()
@@ -291,6 +337,33 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             pred_g = self.netD(fake_images_aug, "fake")
 
         err_g = -pred_g.mean()
+
+        # --- Adversarial Classifier Loss ---
+        if self.classifier is not None:
+            # Normalize fake images from [-1, 1] to [0, 1] for classifier
+            fake_for_classifier = (fake_images[0] + 1) / 2
+            fake_for_classifier = fake_for_classifier.clamp(0, 1)
+
+            # Ensure classifier stays in eval mode
+            self.classifier.eval()
+
+            # Get logits from classifier (assumes all images are melanoma - class 0)
+            logits = self.classifier(fake_for_classifier)
+
+            probs = torch.softmax(logits, dim=-1)
+            melanoma_prob = probs[:, 0]
+            # non_melanoma_prob = probs[:, 1:].max(dim=1)[0]
+
+            # Hard samples: either misclassified confidently OR near boundary
+            boundary_loss = torch.mean(torch.abs(melanoma_prob - 0.5))
+            # misclass_loss = -torch.mean(non_melanoma_prob)
+
+            adversarial_loss = (boundary_loss) * self.hparams.adversarial_loss_weight
+
+            # Add weighted adversarial loss to generator loss
+            err_g = err_g + adversarial_loss
+
+            self.log("train/adversarial_loss", adversarial_loss, on_step=True, on_epoch=False)
 
         self.manual_backward(err_g)
         opt_g.step()
@@ -324,7 +397,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
             # Generate with fixed conditioning
             fixed_seg = self.fixed_conditioning if self.hparams.use_spade else None
-            sample = self(self.fixed_noise, fixed_seg)[0].add(1).mul(0.5)
+            # limit self.fixed_noise to match fixed_seg size
+            fixed_noise = self.fixed_noise[: min(8, fixed_seg.size(0))] if self.hparams.use_spade else self.fixed_noise
+            sample = self(fixed_noise, fixed_seg)[0].add(1).mul(0.5)
 
             # Convert to 3 channel view if HSI > 3 channels
             if self.hparams.nc > 3:
@@ -378,6 +453,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
                 real_image = self.get_real_image(batch)
                 seg = self.get_conditioning(batch)
+                seg = seg.to(self.device, non_blocking=True) if seg is not None else None
 
                 real_image = real_image.to(self.device, non_blocking=True)
                 batch_size = real_image.size(0)
@@ -438,7 +514,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             )
 
         fig = self.spectra_metric.plot()
-        if fig is not None:
+        if fig is not None and hasattr(self.logger, "experiment") and self.logger.experiment is not None:
             self.logger.experiment.log({"Mean Spectra": wandb.Image(fig)})
         self.spectra_metric.reset()
 
@@ -449,10 +525,10 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         datamodule = self.trainer.datamodule
         predict_dataloader = datamodule.predict_dataloader()
 
-        if len(predict_dataloader) > 1:
+        if len(predict_dataloader) > 1 and self.hparams.use_spade:
             print(
                 "WARNING: More than one predict dataloader detected. "
-                "Probably using JointRGBHSIDataModule, but CycleGAN predict only uses the rgb dataloader."
+                "Probably using JointRGBHSIDataModule, but SPADE FastGAN predict only uses the rgb dataloader."
                 "All images with channels different than rgb_channels will be ignored."
                 "Use --data.init_args.rgb_only=True to avoid this warning."
             )
@@ -461,7 +537,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         batch_size = batch["image"].size(0)
 
-        if batch["image"].size(1) != 3:
+        if batch["image"].size(1) != 3 and self.hparams.use_spade:
             return  # Skip non-RGB images
 
         backup_para = copy_G_params(self.netG)

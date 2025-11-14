@@ -1,6 +1,8 @@
 data:
   class_path: data_modules.JointRGBHSIDataModule
   init_args:
+    rgb_dataset: milk10k
+    # rgb_dataset: isic2019
     hsi_config:
       task: 
         return_image: True
@@ -14,7 +16,7 @@ data:
 
       train_val_test_split: [0.7, 0.15, 0.15]
       image_size: 256
-      batch_size: 4
+      batch_size: 8
       num_workers: 8
       pin_memory: True
       data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
@@ -64,7 +66,7 @@ data:
               width: ${data.init_args.hsi_config.image_size}
           - class_path: "ToTensorV2"
             init_args: {}
-    milk10k_config:
+    rgb_config:
       task: 
         return_image: True
         return_mask: False
@@ -73,10 +75,11 @@ data:
         label_type: binary
       train_val_test_split: [1, 0, 0]
       image_size: ${data.init_args.hsi_config.image_size}
-      batch_size: 4
+      batch_size: 8
       num_workers: 8
       pin_memory: True
-      data_dir: data/isic2019_cropped_256
+      # data_dir: data/isic2019_cropped_256
+      data_dir: data/milk10k_melanoma_nevus_cropped_256
       allowed_labels: [melanoma, 
       # melanocytic_nevus
       ]
@@ -84,7 +87,9 @@ data:
       # global_min: [0, 0, 0]
       # range_mode: '-1_1'
       infinite_train: True
-      google_drive_id: 1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP
+
+      # google_drive_id: 1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP # isic2019_cropped_256
+      google_drive_id: 1SQbJ9lG-lG-MlunXfNeA86I6PJYzmf2L # milk10k_melanoma_nevus_cropped_256
 
       transforms:
         train:

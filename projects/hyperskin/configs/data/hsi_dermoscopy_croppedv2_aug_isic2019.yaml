@@ -5,7 +5,7 @@ data:
     # oversample_strategy: minority
     train_val_test_split: [0.7, 0.15, 0.15]
     image_size: 512
-    batch_size: 3
+    batch_size: 2
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks

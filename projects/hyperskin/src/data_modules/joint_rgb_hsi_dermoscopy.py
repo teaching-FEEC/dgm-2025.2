@@ -32,7 +32,8 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
     def __init__(
         self,
         hsi_config: dict,
-        rgb_config: dict,
+        rgb_config: Optional[dict] = None,
+        milk10k_config: Optional[dict] = None,
         rgb_dataset: Literal["milk10k", "isic2019"] = "milk10k",
         num_workers: int = 8,
         pin_memory: bool = False,
@@ -40,6 +41,12 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
         pred_num_samples: int | None = 100,
     ):
         super().__init__()  # Ensure Lightning internal hooks exist
+
+        if milk10k_config is not None and rgb_dataset == "milk10k" and rgb_config is None:
+            rgb_config = milk10k_config
+
+        if rgb_config is None:
+            raise ValueError("rgb_config must be provided if milk10k_config is not used.")
 
         # Saves configs for LightningCLI and adds `_log_hyperparams`
         self.save_hyperparameters({
