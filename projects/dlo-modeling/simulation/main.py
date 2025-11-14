@@ -6,19 +6,20 @@ import time
 import concurrent.futures
 import os
 import multiprocessing 
+import threading 
 
 # --- Simulation Parameters ---
 XML_PATH = "rope_chain.xml"
 MIN_FORCE_MAG = 0.1  # Minimum force magnitude
 MAX_FORCE_MAG = 3.0  # Maximum force magnitude
 FORCE_STEPS = 200
-NUM_TRANSITIONS = 10000  # Total number of transitions to collect (across all workers)
-NUM_ROLLOUTS = 5       # Number of parallel workers/rollouts
-SETTLE_TIME = 5.0
-SAVE_INTERVAL = 10   # <-- NEU: Print progress every X steps (per worker)
+NUM_TRANSITIONS = 100  # Total number of transitions to collect (across all workers)
+NUM_ROLLOUTS = 20       # Number of parallel workers/rollouts
+SETTLE_TIME = 10.0
+SAVE_INTERVAL = 100   
+MONITOR_INTERVAL = 30 
 USE_VIEWER = False       # MUST be False for multiprocessing
 
-# --- Dateinamen ---
 FINAL_OUTPUT_FILENAME = "rope_state_action_next_state.npz"
 PARTIAL_FILENAME_TPL = "rope_data_part_{worker_id}.npz"
 
@@ -71,9 +72,48 @@ def save_data(filename, num_to_save, states, actions, next_states, link_names_ar
     print(f"  next_states: {next_states[:num_to_save].shape}")
     print("--- Save complete ---")
 
+def monitor_throughput(global_count, count_lock, stop_event, interval_sec):
+    
+    
+    while not stop_event.is_set():
+        with count_lock:
+            if global_count.value > 0:
+                break 
+        
+        if stop_event.wait(timeout=0.2): 
+            return 
+            
+    if stop_event.is_set():
+        return 
+
+
+    last_time = time.perf_counter()
+    with count_lock:
+        last_count = global_count.value
+
+    while not stop_event.wait(timeout=interval_sec):
+        current_time = time.perf_counter()
+        
+        with count_lock:
+            current_count = global_count.value
+            
+        elapsed_time = current_time - last_time
+        delta_transitions = current_count - last_count
+        
+        if elapsed_time > 0:
+            tps = delta_transitions / elapsed_time
+        else:
+            tps = 0.0
+            
+
+        
+        last_time = current_time
+        last_count = current_count
+        
 
 def run_rollout_worker(worker_id, transitions_for_this_worker, meta_info, 
-                     link_names_arr, print_lock): # <-- NEU: print_lock
+                     link_names_arr, print_lock, 
+                     global_transition_count, global_count_lock): 
     """
     This function is executed by each parallel worker.
     It runs a simulation segment and saves its results to a partial file.
@@ -100,6 +140,9 @@ def run_rollout_worker(worker_id, transitions_for_this_worker, meta_info,
     # Settle simulation
     for _ in range(int(SETTLE_TIME / m.opt.timestep)):
         step()
+
+    last_log_time = time.perf_counter()
+    num_done_in_batch = 0 
 
     # --- Run simulation loop ---
     for i in range(transitions_for_this_worker):
@@ -128,25 +171,41 @@ def run_rollout_worker(worker_id, transitions_for_this_worker, meta_info,
         # 4. Record the resulting next state (S_{t+1})
         next_states[i] = d.xpos[link_ids, :].astype(np.float32)
 
-        # --- (NEU) Progress Logging (mit Lock) ---
-        if (i + 1) % SAVE_INTERVAL == 0:
-            with print_lock:
-                print(f"[Worker {worker_id}] Progress: {i + 1}/{transitions_for_this_worker} transitions completed.")
+        num_done_in_batch += 1 # <-- NEU: Zähle jede fertige Transition
 
+        if (i + 1) % SAVE_INTERVAL == 0:
+            current_time = time.perf_counter()
+            elapsed_for_interval = current_time - last_log_time
+            
+            time_per_trans_s = elapsed_for_interval / SAVE_INTERVAL 
+
+            with print_lock:
+                print(f"[Worker {worker_id}] Progress: {i + 1}/{transitions_for_this_worker} "
+                      f"| Avg: {time_per_trans_s:.4f} s/trans")
+            
+            with global_count_lock:
+                global_transition_count.value += num_done_in_batch
+            
+            num_done_in_batch = 0 
+            last_log_time = current_time 
+
+    if num_done_in_batch > 0:
+        with global_count_lock:
+            global_transition_count.value += num_done_in_batch
+        
     # --- Save partial data ---
     output_filename = PARTIAL_FILENAME_TPL.format(worker_id=worker_id)
-    # Verwende das print_lock auch hier, um die "Saving..."-Nachricht zu schützen
     with print_lock:
         save_data(output_filename, transitions_for_this_worker, states, actions, 
                   next_states, link_names_arr, meta_info)
     
     return output_filename, transitions_for_this_worker
 
-
 def main():
     """
     Main function to ORCHESTRATE the simulation.
-    It distributes work to parallel processes and concatenates the results.
+    It distributes work to parallel processes, loads existing data,
+    and appends new data to the final file.
     """
     if USE_VIEWER:
         print("ERROR: USE_VIEWER must be set to False to run in parallel.")
@@ -180,15 +239,24 @@ def main():
         transitions_per_worker[i] += 1
         
     print(f"Starting {NUM_ROLLOUTS} parallel workers...")
-    print(f"Total transitions to collect: {NUM_TRANSITIONS}")
+    print(f"Total NEW transitions to collect this run: {NUM_TRANSITIONS}")
     print(f"Work distribution: {transitions_per_worker}")
     
     global_start_time = time.perf_counter()
     partial_files = []
     
-    # --- (NEU) Manager erstellen, um Lock zu teilen ---
     with multiprocessing.Manager() as manager:
-        print_lock = manager.Lock() # Lock für saubere Konsolenausgabe
+        print_lock = manager.Lock() 
+        global_transition_count = manager.Value('i', 0) 
+        global_count_lock = manager.Lock() 
+        stop_event = manager.Event() 
+
+        monitor_thread = threading.Thread(
+            target=monitor_throughput,
+            args=(global_transition_count, global_count_lock, stop_event, MONITOR_INTERVAL),
+            daemon=True 
+        )
+        monitor_thread.start()
         
         # --- Launch parallel workers ---
         with concurrent.futures.ProcessPoolExecutor(max_workers=NUM_ROLLOUTS) as executor:
@@ -204,7 +272,9 @@ def main():
                             n_tasks, 
                             meta_info, 
                             link_names_arr,
-                            print_lock  # <-- Lock an Worker übergeben
+                            print_lock,
+                            global_transition_count, 
+                            global_count_lock     
                         )
                     )
 
@@ -212,33 +282,35 @@ def main():
             for future in concurrent.futures.as_completed(futures):
                 try:
                     filename, num_done = future.result()
-                    # Diese Nachricht ist jetzt redundant, da save_data() sie druckt
-                    # print(f"  Worker finished, saved {num_done} transitions to {filename}")
                     partial_files.append(filename)
                 except Exception as e:
                     print(f"A worker failed: {e}")
 
+        print("\nAll workers finished. Stopping monitor thread...")
+        stop_event.set()
+        monitor_thread.join(timeout=2.0) 
+
     total_time = time.perf_counter() - global_start_time
-    print(f"\nAll workers finished in {total_time:.2f}s.")
+    print(f"Workers and monitor finished in {total_time:.2f}s.")
 
     if not partial_files:
-        print("No data was collected. Exiting.")
+        print("No new data was collected. Exiting.")
         return
 
-    # --- Concatenate results ---
-    print(f"Concatenating {len(partial_files)} partial files...")
-    all_states, all_actions, all_next_states = [], [], []
-    total_saved_transitions = 0
+    # --- Concatenate results from *this run* ---
+    print(f"Concatenating {len(partial_files)} partial files from this run...")
+    all_states_new, all_actions_new, all_next_states_new = [], [], []
+    total_saved_transitions_this_run = 0
 
     partial_files.sort() 
 
     for filename in partial_files:
         try:
             with np.load(filename) as data:
-                all_states.append(data['states'])
-                all_actions.append(data['actions'])
-                all_next_states.append(data['next_states'])
-                total_saved_transitions += len(data['states'])
+                all_states_new.append(data['states'])
+                all_actions_new.append(data['actions'])
+                all_next_states_new.append(data['next_states'])
+                total_saved_transitions_this_run += len(data['states'])
         except Exception as e:
             print(f"Error loading {filename}: {e}. Skipping...")
         finally:
@@ -247,33 +319,83 @@ def main():
                 os.remove(filename)
                 print(f"  Removed temporary file: {filename}")
 
-    if total_saved_transitions == 0:
-        print("Concatenation failed or no data was loaded. Final file not saved.")
+    if total_saved_transitions_this_run == 0:
+        print("Concatenation failed or no new data was loaded. Final file not saved.")
         return
 
-    # Combine all data
-    final_states = np.concatenate(all_states, axis=0)
-    final_actions = np.concatenate(all_actions, axis=0)
-    final_next_states = np.concatenate(all_next_states, axis=0)
+    # Kombiniere alle NEUEN Daten
+    new_states = np.concatenate(all_states_new, axis=0)
+    new_actions = np.concatenate(all_actions_new, axis=0)
+    new_next_states = np.concatenate(all_next_states_new, axis=0)
+
+    
+    all_final_states = []
+    all_final_actions = []
+    all_final_next_states = []
+    num_old_transitions = 0
+
+    if os.path.exists(FINAL_OUTPUT_FILENAME):
+        print(f"\nFound existing file: {FINAL_OUTPUT_FILENAME}. Loading to append...")
+        try:
+            with np.load(FINAL_OUTPUT_FILENAME, allow_pickle=True) as old_data:
+                all_final_states.insert(0, old_data['states'])
+                all_final_actions.insert(0, old_data['actions'])
+                all_final_next_states.insert(0, old_data['next_states'])
+                
+                num_old_transitions = len(old_data['states'])
+                print(f"  Loaded {num_old_transitions:,} existing transitions.")
+                
+                if 'meta' in old_data:
+                    old_meta = old_data['meta'].item() 
+                    if (old_meta.get('force_steps') != meta_info.get('force_steps') or
+                        old_meta.get('timestep') != meta_info.get('timestep')):
+                        print("\n" + "="*50)
+                        print(f"  WARNING: METADATA MISMATCH!")
+                        print(f"  Old meta: {old_meta.get('force_steps')} force_steps, {old_meta.get('timestep')} ts")
+                        print(f"  New meta: {meta_info.get('force_steps')} force_steps, {meta_info.get('timestep')} ts")
+                        print(f"  Appending data may lead to an inconsistent dataset.")
+                        print("="*50 + "\n")
+                else:
+                     print("  Warning: Old file contains no metadata for comparison.")
+                         
+        except Exception as e:
+            print(f"  Error loading old file '{FINAL_OUTPUT_FILENAME}': {e}.")
+            print("  This is often a pickle error. If so, the fix was unsuccessful.")
+            print("  Will overwrite with only new data.")
+            all_final_states, all_final_actions, all_final_next_states = [], [], []
+
+    all_final_states.append(new_states)
+    all_final_actions.append(new_actions)
+    all_final_next_states.append(new_next_states)
+
+    final_states_to_save = np.concatenate(all_final_states, axis=0)
+    final_actions_to_save = np.concatenate(all_final_actions, axis=0)
+    final_next_states_to_save = np.concatenate(all_final_next_states, axis=0)
+    total_transitions_to_save = len(final_states_to_save)
+
 
     # --- Final Save ---
     print("\nPerforming final save...")
-    save_data(FINAL_OUTPUT_FILENAME, total_saved_transitions, final_states, 
-              final_actions, final_next_states, link_names_arr, meta_info)
+    print(f"  New transitions this run: {total_saved_transitions_this_run:,}")
+    print(f"  Total transitions (old + new): {total_transitions_to_save:,}")
     
-    # --- Final Stats ---
-    if total_saved_transitions > 0:
-        avg_time_per_transition = total_time / total_saved_transitions
-        transitions_per_sec = total_saved_transitions / total_time
-        print(f"  Final Stats ({total_saved_transitions} transitions):")
+    save_data(FINAL_OUTPUT_FILENAME, total_transitions_to_save, final_states_to_save, 
+              final_actions_to_save, final_next_states_to_save, link_names_arr, meta_info)
+    
+    
+    if total_saved_transitions_this_run > 0:
+        overall_tps = total_saved_transitions_this_run / total_time
+        avg_time_per_trans_s = total_time / total_saved_transitions_this_run
+        
+        print(f"\n  Stats for THIS RUN ({total_saved_transitions_this_run} transitions):")
         print(f"    Total Runtime: {total_time:.2f}s")
-        print(f"    Avg. Time/Transition: {avg_time_per_transition * 1000:.4f} ms")
-        print(f"    Throughput: {transitions_per_sec:.2f} trans/sec")
+        print(f"    Avg. Time/Transition: {avg_time_per_trans_s * 1000:.4f} ms")
+        print(f"    Avg. Throughput (Overall): {overall_tps:.2f} trans/sec")
     else:
-        print(f"  Final Stats: No transitions recorded.")
+        print(f"  Final Stats: No transitions recorded this run.")
         print(f"    Total Runtime: {total_time:.2f}s")
     print("=================================================")
 
-
 if __name__ == "__main__":
+    multiprocessing.freeze_support() 
     main()
