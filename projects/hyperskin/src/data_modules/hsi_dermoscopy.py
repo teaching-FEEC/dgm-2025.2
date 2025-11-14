@@ -169,6 +169,23 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         else:
             return dataset.labels
 
+    def _get_is_synthetic_from_dataset(
+        self, dataset: torch.utils.data.Dataset
+    ) -> np.ndarray:
+        """Extract synthetic flags from dataset (handles Subset and ConcatDataset)."""
+        if isinstance(dataset, torch.utils.data.ConcatDataset):
+            flags = []
+            for ds in dataset.datasets:
+                flags.extend(self._get_is_synthetic_from_dataset(ds))
+            return np.array(flags)
+        elif isinstance(dataset, torch.utils.data.Subset):
+            base_flags = self._get_is_synthetic_from_dataset(dataset.dataset)
+            return base_flags[dataset.indices]
+        else:
+            # Base dataset - check if it's synthetic
+            is_synthetic = getattr(dataset, 'is_synthetic', False)
+            return np.full(len(dataset), is_synthetic, dtype=bool)
+
     def _apply_sampling(
         self, dataset: torch.utils.data.Dataset, split_name: str = "train"
     ) -> torch.utils.data.Dataset:
@@ -361,9 +378,9 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
             )
-            self.data_train = torch.utils.data.Subset( #aqui acontece a subdivisão dos dados só de treino 
+            self.data_train = torch.utils.data.Subset( #aqui acontece a subdivisão dos dados só de treino
                 self.data_train, self.train_indices
-            ) 
+            )
 
             self.data_val = HSIDermoscopyDataset(
                 task=self.hparams.task,
@@ -380,8 +397,11 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                     task=self.hparams.task,
                     data_dir=self.hparams.synthetic_data_dir,
                     transform=self.transforms_train,
+                    is_synthetic=True,
                 )
-                indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio) #quantos dados sintéticos vamos usar NÃO COLOCAR 0 
+
+                # quantos dados sintéticos vamos usar NÃO COLOCAR 0
+                indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio)
                 synthetic_indices = np.arange(indices_ratio)
 
                 if self.hparams.allowed_labels is not None:
@@ -418,7 +438,6 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 self.data_train, split_name="train"
             )
 
-           
         if stage in ["test", "predict"] or stage is None and (
             self.data_test is None
         ):
@@ -435,10 +454,10 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         self._print_split_statistics()
 
     def _print_split_statistics(self):
-        """Print label distribution table for each split."""
-        print("\n" + "=" * 70)
+        """Print label distribution table for each split, including synthetic vs real breakdown."""
+        print("\n" + "=" * 80)
         print("DATASET SPLIT STATISTICS")
-        print("=" * 70)
+        print("=" * 80)
 
         # Get label map for display
         labels_map = self.get_labels_map()
@@ -454,23 +473,37 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
 
         for split_name, dataset in splits_info:
             labels = self._get_labels_from_dataset(dataset)
+            is_synthetic = self._get_is_synthetic_from_dataset(dataset)
             unique_labels, counts = np.unique(labels, return_counts=True)
 
             print(f"\n{split_name} Split:")
-            print(f"{'Class':<30} {'Count':<10} {'Percentage':<10}")
-            print("-" * 50)
+            print(
+                f"{'Class':<30} {'Count':<10} {'Real':<10} {'Synth':<10} "
+                f"{'Percentage':<10}"
+            )
+            print("-" * 80)
 
             total = len(labels)
+            n_real = (~is_synthetic).sum()
+            n_synthetic = is_synthetic.sum()
+
             for label, count in zip(unique_labels, counts):
                 class_name = inv_labels_map.get(label, f"Unknown({label})")
+                label_mask = labels == label
+                real_count = (~is_synthetic & label_mask).sum()
+                synth_count = (is_synthetic & label_mask).sum()
                 percentage = (count / total) * 100
                 print(
-                    f"{class_name:<30} {count:<10} {percentage:>6.2f}%"
+                    f"{class_name:<30} {count:<10} {real_count:<10} "
+                    f"{synth_count:<10} {percentage:>6.2f}%"
                 )
 
-            print(f"{'Total':<30} {total:<10} {100.0:>6.2f}%")
+            print(
+                f"{'Total':<30} {total:<10} {n_real:<10} {n_synthetic:<10} "
+                f"{100.0:>6.2f}%"
+            )
 
-        print("=" * 70 + "\n")
+        print("=" * 80 + "\n")
 
     def train_dataloader(self):
         sampler = None
@@ -624,7 +657,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         if getattr(hparams, "synthetic_data_dir", None):
             run_name += "synth_"
             tags.append("synthetic_data")
-        
+
         if getattr(hparams, "synth_mode", None):
             run_name += hparams.synth_mode + "_"
             tags.append(hparams.synth_mode)

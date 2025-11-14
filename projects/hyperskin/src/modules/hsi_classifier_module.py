@@ -124,11 +124,17 @@ class HSIClassifierModule(pl.LightningModule):
 
         rec_metric = Recall(task=self.class_task, num_classes=self.hparams.num_classes,
         threshold=self.hparams.metric_threshold)
+        self.train_rec = rec_metric.clone()
+        self.train_real_rec = rec_metric.clone()
+        self.train_synth_rec = rec_metric.clone()
         self.val_rec   = rec_metric.clone()
         self.test_rec  = rec_metric.clone()
 
         spec_metric = Specificity(task=self.class_task, num_classes=self.hparams.num_classes,
                                                threshold=self.hparams.metric_threshold)
+        self.train_spec = spec_metric.clone()
+        self.train_real_spec = spec_metric.clone()
+        self.train_synth_spec = spec_metric.clone()
         self.val_spec = spec_metric.clone()
         self.test_spec = spec_metric.clone()
 
@@ -245,13 +251,44 @@ class HSIClassifierModule(pl.LightningModule):
     def training_step(self, batch: Any, batch_idx: int):
         loss, preds, targets, _ = self.model_step(batch)
 
+        if isinstance(batch, dict) and "synthetic_label" in batch:
+            synth_labels = batch["synthetic_label"]
+            # synth_labels is a batch of (batch_size,) with a number 0 or 1, indicating if the sample is real or synthetic
+            # get which indices are synthetic
+            synth_indices = (synth_labels == 1).nonzero(as_tuple=True)[0]
+            real_indices = (synth_labels == 0).nonzero(as_tuple=True)[0]
+
+            if len(synth_indices) > 0:
+                synth_preds = preds[synth_indices]
+                synth_targets = targets[synth_indices]
+                real_preds = preds[real_indices]
+                real_targets = targets[real_indices]
+
+                if (synth_targets == 0).any():
+                    self.train_synth_spec(synth_preds, synth_targets)
+                    self.log("train/specificity_synth", self.train_synth_spec, on_step=False, on_epoch=True)
+
+                if (real_targets == 0).any():
+                    self.train_real_spec(real_preds, real_targets)
+                    self.log("train/specificity_real", self.train_real_spec, on_step=False, on_epoch=True)
+
+                if (synth_targets == 1).any():
+                    self.train_synth_rec(synth_preds, synth_targets)
+                    self.log("train/recall_synth", self.train_synth_rec, on_step=False, on_epoch=True)
+
+                if (real_targets == 1).any():
+                    self.train_real_rec(real_preds, real_targets)
+                    self.log("train/recall_real", self.train_real_rec, on_step=False, on_epoch=True)
+
         # update and log metrics
         self.train_loss(loss)
         self.train_acc(preds, targets)
         self.train_f1 (preds, targets)
+        self.train_spec(preds, targets)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True)
         self.log("train/acc", self.train_acc, on_step=False, on_epoch=True)
         self.log("train/f1", self.train_f1, on_step=False, on_epoch=True)
+        self.log("train/specificity", self.train_spec, on_step=False, on_epoch=True)
 
         # we can return here dict with any tensors
         # and then read it in some callback or in `training_epoch_end()` below
