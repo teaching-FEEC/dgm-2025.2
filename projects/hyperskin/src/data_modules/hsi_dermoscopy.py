@@ -631,7 +631,7 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
 
         if getattr(hparams, "synth_ratio", None):
             if hparams.synth_ratio != 1.0:
-                run_name += "r" + hparams.synth_ratio + "_"
+                run_name += "r" + str(hparams.synth_ratio) + "_"
                 tags.append(hparams.synth_mode)
 
         if "train" in self.transforms_cfg:
