@@ -624,6 +624,15 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
         if getattr(hparams, "synthetic_data_dir", None):
             run_name += "synth_"
             tags.append("synthetic_data")
+        
+        if getattr(hparams, "synth_mode", None):
+            run_name += hparams.synth_mode + "_"
+            tags.append(hparams.synth_mode)
+
+        if getattr(hparams, "synth_ratio", None):
+            if hparams.synth_ratio != 1.0:
+                run_name += "r" + hparams.synth_ratio + "_"
+                tags.append(hparams.synth_mode)
 
         if "train" in self.transforms_cfg:
             transforms = self.transforms_cfg["train"]
