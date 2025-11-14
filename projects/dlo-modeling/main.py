@@ -157,6 +157,7 @@ def main():
         action_dim=ACTION_DIM
     )
 
+
     models_to_compare["Transformer"] = RopeTransformer(
         seq_len=SEQ_LEN, 
         d_model=D_MODEL, 
@@ -168,7 +169,7 @@ def main():
         use_dense_action=USE_DENSE_ACTION, 
         action_dim=ACTION_DIM
     )
-
+    
     # 3. Modelle trainieren
     print("\n--- Starting Model Training ---")
     for name, model in models_to_compare.items():
@@ -202,10 +203,14 @@ def main():
         )
         test_losses[name] = test_loss
         print(f"Final Test Loss ({name}): {test_loss:.6f}")
-
-    # 5. Vergleich plotten
+# 5. Plot Comparison
     print("\n--- Plotting Model Comparison ---")
-    print("Displaying plot... Close the plot window to exit the script.")
+    
+    # --- vvvv DEFINE YOUR FILENAME HERE vvvv ---
+    plot_save_file = "model_comparison.png"
+    # --- ^^^^ DEFINE YOUR FILENAME HERE ^^^^ ---
+    
+    print(f"Displaying plot and saving to {plot_save_file}...")
     
     # 'plot_model_comparison'-Funktion aus utils.py verwenden
     plot_model_comparison(
@@ -215,10 +220,11 @@ def main():
         index=0,  # Das erste Sample aus dem Test-Set plotten
         denormalize=False, # auf True setzen, falls Ihre Daten normalisiert sind
         train_mean=None,   # Mittelwert angeben, falls denormalize=True
-        train_std=None     # Standardabweichung angeben, falls denormalize=True
+        train_std=None,    # Standardabweichung angeben, falls denormalize=True
+        save_path=plot_save_file # <-- ADDED THIS LINE
     )
     
-    print("Comparison plot displayed. Script finished.")
+    print("Script finished.")
 
 if __name__ == "__main__":
     main()

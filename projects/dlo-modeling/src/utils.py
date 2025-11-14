@@ -75,8 +75,6 @@ def plot_rope_predictions(
     ax.set_title(f"Rope State Prediction (Sample {index})")
     plt.tight_layout()
     plt.show()
-
-# --- NEW FUNCTION ---
 def plot_model_comparison(
     models_dict: dict[str, BaseRopeModel],
     dataset,
@@ -85,6 +83,7 @@ def plot_model_comparison(
     denormalize: bool = True,
     train_mean: torch.Tensor = None,
     train_std: torch.Tensor = None,
+    save_path: str = None,  # <-- ADDED THIS ARGUMENT
 ):
     """
     Plots predictions from multiple models on the same 3D plot.
@@ -97,6 +96,7 @@ def plot_model_comparison(
         denormalize: Whether to denormalize.
         train_mean: Mean tensor from the training set.
         train_std: Std tensor from the training set.
+        save_path: (str) Optional. Path to save the plot image.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -158,8 +158,20 @@ def plot_model_comparison(
     ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1))
     ax.set_title(f"Model Comparison (Sample {index})")
     plt.tight_layout(rect=[0, 0, 0.85, 1]) # Adjust layout for legend
-    plt.show()
 
+    # --- vvvv THIS IS THE NEW SECTION vvvv ---
+    if save_path:
+        print(f"Saving comparison plot to {save_path}...")
+        # We use fig.savefig and bbox_inches='tight' to ensure the legend is saved
+        try:
+            fig.savefig(save_path, bbox_inches='tight', dpi=150)
+            print(f"Plot saved successfully to {save_path}")
+        except Exception as e:
+            print(f"Error saving plot: {e}")
+    # --- ^^^^ THIS IS THE NEW SECTION ^^^^ ---
+
+    plt.show()
+    
 
 def animate_rope(
     model,
