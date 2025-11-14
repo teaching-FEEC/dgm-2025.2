@@ -19,7 +19,7 @@ data:
                   0.01310135, 0.01476806, 0.01932094, 0.02020744]
     # synthetic_data_dir: data/hsi_dermoscopy_synth_vae #data/hsi_dermoscopy_croppedv2_256_synth_ac_cyclegan
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan_hard
-    synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan
+    # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_spade_fsgan # concatena os datasets
     
     transforms:
