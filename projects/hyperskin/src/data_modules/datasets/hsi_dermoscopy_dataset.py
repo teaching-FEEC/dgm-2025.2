@@ -102,9 +102,11 @@ class HSIDermoscopyDataset(Dataset):
         task: TaskConfig | str = "classification_all_classes",
         force_create_df: bool = True,
         save_labels_df: bool = True,
+        is_synthetic: bool = False,
     ):
         self.data_dir = Path(data_dir)
         self.transform = transform
+        self.is_synthetic = is_synthetic
 
         # Handle task config
         if isinstance(task, str):
@@ -320,6 +322,9 @@ class HSIDermoscopyDataset(Dataset):
         if self.task_config.return_label:
             label = self._get_label(idx)
             sample.label = torch.tensor(label, dtype=torch.long)
+
+        if self.task_config.return_synthetic_label:
+            sample.synthetic_label = torch.tensor(int(self.is_synthetic), dtype=torch.long)
 
         if self.task_config.return_mask:
             sample.mask = mask

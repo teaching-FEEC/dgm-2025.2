@@ -10,6 +10,7 @@ class DatasetSample:
     image: torch.Tensor
     label: torch.Tensor | None = None
     mask: torch.Tensor | None = None
+    synthetic_label: torch.Tensor | None = None
 
     def to_tuple(self):
         """Convert to tuple in fixed order."""
@@ -18,6 +19,8 @@ class DatasetSample:
             items.append(self.mask)
         if self.label is not None:
             items.append(self.label)
+        if self.synthetic_label is not None:
+            items.append(self.synthetic_label)
         return tuple(items)
     def to_dict(self):
         """Convert to dict."""
@@ -27,6 +30,8 @@ class DatasetSample:
             result["mask"] = self.mask
         if self.label is not None:
             result["label"] = self.label
+        if self.synthetic_label is not None:
+            result["synthetic_label"] = self.synthetic_label
         return result
 
 
@@ -41,3 +46,4 @@ class TaskConfig:
     label_type: Literal["multilabel", "binary", "class_index"] = "multilabel"
     label_mapping: dict[str, int] | None = None
     filter_classes: list[str] | None = None
+    return_synthetic_label: bool = True
