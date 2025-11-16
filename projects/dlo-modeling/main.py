@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import sys
 import os
-from torch.utils.data import TensorDataset, random_split
+from torch.utils.data import TensorDataset
 
 # --- 1. Path Setup ---
 # Add 'src' and 'src/models' to the system path
@@ -14,8 +14,11 @@ try:
     from models.rope_bert import RopeBERT
     from models.rope_bilstm import RopeBiLSTM
     from models.rope_transformer import RopeTransformer
-    # split_data wird nicht mehr benötigt, da wir random_split verwenden
-    from utils import set_seed, plot_model_comparison, rope_loss
+    # Import all the functions we need from utils
+    from utils import (
+        set_seed, plot_model_comparison, rope_loss, load_data_from_npz,
+        normalize_data, center_data
+    )
     from models.base_model import BaseRopeModel
 except ImportError as e:
     print(f"Error: Could not import necessary modules.")
@@ -28,113 +31,23 @@ except ImportError as e:
 SEED = 42
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Data parameters
-# Sie müssen diese möglicherweise an Ihre geladenen Daten anpassen
-SEQ_LEN = 70       # Sequence length of the rope
-STATE_DIM = 3      # (x, y, z)
-ACTION_DIM = 4     # Sparse action (dx, dy, dz, flag)
-
-# Model parameters
-D_MODEL = 128
-NHEAD = 4
-NUM_LAYERS = 2     # Klein halten für schnelles Training
-DIM_FF = D_MODEL * 2
+# Model parameters (Medium size)
+D_MODEL = 384
+NHEAD = 8
+NUM_LAYERS = 6     
+DIM_FF = D_MODEL * 4 # Standard Transformer FFN size
 
 # Training parameters
-BATCH_SIZE = 32
-EPOCHS = 5         # Niedrig halten für einen schnellen Testlauf
-LR = 1e-3
-USE_DENSE_ACTION = True # Use dense actions (B, 4) based on data format
+BATCH_SIZE = 32    
+EPOCHS = 10        
+LR = 1e-4          
 
-
-def load_data_from_npz():
+# This helper function is now inside main.py
+def instantiate_models(SEQ_LEN, USE_DENSE_ACTION, ACTION_DIM):
     """
-    Lädt Daten aus einer NPZ-Datei, die 'states', 'actions' 
-    und 'next_states' enthält, und teilt sie auf.
-    
-    !!!! SIE MÜSSEN DIESE FUNKTION BEARBEITEN !!!!
+    Creates a new dictionary of models.
+    Called for each experiment to ensure models are fresh.
     """
-    print("Loading data from NPZ...")
-    
-    # === BEARBEITEN SIE DIESEN PFAD ===
-    data_path = 'src/data/rope_state_action_next_state_mil.npz'
-    if not os.path.exists(data_path):
-        print(f"Error: Data file not found at {data_path}")
-        print("Please edit 'main.py' to point to your .npz file.")
-        sys.exit(1)
-        
-    data = np.load(data_path)
-    
-    # === BEARBEITEN SIE DIESE KEYS ===
-    # Dies sollten die Namen der Arrays in Ihrer .npz-Datei sein
-    states_key = 'states'         # Ihr 'src'-Tensor (Zustand t)
-    actions_key = 'actions'       # Ihr 'action'-Tensor (Aktion t)
-    next_states_key = 'next_states' # Ihr 'tgt'-Tensor (Zustand t+1)
-
-    try:
-        src_data = data[states_key]
-        act_data = data[actions_key]
-        tgt_data = data[next_states_key]
-    except KeyError as e:
-        print(f"Error: Key {e} not found in {data_path}.")
-        print(f"Available keys are: {list(data.keys())}")
-        print("Please edit 'main.py' to use the correct keys for your data.")
-        sys.exit(1)
-
-    # Sicherstellen, dass alle Arrays die gleiche Anzahl von Samples haben
-    if not (len(src_data) == len(act_data) == len(tgt_data)):
-        print(f"Error: Data arrays have different lengths (number of samples)!")
-        print(f"  {states_key}: {len(src_data)}")
-        print(f"  {actions_key}: {len(act_data)}")
-        print(f"  {next_states_key}: {len(tgt_data)}")
-        print("All arrays must have the same first dimension (N_samples).")
-        sys.exit(1)
-
-    # In Tensoren umwandeln
-    src_tensor = torch.tensor(src_data, dtype=torch.float32)
-    act_tensor = torch.tensor(act_data, dtype=torch.float32)
-    tgt_tensor = torch.tensor(tgt_data, dtype=torch.float32)
-
-    # Ein vollständiges Dataset erstellen
-    full_dataset = TensorDataset(src_tensor, act_tensor, tgt_tensor)
-    
-    # Dataset aufteilen (z.B. 80% Train, 10% Val, 10% Test)
-    total_size = len(full_dataset)
-    train_size = int(total_size * 0.8)
-    val_size = int(total_size * 0.1)
-    test_size = total_size - train_size - val_size
-    
-    print(f"Splitting data ({total_size} total samples):")
-    print(f"  Train: {train_size} samples")
-    print(f"  Val:   {val_size} samples")
-    print(f"  Test:  {test_size} samples")
-
-    train_dataset, val_dataset, test_dataset = random_split(
-        full_dataset, 
-        [train_size, val_size, test_size],
-        generator=torch.Generator().manual_seed(SEED) # Unseren Seed verwenden
-    )
-    
-    print(f"Data loaded: {len(train_dataset)} train, {len(val_dataset)} val, {len(test_dataset)} test")
-    return train_dataset, val_dataset, test_dataset
-
-
-def main():
-    set_seed(SEED)
-    print(f"Using device: {DEVICE}")
-
-    # 1. Daten aus NPZ laden
-    try:
-        train_ds, val_ds, test_ds = load_data_from_npz()
-    except Exception as e:
-        print(f"\n---!! An error occurred while loading data: {e}")
-        print("Please check the 'load_data_from_npz' function in 'main.py' and ensure")
-        print("your file paths and NPZ keys are correct. ---\n")
-        # Exception erneut auslösen, um den vollen Traceback anzuzeigen
-        raise
-
-    # 2. Modelle instanziieren
-    print("Instantiating models...")
     models_to_compare = {}
 
     models_to_compare["BiLSTM"] = RopeBiLSTM(
@@ -157,7 +70,6 @@ def main():
         action_dim=ACTION_DIM
     )
 
-
     models_to_compare["Transformer"] = RopeTransformer(
         seq_len=SEQ_LEN, 
         d_model=D_MODEL, 
@@ -169,62 +81,309 @@ def main():
         use_dense_action=USE_DENSE_ACTION, 
         action_dim=ACTION_DIM
     )
-    
-    # 3. Modelle trainieren
-    print("\n--- Starting Model Training ---")
-    for name, model in models_to_compare.items():
-        print(f"\nTraining {name}...")
-        checkpoint_path = f"{name}_best_model.pth"
-        
-        model.train_model(
-            train_dataset=train_ds,
-            val_dataset=val_ds,
-            device=DEVICE,
-            batch_size=BATCH_SIZE,
-            epochs=EPOCHS,
-            lr=LR,
-            checkpoint_path=checkpoint_path,
-            criterion=rope_loss  # Ihre benutzerdefinierte Loss-Funktion
-        )
-        
-        # Die besten Gewichte für Evaluierung und Plotten laden
-        print(f"Loading best weights for {name} from {checkpoint_path}")
-        model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
+    return models_to_compare
 
-    # 4. Modelle auf dem Test-Set evaluieren
-    print("\n--- Starting Model Evaluation ---")
-    test_losses = {}
-    for name, model in models_to_compare.items():
-        test_loss = model.evaluate_model(
-            test_dataset=test_ds,
-            device=DEVICE,
-            batch_size=BATCH_SIZE,
-            criterion=rope_loss
-        )
-        test_losses[name] = test_loss
-        print(f"Final Test Loss ({name}): {test_loss:.6f}")
-# 5. Plot Comparison
-    print("\n--- Plotting Model Comparison ---")
+def main():
+    set_seed(SEED)
+    print(f"Using device: {DEVICE}")
+
+    # Dictionaries to store all experiment results
+    all_test_losses_normalized = {}
+    all_test_losses_denormalized = {}
+    all_test_losses_rollout = {} 
+
+    # 1. Load Data (Raw)
+    try:
+        (
+            src_train_raw_np, act_train_raw_np, tgt_train_raw_np,
+            src_val_raw_np,   act_val_raw_np,   tgt_val_raw_np,
+            src_test_raw_np,  act_test_raw_np,  tgt_test_raw_np,
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        ) = load_data_from_npz(seed=SEED)
+        
+    except Exception as e:
+        print(f"\n---!! An error occurred while loading data: {e}")
+        raise
+        
+    print(f"\n--- Global Config ---")
+    print(f"Using dense action: {USE_DENSE_ACTION}")
+    print(f"Sequence length: {SEQ_LEN}")
+    print(f"Action dimension: {ACTION_DIM}")
+    print(f"----------------------\n")
     
-    # --- vvvv DEFINE YOUR FILENAME HERE vvvv ---
-    plot_save_file = "model_comparison.png"
-    # --- ^^^^ DEFINE YOUR FILENAME HERE ^^^^ ---
+    # Convert all raw numpy arrays to raw PyTorch tensors
+    src_train_raw = torch.tensor(src_train_raw_np, dtype=torch.float32)
+    act_train_raw = torch.tensor(act_train_raw_np, dtype=torch.float32)
+    tgt_train_raw = torch.tensor(tgt_train_raw_np, dtype=torch.float32)
     
-    print(f"Displaying plot and saving to {plot_save_file}...")
+    src_val_raw = torch.tensor(src_val_raw_np, dtype=torch.float32)
+    act_val_raw = torch.tensor(act_val_raw_np, dtype=torch.float32)
+    tgt_val_raw = torch.tensor(tgt_val_raw_np, dtype=torch.float32)
     
-    # 'plot_model_comparison'-Funktion aus utils.py verwenden
-    plot_model_comparison(
-        models_dict=models_to_compare,
-        dataset=test_ds,
-        device=DEVICE,
-        index=0,  # Das erste Sample aus dem Test-Set plotten
-        denormalize=False, # auf True setzen, falls Ihre Daten normalisiert sind
-        train_mean=None,   # Mittelwert angeben, falls denormalize=True
-        train_std=None,    # Standardabweichung angeben, falls denormalize=True
-        save_path=plot_save_file # <-- ADDED THIS LINE
+    src_test_raw = torch.tensor(src_test_raw_np, dtype=torch.float32)
+    act_test_raw = torch.tensor(act_test_raw_np, dtype=torch.float32)
+    tgt_test_raw = torch.tensor(tgt_test_raw_np, dtype=torch.float32)
+    
+    # --- Define Experiments ---
+    # --- vvvv MODIFIED SECTION vvvv ---
+    experiment_types = ['standard', 'com_plus_standard']
+    # --- ^^^^ END MODIFIED SECTION ^^^^ ---
+
+    for norm_type in experiment_types:
+        print(f"\n=======================================================")
+        print(f"  STARTING EXPERIMENT: {norm_type.upper()}")
+        print(f"=======================================================\n")
+        
+        # --- 1. Prepare Data for this experiment ---
+        denorm_stats_for_rollout = None
+        
+        if norm_type == 'standard':
+            print("Applying 'Standard' normalization (mean/std)")
+            (
+                src_train, tgt_train,
+                src_val, tgt_val,
+                src_test, tgt_test,
+                plot_mean, plot_std
+            ) = normalize_data(
+                src_train_raw, tgt_train_raw,
+                src_val_raw, tgt_val_raw,
+                src_test_raw, tgt_test_raw
+            )
+            denorm_flag = True
+            denorm_stats_for_rollout = (plot_mean, plot_std)
+            
+        elif norm_type == 'com_only':
+            # This block will now be skipped, but is safe to leave
+            print("Applying 'Center of Mass (CoM)' normalization")
+            (
+                src_train, tgt_train,
+                src_val, tgt_val,
+                src_test, tgt_test
+            ) = center_data(
+                src_train_raw, tgt_train_raw,
+                src_val_raw, tgt_val_raw,
+                src_test_raw, tgt_test_raw
+            )
+            plot_mean, plot_std = None, None
+            denorm_flag = False
+            denorm_stats_for_rollout = None 
+
+        elif norm_type == 'com_plus_standard':
+            print("Applying 'CoM + Standard' normalization")
+            # First, center all data
+            (
+                src_train_com, tgt_train_com,
+                src_val_com, tgt_val_com,
+                src_test_com, tgt_test_com
+            ) = center_data(
+                src_train_raw, tgt_train_raw,
+                src_val_raw, tgt_val_raw,
+                src_test_raw, tgt_test_raw
+            )
+            # Second, normalize the CoM data
+            (
+                src_train, tgt_train,
+                src_val, tgt_val,
+                src_test, tgt_test,
+                plot_mean, plot_std
+            ) = normalize_data(
+                src_train_com, tgt_train_com,
+                src_val_com, tgt_val_com,
+                src_test_com, tgt_test_com
+            )
+            # This will denormalize plots back to the CoM-centered space
+            denorm_flag = True
+            denorm_stats_for_rollout = (plot_mean, plot_std)
+
+        # Create datasets (actions are always the raw actions)
+        # For train/val, the target is just t+1 (which is `tgt_train`)
+        train_ds = TensorDataset(src_train, act_train_raw, tgt_train)
+        val_ds = TensorDataset(src_val, act_val_raw, tgt_val)
+        
+        # The test dataset is NOT a DataLoader, but the raw tensors
+        # This is required for the sequential rollout evaluation
+        
+        # --- 2. Instantiate Fresh Models ---
+        print("Instantiating fresh models...")
+        models_to_compare = instantiate_models(SEQ_LEN, USE_DENSE_ACTION, ACTION_DIM)
+
+        # --- 3. Train models ---
+        print(f"\n--- Starting Model Training ({norm_type}) ---")
+        
+        checkpoints_dir = os.path.join("checkpoints", norm_type)
+        os.makedirs(checkpoints_dir, exist_ok=True)
+        print(f"Checkpoints will be saved to the '{checkpoints_dir}' directory.")
+        
+        for name, model in models_to_compare.items():
+            print(f"\nTraining {name}...")
+            filename = f"{name}_best.pth"
+            checkpoint_path = os.path.join(checkpoints_dir, filename)
+            
+            model.train_model(
+                train_dataset=train_ds,
+                val_dataset=val_ds,
+                device=DEVICE,
+                batch_size=BATCH_SIZE,
+                epochs=EPOCHS,
+                lr=LR,
+                checkpoint_path=checkpoint_path, 
+                criterion=rope_loss 
+            )
+            
+            print(f"Loading best weights for {name} from {checkpoint_path}")
+            model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
+
+        # --- 4. Evaluate models ---
+        print(f"\n--- Starting Model Evaluation ({norm_type}) ---")
+        
+        norm_losses = {} 
+        denorm_losses = {} 
+        rollout_losses = {} 
+
+        # Create a simple test dataset for single-step eval
+        test_ds_single_step = TensorDataset(src_test, act_test_raw, tgt_test)
+        
+        for name, model in models_to_compare.items():
+            # 1. Calculate NORMALIZED loss (t+1)
+            norm_loss = model.evaluate_model(
+                test_dataset=test_ds_single_step,
+                device=DEVICE,
+                batch_size=BATCH_SIZE,
+                criterion=rope_loss
+            )
+            norm_losses[name] = norm_loss
+            print(f"  Normalized Test Loss (t+1) ({name} @ {norm_type}): {norm_loss:.6f}")
+
+            # 2. Calculate DENORMALIZED loss (t+1)
+            if denorm_flag: # i.e., 'standard' or 'com_plus_standard'
+                denorm_loss = model.evaluate_model_denormalized(
+                    test_dataset=test_ds_single_step,
+                    device=DEVICE,
+                    train_mean=plot_mean, 
+                    train_std=plot_std,
+                    batch_size=BATCH_SIZE,
+                    criterion=rope_loss
+                )
+                denorm_losses[name] = denorm_loss
+                print(f"Denormalized Test Loss (t+1) ({name} @ {norm_type}): {denorm_loss:.6f}")
+            else:
+                denorm_losses[name] = None 
+
+            # 3. Calculate AUTOREGRESSIVE ROLLOUT loss (t+1 to t+10)
+            print(f"Starting 10-step rollout for {name}...")
+            rollout_loss = model.evaluate_autoregressive_rollout(
+                test_src_tensor=src_test,
+                test_act_tensor=act_test_raw,
+                test_tgt_tensor=tgt_test,
+                device=DEVICE,
+                steps=10,
+                criterion=rope_loss,
+                # For rollout, we calculate loss in the "real" space
+                # For 'com_only', this is the centered space (denorm_stats=None)
+                # For others, it's the denormalized space
+                denormalize_stats=denorm_stats_for_rollout
+            )
+            rollout_losses[name] = rollout_loss
+            print(f" Rollout Loss (Avg t+1...t+10) ({name} @ {norm_type}): {rollout_loss:.6f}")
+
+        
+        # Store this experiment's results in the main dictionaries
+        all_test_losses_normalized[norm_type] = norm_losses
+        all_test_losses_denormalized[norm_type] = denorm_losses
+        all_test_losses_rollout[norm_type] = rollout_losses
+        
+        # --- 5. Plot Comparison (on single-step test_ds) ---
+        print(f"\n--- Plotting Model Comparison ({norm_type}) ---")
+        
+        # Create a subdirectory for this experiment's plots
+        plots_dir = os.path.join("comparisons", norm_type)
+        os.makedirs(plots_dir, exist_ok=True)
+        print(f"Plots will be saved to the '{plots_dir}' directory.")
+
+        num_plots = 5
+        if len(test_ds_single_step) == 0:
+            print("Test dataset is empty, skipping plotting.")
+        else:
+            num_samples_to_plot = min(num_plots, len(test_ds_single_step))
+            random_indices = np.random.choice(
+                len(test_ds_single_step), 
+                num_samples_to_plot, 
+                replace=False
+            )
+            print(f"Plotting for {num_samples_to_plot} random samples (Indices: {random_indices})")
+            
+            for i, idx in enumerate(random_indices, 1): 
+                filename = f"model_comparison_{i}.png"
+                plot_save_file = os.path.join(plots_dir, filename)
+                
+                print(f"\n--- Plotting Sample {i}/{num_samples_to_plot} (Data Index: {idx}) ---")
+                print(f"Displaying plot and saving to {plot_save_file}...")
+                
+                plot_model_comparison(
+                    models_dict=models_to_compare,
+                    dataset=test_ds_single_step,
+                    device=DEVICE,
+                    index=idx, 
+                    denormalize=denorm_flag,        
+                    train_mean=plot_mean,   
+                    train_std=plot_std,     
+                    save_path=plot_save_file,
+                    use_dense_action=USE_DENSE_ACTION 
+                )
+    
+    print("\n\nAll experiments finished.")
+    
+    # Print the final summary tables
+    print_loss_table(
+        all_test_losses_normalized, 
+        "Final Normalized Test Loss (t+1 only)"
     )
+    print_loss_table(
+        all_test_losses_denormalized, 
+        "Final Denormalized Test Loss (t+1 only, real-world units)"
+    )
+    print_loss_table(
+        all_test_losses_rollout, 
+        "Final Rollout Test Loss (Avg. t+1 to t+10, real-world units)"
+    )
+
+
+def print_loss_table(all_test_losses, title):
+    """
+    Prints a formatted Markdown table of all test losses.
+    """
+    print(f"\n\n=======================================================")
+    print(f"           {title}")
+    print(f"=======================================================")
     
-    print("Script finished.")
+    if not all_test_losses:
+        print("No test losses recorded.")
+        return
+
+    # Get model names dynamically from the first entry
+    first_norm_type = list(all_test_losses.keys())[0]
+    model_names = list(all_test_losses[first_norm_type].keys())
+    
+    # Header
+    header = "| Normalization |"
+    separator = "|---|"
+    for name in model_names:
+        header += f" {name} Loss |"
+        separator += "---|"
+    print(header)
+    print(separator)
+    
+    # Rows
+    for norm_type, model_losses in all_test_losses.items():
+        row = f"| {norm_type} |"
+        for name in model_names:
+            loss = model_losses.get(name)
+            if isinstance(loss, float):
+                row += f" {loss:.6f} |"
+            else:
+                row += f" N/A |"
+        print(row)
+
 
 if __name__ == "__main__":
     main()

@@ -7,18 +7,7 @@ from .base_model import BaseRopeModel # FIXED: Relative import
 class RopeBERT(BaseRopeModel):
     """
     Bidirectional Transformer (BERT-style) that maps (state_t, action_t) -> state_{t+1}.
-
-    Supports two modes:
-    1.  use_dense_action=True:
-        -   action_t (B, 4) -> [dx, dy, dz, link_id]
-        -   The dense action is projected to (B, d_model) and then
-        -   "scattered" to the correct link_id to create a (B, L, d_model)
-        -   tensor, which is added to the state embedding.
-
-    2.  use_dense_action=False:
-        -   action_t (B, L, 4) -> Sparse map [dx, dy, dz, flag]
-        -   This sparse map is projected to (B, L, d_model) and added to
-        -   the state embedding.
+    ...
     """
 
     def __init__(
@@ -44,7 +33,8 @@ class RopeBERT(BaseRopeModel):
         # --- Positional Encoding (using external class) ---
         self.pos_enc = PositionalEncoding(d_model=d_model, max_len=seq_len)
 
-        self.layernorm_in = nn.LayerNorm(d_model)
+        # --- MODIFICATION: LayerNorm removed as requested ---
+        # self.layernorm_in = nn.LayerNorm(d_model) 
         self.dropout_in = nn.Dropout(dropout)
 
         # --- Action Projections ---
@@ -74,17 +64,7 @@ class RopeBERT(BaseRopeModel):
 
     def forward(self, src_state: torch.Tensor, action: torch.Tensor, decoder_inputs: torch.Tensor = None) -> torch.Tensor:
         """
-        Forward pass.
-
-        Args:
-            src_state: (B, L, 3)
-            action:
-                - (batch, 4) if use_dense_action=True
-                - (batch, L, 4) if use_dense_action=False
-            decoder_inputs: (batch, L, 3) - Ignored.
-
-        Returns:
-            pred_next_state: (B, L, 3)
+        ...
         """
         B, L, _ = src_state.size()
 
@@ -125,7 +105,9 @@ class RopeBERT(BaseRopeModel):
         # 3. Combine state and action
         # This tells the model "at this point, this action happened."
         x = state_emb + action_emb
-        x = self.layernorm_in(x) # Normalize the combined state+action
+        
+        # --- MODIFICATION: LayerNorm removed as requested ---
+        # x = self.layernorm_in(x) # Normalize the combined state+action
 
         # 4. Add positional embeddings
         x = self.pos_enc(x)
