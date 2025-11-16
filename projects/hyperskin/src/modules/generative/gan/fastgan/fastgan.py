@@ -17,10 +17,10 @@ from tqdm import tqdm
 from src.data_modules.joint_rgb_hsi_dermoscopy import JointRGBHSIDataModule
 from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
-from src.models.fastgan.fastgan import weights_init
+from src.models.fastgan.fastgan import Generator, weights_init
 from src.models.timm import TIMMModel
 from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
-from src.models.fastgan.fastgan import Generator, Discriminator
+from src.models.fastgan.fastgan import Discriminator
 from pytorch_lightning.trainer.trainer import TrainerFn
 
 # Import SPADE versions
@@ -72,6 +72,18 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         ngf: int = 64,
         nz: int = 256,
         nlr: float = 0.0002,
+        nlr_G: Optional[float] = None,
+        nlr_D: Optional[float] = None,
+        hinge_loss_rand_weight: bool = True,
+        noise_std_start: float = 0.0,
+        noise_std_end: float = 0.0,
+        noise_std: Optional[float] = None,
+        noise_decay_steps: int = 10000,
+        use_topk: bool = False,
+        topk_start: float = 0.5,          # start by using top 50% easiest fakes
+        topk_end: float = 1.0,            # end by using all samples
+        topk_decay_steps: int = 50000,    # number of training steps to reach 100%
+        freeze_d: int = 0,
         nbeta1: float = 0.5,
         nbeta2: float = 0.999,
         log_images_on_step_n: int = 1,
@@ -94,6 +106,11 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
+        
+        if self.hparams.nlr is not None and self.hparams.nlr_G is None:
+            self.hparams.nlr_G = self.hparams.nlr
+        if self.hparams.nlr is not None and self.hparams.nlr_D is None:
+            self.hparams.nlr_D = nlr
 
         # Validate SPADE configuration
         if self.hparams.use_spade:
@@ -111,6 +128,10 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             self.netD = Discriminator(ndf=ndf, im_size=im_size, nc=nc)
         self.netG.apply(weights_init)
         self.netD.apply(weights_init)
+
+        # Optionally freeze D layers
+        if self.hparams.freeze_d > 0:
+            self.freeze_d(self.hparams.freeze_d)
 
         # EMA parameters
         self.avg_param_G = copy_G_params(self.netG)
@@ -237,6 +258,90 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
     def on_train_start(self):
         """Properly initialize EMA params on correct device."""
         self.avg_param_G = [p.data.clone().detach().to(self.device) for p in self.netG.parameters()]
+        
+        self.freeze_d(self.hparams.freeze_d)
+
+    def freeze_d(self, n_layers: int) -> None:
+        """
+        Freeze the first `n_layers` hierarchical components in the Discriminator.
+        Layer order is defined as:
+          [down_from_big, down_4, se_2_16, down_8, se_4_32, down_16,
+           down_32, se_8_64, down_64]
+
+        Args:
+            n_layers (int): Number of discriminator submodules to freeze, in order.
+        """
+        # Define ordered list of submodules in forward order
+        layer_order = [
+            ("down_from_big", self.netD.down_from_big),
+            ("down_4", self.netD.down_4),
+            ("se_2_16", getattr(self.netD, "se_2_16", None)),
+            ("down_8", self.netD.down_8),
+            ("se_4_32", getattr(self.netD, "se_4_32", None)),
+            ("down_16", self.netD.down_16),
+            ("down_32", self.netD.down_32),
+            ("se_8_64", getattr(self.netD, "se_8_64", None)),
+            ("down_64", self.netD.down_64),
+        ]
+
+        frozen_layers = []
+
+        for i, (name, layer) in enumerate(layer_order):
+            if layer is None:
+                continue
+            if i < n_layers:
+                for p in layer.parameters():
+                    p.requires_grad = False
+                frozen_layers.append(name)
+            else:
+                # Ensure later layers are still trainable
+                for p in layer.parameters():
+                    p.requires_grad = True
+
+        if len(frozen_layers) == 0:
+            print("[FastGAN] No discriminator layers frozen.")
+        else:
+            print(f"[FastGAN] Frozen discriminator layers: {frozen_layers}")
+
+    # Add this as a new method inside the FastGANModule class
+    def get_current_noise_std(self) -> float:
+        """Compute linearly decayed noise_std based on training progress."""
+        start = getattr(self.hparams, "noise_std_start", 0.0)
+        end = getattr(self.hparams, "noise_std_end", 0.0)
+        decay_steps = getattr(self.hparams, "noise_decay_steps", 100000)
+
+        if self.hparams.noise_std is not None:
+            return self.hparams.noise_std
+
+        if start == end or decay_steps <= 0:
+            return start
+
+        # Compute proportion of training completed
+        # Use global_step // 2 to get the number of training iterations
+        step = float(self.global_step // 2)
+        progress = min(step / decay_steps, 1.0)
+
+        # Linear decay schedule: interpolate between start and end
+        return start + (end - start) * progress
+
+    def get_current_topk_fraction(self) -> float:
+        """Compute gradually increasing Top‑k fraction for curriculum GAN training."""
+        if not self.hparams.use_topk:
+            return 1.0
+
+        start = self.hparams.topk_start
+        end = self.hparams.topk_end
+        decay_steps = self.hparams.topk_decay_steps
+
+        if decay_steps <= 0:
+            return end
+
+        # proportion of training progress (using global_step // 2 like noise std)
+        step = float(self.global_step // 2)
+        progress = min(step / decay_steps, 1.0)
+
+        # linear interpolation
+        return start + (end - start) * progress
 
     def train_d_step(self, real_image, fake_images, seg, label="real"):
         """Discriminator step with optional SPADE conditioning"""
@@ -247,10 +352,15 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, seg=seg, part=part)
             else:
                 pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, part=part)
+                
+                
+            if self.hparams.hinge_loss_rand_weight:
+                rand_weight = torch.rand_like(pred) * 0.2 + 0.8 
+            else:
+                rand_weight = torch.ones_like(pred)
 
-            rand_weight = torch.rand_like(pred)
             err = (
-                F.relu(rand_weight * 0.2 + 0.8 - pred).mean()
+                F.relu(rand_weight - pred).mean()
                 + self.percept(rec_all, F.interpolate(real_image, rec_all.shape[2])).sum()
                 + self.percept(rec_small, F.interpolate(real_image, rec_small.shape[2])).sum()
                 + self.percept(rec_part, F.interpolate(crop_image_by_part(real_image, part), rec_part.shape[2])).sum()
@@ -262,8 +372,12 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             else:
                 pred = self.netD(fake_images, label)
 
-            rand_weight = torch.rand_like(pred)
-            err = F.relu(rand_weight * 0.2 + 0.8 + pred).mean()
+            if self.hparams.hinge_loss_rand_weight:
+                rand_weight = torch.rand_like(pred) * 0.2 + 0.8 
+            else:
+                rand_weight = torch.ones_like(pred)
+
+            err = F.relu(rand_weight + pred).mean()
             return err, pred.mean()
 
     def get_real_image(self, batch):
@@ -311,17 +425,29 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         seg_aug = DiffAugment(seg, policy=policy) if seg is not None else None
 
+        # --- ADD NOISE SCHEDULER HERE ---
+        noise_std = self.get_current_noise_std()
+        noisy_real_image = real_image
+        noisy_fake_images_aug = fake_images_aug
+
+        if noise_std > 0:
+            noisy_real_image = real_image + torch.randn_like(real_image) * noise_std
+            noisy_fake_images_aug = [
+                f + torch.randn_like(f) * noise_std for f in fake_images_aug
+            ]
+        # --- END NOISE ADDITION ---
+
         # --------- Train D ---------
         opt_d.zero_grad(set_to_none=True)
         self.netD.zero_grad(set_to_none=True)
 
         err_dr, pred_real, rec_all, rec_small, rec_part = self.train_d_step(
-            real_image, fake_images_aug, seg_aug, "real"
+            noisy_real_image, noisy_fake_images_aug, seg_aug, "real"
         )
         self.manual_backward(err_dr)
 
         err_df, pred_fake = self.train_d_step(
-            real_image, [fi.detach() for fi in fake_images_aug], seg_aug, "fake"
+            noisy_real_image, [fi.detach() for fi in noisy_fake_images_aug], seg_aug, "fake"
         )
         self.manual_backward(err_df)
 
@@ -336,7 +462,20 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         else:
             pred_g = self.netD(fake_images_aug, "fake")
 
-        err_g = -pred_g.mean()
+        if self.hparams.use_topk:
+            # Get the progressively increasing fraction
+            topk_frac = self.get_current_topk_fraction()
+            k = max(1, int(pred_g.numel() * topk_frac))
+
+            # Select the easiest fake samples (largest logits = discriminator most fooled)
+            topk_vals, _ = torch.topk(pred_g.view(-1), k, largest=True)
+
+            err_g = -topk_vals.mean()
+
+            self.log("train/topk_fraction", topk_frac, on_step=True, on_epoch=False)
+            self.log("train/topk_k", float(k), on_step=True, on_epoch=False)
+        else:
+            err_g = -pred_g.mean()
 
         # --- Adversarial Classifier Loss ---
         if self.classifier is not None:
@@ -378,6 +517,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         self.log("train/d_loss_fake", err_df, on_step=True, on_epoch=False)
         self.log("train/d_loss_total", d_loss_total, on_step=True, on_epoch=False)
         self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
+        self.log("train/noise_std", noise_std, on_step=True, on_epoch=False)
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
         current_step = self.global_step // 2
@@ -453,6 +593,11 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
                 real_image = self.get_real_image(batch)
                 seg = self.get_conditioning(batch)
+
+                label = batch.get("label", None)
+                if label is not None:
+                    label = label.to(self.device, non_blocking=True)
+                    
                 seg = seg.to(self.device, non_blocking=True) if seg is not None else None
 
                 real_image = real_image.to(self.device, non_blocking=True)
@@ -491,8 +636,8 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 tv_sum += tv_val.item()
                 count += 1
 
-                self.spectra_metric.update(real_norm, is_fake=False)
-                self.spectra_metric.update(fake_norm, is_fake=True)
+                self.spectra_metric.update(real_norm, is_fake=False, labels=label)
+                self.spectra_metric.update(fake_norm, is_fake=True, labels=label)
 
             mean_sam = sam_sum / max(count, 1)
             mean_rase = rase_sum / max(count, 1)
@@ -565,10 +710,10 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
     def configure_optimizers(self):
         opt_g = optim.Adam(
-            self.netG.parameters(), lr=self.hparams.nlr, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+            self.netG.parameters(), lr=self.hparams.nlr_G, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
         )
         opt_d = optim.Adam(
-            self.netD.parameters(), lr=self.hparams.nlr, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+            self.netD.parameters(), lr=self.hparams.nlr_D, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
         )
         return [opt_g, opt_d]
 

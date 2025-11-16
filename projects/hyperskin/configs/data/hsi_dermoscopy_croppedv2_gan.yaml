@@ -1,11 +1,25 @@
 data:
   class_path: data_modules.HSIDermoscopyDataModule
   init_args:
-    task: GENERATION
-    allowed_labels: ["melanoma"]
+    task: 
+      return_image: True
+      return_mask: False
+      return_label: True
+      binary_classification: True
+      label_mapping:
+        melanoma: 0
+        dysplastic_nevi: 1
+      filter_classes: [
+        # "melanoma", 
+        "dysplastic_nevi"
+      ]
+    allowed_labels: [
+      "melanoma", 
+      "dysplastic_nevi"
+    ]
     train_val_test_split: [0.7, 0.15, 0.15]
     image_size: 256
-    batch_size: 32
+    batch_size: 30
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
