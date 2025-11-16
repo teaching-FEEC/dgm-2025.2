@@ -368,6 +368,93 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     ) -> torch.utils.data.Subset:
         """Create subset from ConcatDataset using global indices."""
         return torch.utils.data.Subset(concat_dataset, indices)
+    
+ 
+    def stratify_synthetic_data(self, synthetic_dataset) -> np.ndarray:
+        """
+        Return a numpy array of indices selecting a stratified subset of the
+        provided synthetic_dataset according to self.hparams.synth_ratio.
+        Behavior:
+         - If synth_ratio >= 1.0 -> return all indices
+         - Otherwise pick approximately synth_ratio fraction from each class
+           (per-class floor allocation + distribute remainder by fractional parts).
+         - Sampling is done without replacement and is reproducible using
+           self.hparams.sampling_random_state.
+        """
+        # Defensive checks
+        ratio = getattr(self.hparams, "synth_ratio", 1.0)
+        rnd_state = int(getattr(self.hparams, "sampling_random_state", 42) or 42)
+        total = len(synthetic_dataset)
+
+        if ratio >= 1.0:
+            return np.arange(total, dtype=int)
+
+        # obtain numeric labels for all synthetic samples
+        labels_all = (
+            synthetic_dataset.labels_df["label"]
+            .map(synthetic_dataset.labels_map)
+            .to_numpy()
+        )
+
+        # reproducible RNG
+        rng = np.random.RandomState(rnd_state)
+
+        target_total = int(np.floor(total * ratio))
+        # ensure at least 1 if ratio>0 and dataset non-empty
+        target_total = max(1, target_total)
+
+        unique, counts = np.unique(labels_all, return_counts=True)
+
+        # raw per-class expected values (float)
+        raw = counts * ratio
+        # floor allocation
+        per_class = np.floor(raw).astype(int)
+
+        # ensure classes that exist get at least one if ratio yields zero but ratio>0
+        per_class = np.where((counts > 0) & (per_class == 0), 1, per_class)
+
+        # adjust to match target_total using fractional parts
+        current = per_class.sum()
+        if current < target_total:
+            frac = raw - np.floor(raw)
+            order = np.argsort(-frac)  # descending fractional parts
+            for idx in order:
+                if current >= target_total:
+                    break
+                # don't exceed available samples in that class
+                if per_class[idx] < counts[idx]:
+                    per_class[idx] += 1
+                    current += 1
+        elif current > target_total:
+            frac = raw - np.floor(raw)
+            order = np.argsort(frac)  # smallest fractional parts first
+            for idx in order:
+                if current <= target_total:
+                    break
+                if per_class[idx] > 0:
+                    per_class[idx] -= 1
+                    current -= 1
+
+        # sample per-class indices without replacement
+        synthetic_indices_list = []
+        for lab, num in zip(unique, per_class):
+            if num <= 0:
+                continue
+            label_mask = np.where(labels_all == lab)[0]
+            if num >= len(label_mask):
+                chosen = label_mask.tolist()
+            else:
+                chosen = rng.choice(label_mask, size=int(num), replace=False).tolist()
+            synthetic_indices_list.extend(chosen)
+
+        if len(synthetic_indices_list) == 0:
+            return np.array([], dtype=int)
+
+        synthetic_indices = np.array(synthetic_indices_list, dtype=int)
+        # shuffle the final selection a bit for mixing
+        rng.shuffle(synthetic_indices)
+        return synthetic_indices
+
 
     def setup(self, stage: str = None):
         if stage in ["fit", "validate"] or stage is None and (
@@ -401,8 +488,9 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
                 )
 
                 # quantos dados sintéticos vamos usar NÃO COLOCAR 0
-                indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio)
-                synthetic_indices = np.arange(indices_ratio)
+                synthetic_indices = self.stratify_synthetic_data(synthetic_dataset)
+                #indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio)
+                #synthetic_indices = np.arange(indices_ratio)
 
                 if self.hparams.allowed_labels is not None:
                     synthetic_labels = (
