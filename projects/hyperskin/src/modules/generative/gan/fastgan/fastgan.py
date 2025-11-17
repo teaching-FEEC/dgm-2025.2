@@ -19,9 +19,11 @@ from src.losses.lpips import PerceptualLoss
 from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import Generator, weights_init
 from src.models.timm import TIMMModel
+from src.modules.generative.gan.fastgan.barlow_twins import BarlowTwinsProjector, off_diagonal
 from src.modules.generative.gan.fastgan.operation import copy_G_params, load_params
 from src.models.fastgan.fastgan import Discriminator
 from pytorch_lightning.trainer.trainer import TrainerFn
+import kornia.augmentation as K
 
 # Import SPADE versions
 from src.models.fastgan.spade_fastgan import GeneratorSPADE, DiscriminatorSPADE
@@ -80,9 +82,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         noise_std: Optional[float] = None,
         noise_decay_steps: int = 10000,
         use_topk: bool = False,
-        topk_start: float = 0.5,          # start by using top 50% easiest fakes
-        topk_end: float = 1.0,            # end by using all samples
-        topk_decay_steps: int = 50000,    # number of training steps to reach 100%
+        topk_start: float = 0.5,
+        topk_end: float = 1.0,
+        topk_decay_steps: int = 50000,
         freeze_d: int = 0,
         nbeta1: float = 0.5,
         nbeta2: float = 0.999,
@@ -101,7 +103,12 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         classifier_config: Optional[dict] = None,
         classifier_weights_path: Optional[str] = None,
         adversarial_loss_weight: float = 0.1,
-        classifier_loss_type: str = "confidence",  # or "entropy"
+        classifier_loss_type: str = "confidence",
+        # Barlow Twins configuration
+        use_barlow_twins: bool = False,
+        barlow_twins_weight: float = 0.005,
+        barlow_twins_lambd: float = 0.0051,
+        barlow_twins_projector_dim: int = 2048,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -110,7 +117,7 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         if self.hparams.nlr is not None and self.hparams.nlr_G is None:
             self.hparams.nlr_G = self.hparams.nlr
         if self.hparams.nlr is not None and self.hparams.nlr_D is None:
-            self.hparams.nlr_D = nlr
+            self.hparams.nlr_D = self.hparams.nlr
 
         # Validate SPADE configuration
         if self.hparams.use_spade:
@@ -141,9 +148,29 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         self.register_buffer("fixed_noise", torch.FloatTensor(8, self.hparams.nz).normal_(0, 1))
 
-
         if self.hparams.use_spade:
             self.fixed_conditioning = None
+
+        # --- Barlow Twins Setup ---
+        if self.hparams.use_barlow_twins:
+            self.barlow_projector = BarlowTwinsProjector(
+                input_dim=512,
+                hidden_dim=self.hparams.barlow_twins_projector_dim,
+                output_dim=self.hparams.barlow_twins_projector_dim,
+            )
+            self.barlow_projector.apply(weights_init)
+            
+            # Albumentations augmentations
+            self.augment = torch.nn.Sequential(
+                K.RandomResizedCrop(size=(im_size, im_size), scale=(0.8, 1.0)),
+                K.RandomHorizontalFlip(p=0.5),
+                K.RandomBrightness(0.4),
+                K.RandomContrast(0.4),
+                K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=1.0),
+                K.RandomSolarize(p=0.2),
+            )
+        else:
+            self.barlow_projector = None
 
         # --- Adversarial Classifier Setup ---
         if self.hparams.use_adversarial_classifier:
@@ -161,7 +188,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 )
                 if 'state_dict' in checkpoint:
                     state_dict = checkpoint['state_dict']
-                    # Remove 'model.' prefix if present from Lightning checkpoint
                     state_dict = {
                         k.replace('net.', ''): v
                         for k, v in state_dict.items()
@@ -193,6 +219,43 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         self.fid.eval()
 
         self.spectra_metric = MeanSpectraMetric()
+
+    def apply_augmentation(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        Apply GPU-native augmentations (Kornia).
+        images: (B, C, H, W) in [-1, 1]
+        """
+        # Convert to [0, 1]
+        images = (images + 1) / 2
+        # Apply augmentations directly on GPU
+        augmented = self.augment(images)
+        # Convert back to [-1, 1]
+        return augmented * 2 - 1   
+
+    def compute_barlow_twins_loss(self, features1, features2):
+        """
+        Compute Barlow Twins loss between two sets of features
+        
+        Args:
+            features1: Features from first augmented view
+            features2: Features from second augmented view
+        """
+        # Project features
+        features1 = F.adaptive_avg_pool2d(features1, 1).view(features1.size(0), -1)
+        features2 = F.adaptive_avg_pool2d(features2, 1).view(features2.size(0), -1)
+        z1 = self.barlow_projector(features1)
+        z2 = self.barlow_projector(features2)
+        
+        # Compute empirical cross-correlation matrix
+        batch_size = z1.size(0)
+        c = (z1.T @ z2) / batch_size
+        
+        # Loss: encourage diagonal to be 1, off-diagonal to be 0
+        on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
+        off_diag = off_diagonal(c).pow_(2).sum()
+        loss = on_diag + self.hparams.barlow_twins_lambd * off_diag
+        
+        return loss
 
     def _get_tags_and_run_name(self):
         """Automatically derive tags and a run name from FastGANModule hyperparameters."""
@@ -343,6 +406,24 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         # linear interpolation
         return start + (end - start) * progress
 
+    def extract_discriminator_features(self, images, seg=None):
+        """Extract intermediate features from discriminator for Barlow Twins"""
+        # We'll extract features from the discriminator forward pass
+        # For this, we need to modify the discriminator call slightly
+        
+        # Process original size image through discriminator layers
+        feat_2 = self.netD.down_from_big(images)
+        feat_4 = self.netD.down_4(feat_2)
+        feat_8 = self.netD.down_8(feat_4)
+        feat_16 = self.netD.down_16(feat_8)
+        feat_16 = self.netD.se_2_16(feat_2, feat_16)
+        feat_32 = self.netD.down_32(feat_16)
+        feat_32 = self.netD.se_4_32(feat_4, feat_32)
+        feat_last = self.netD.down_64(feat_32)
+        feat_last = self.netD.se_8_64(feat_8, feat_last)
+        
+        return feat_last
+
     def train_d_step(self, real_image, fake_images, seg, label="real"):
         """Discriminator step with optional SPADE conditioning"""
         if label == "real":
@@ -352,7 +433,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, seg=seg, part=part)
             else:
                 pred, [rec_all, rec_small, rec_part] = self.netD(real_image, label, part=part)
-                
                 
             if self.hparams.hinge_loss_rand_weight:
                 rand_weight = torch.rand_like(pred) * 0.2 + 0.8 
@@ -418,14 +498,13 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         opt_g, opt_d = self.optimizers()
 
         fake_images = self(noise, seg)
-
         fake_images = [fi.float() for fi in fake_images]
         real_image = DiffAugment(real_image, policy=policy)
         fake_images_aug = [DiffAugment(fake, policy=policy) for fake in fake_images]
 
         seg_aug = DiffAugment(seg, policy=policy) if seg is not None else None
 
-        # --- ADD NOISE SCHEDULER HERE ---
+        # Add noise scheduler
         noise_std = self.get_current_noise_std()
         noisy_real_image = real_image
         noisy_fake_images_aug = fake_images_aug
@@ -435,16 +514,35 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             noisy_fake_images_aug = [
                 f + torch.randn_like(f) * noise_std for f in fake_images_aug
             ]
-        # --- END NOISE ADDITION ---
 
         # --------- Train D ---------
         opt_d.zero_grad(set_to_none=True)
         self.netD.zero_grad(set_to_none=True)
+        if self.hparams.use_barlow_twins:
+            self.barlow_projector.zero_grad(set_to_none=True)
 
         err_dr, pred_real, rec_all, rec_small, rec_part = self.train_d_step(
             noisy_real_image, noisy_fake_images_aug, seg_aug, "real"
         )
-        self.manual_backward(err_dr)
+        
+        # Barlow Twins loss on real data
+        barlow_loss = torch.tensor(0.0, device=self.device)
+        if self.hparams.use_barlow_twins:
+            # Create two augmented views of the real image
+            real_view1 = self.apply_augmentation(real_image)
+            real_view2 = self.apply_augmentation(real_image)
+            
+            # Extract features from both views
+            features1 = self.extract_discriminator_features(real_view1, seg_aug)
+            features2 = self.extract_discriminator_features(real_view2, seg_aug)
+            
+            # Compute Barlow Twins loss
+            barlow_loss = self.compute_barlow_twins_loss(features1, features2)
+            barlow_loss = barlow_loss * self.hparams.barlow_twins_weight
+        
+        # Total discriminator loss
+        d_loss = err_dr + barlow_loss
+        self.manual_backward(d_loss)
 
         err_df, pred_fake = self.train_d_step(
             noisy_real_image, [fi.detach() for fi in noisy_fake_images_aug], seg_aug, "fake"
@@ -463,13 +561,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             pred_g = self.netD(fake_images_aug, "fake")
 
         if self.hparams.use_topk:
-            # Get the progressively increasing fraction
             topk_frac = self.get_current_topk_fraction()
             k = max(1, int(pred_g.numel() * topk_frac))
-
-            # Select the easiest fake samples (largest logits = discriminator most fooled)
             topk_vals, _ = torch.topk(pred_g.view(-1), k, largest=True)
-
             err_g = -topk_vals.mean()
 
             self.log("train/topk_fraction", topk_frac, on_step=True, on_epoch=False)
@@ -477,47 +571,39 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         else:
             err_g = -pred_g.mean()
 
-        # --- Adversarial Classifier Loss ---
+        # Adversarial Classifier Loss
         if self.classifier is not None:
-            # Normalize fake images from [-1, 1] to [0, 1] for classifier
             fake_for_classifier = (fake_images[0] + 1) / 2
             fake_for_classifier = fake_for_classifier.clamp(0, 1)
-
-            # Ensure classifier stays in eval mode
             self.classifier.eval()
 
-            # Get logits from classifier (assumes all images are melanoma - class 0)
             logits = self.classifier(fake_for_classifier)
-
             probs = torch.softmax(logits, dim=-1)
             melanoma_prob = probs[:, 0]
-            # non_melanoma_prob = probs[:, 1:].max(dim=1)[0]
 
-            # Hard samples: either misclassified confidently OR near boundary
             boundary_loss = torch.mean(torch.abs(melanoma_prob - 0.5))
-            # misclass_loss = -torch.mean(non_melanoma_prob)
+            adversarial_loss = boundary_loss * self.hparams.adversarial_loss_weight
 
-            adversarial_loss = (boundary_loss) * self.hparams.adversarial_loss_weight
-
-            # Add weighted adversarial loss to generator loss
             err_g = err_g + adversarial_loss
-
             self.log("train/adversarial_loss", adversarial_loss, on_step=True, on_epoch=False)
 
         self.manual_backward(err_g)
         opt_g.step()
 
-        # --------- EMA update after G step ---------
+        # EMA update after G step
         for p, avg_p in zip(self.netG.parameters(), self.avg_param_G):
             avg_p.mul_(0.999).add_(p.data, alpha=0.001)
 
-        # --------- Log losses ---------
+        # Log losses
         d_loss_total = err_dr + err_df
         self.log("train/d_loss_real", err_dr, on_step=True, on_epoch=False)
         self.log("train/d_loss_fake", err_df, on_step=True, on_epoch=False)
         self.log("train/d_loss_total", d_loss_total, on_step=True, on_epoch=False)
         self.log("train/g_loss", err_g, on_step=True, on_epoch=False)
         self.log("train/noise_std", noise_std, on_step=True, on_epoch=False)
+        
+        if self.hparams.use_barlow_twins:
+            self.log("train/barlow_twins_loss", barlow_loss, on_step=True, on_epoch=False)
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
         current_step = self.global_step // 2
@@ -594,7 +680,11 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 real_image = self.get_real_image(batch)
                 seg = self.get_conditioning(batch)
 
-                label = batch.get("label", None)
+                if self.hparams.use_spade and "rgb" in batch:
+                    label = batch["rgb"].get("label", None)
+                else:
+                    label = batch.get("label", None)
+                
                 if label is not None:
                     label = label.to(self.device, non_blocking=True)
                     
@@ -708,17 +798,58 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         load_params(self.netG, backup_para)
         self.netG.train()
 
+    # def configure_optimizers(self):
+    #     # Generator parameters
+    #     opt_g = optim.Adam(
+    #         self.netG.parameters(), 
+    #         lr=self.hparams.nlr_G, 
+    #         betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+    #     )
+        
+    #     # Discriminator parameters (include Barlow projector if enabled)
+    #     d_params = list(self.netD.parameters())
+    #     if self.hparams.use_barlow_twins:
+    #         d_params += list(self.barlow_projector.parameters())
+        
+    #     opt_d = optim.Adam(
+    #         d_params,
+    #         lr=self.hparams.nlr_D, 
+    #         betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+    #     )
+        
+    #     return [opt_g, opt_d]
+    
     def configure_optimizers(self):
+        # Generator parameters
         opt_g = optim.Adam(
-            self.netG.parameters(), lr=self.hparams.nlr_G, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+            self.netG.parameters(), 
+            lr=self.hparams.nlr_G, 
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2)
         )
+        
+        # Discriminator parameters (include Barlow projector if enabled)
+        d_params = list(self.netD.parameters())
+        if self.hparams.use_barlow_twins:
+            d_params += list(self.barlow_projector.parameters())
+        
         opt_d = optim.Adam(
-            self.netD.parameters(), lr=self.hparams.nlr_D, betas=(self.hparams.nbeta1, self.hparams.nbeta2)
+            d_params,
+            lr=self.hparams.nlr_D, 
+            betas=(self.hparams.nbeta1, self.hparams.nbeta2)
         )
+        
         return [opt_g, opt_d]
 
     def on_save_checkpoint(self, checkpoint):
         checkpoint["avg_param_G"] = [p.clone().cpu() for p in self.avg_param_G]
+        if self.hparams.use_barlow_twins:
+            checkpoint["barlow_projector"] = self.barlow_projector.state_dict()
+        
+    def on_load_checkpoint(self, checkpoint):
+        # load barlow projector state dict if applicable
+        if self.hparams.use_barlow_twins and "barlow_projector" in checkpoint:
+            self.barlow_projector.load_state_dict(checkpoint["barlow_projector"])
+        self.avg_param_G = [p.clone().to(self.device) for p in checkpoint["avg_param_G"]]
 
 if __name__ == "__main__":
     # Simple test to instantiate the module

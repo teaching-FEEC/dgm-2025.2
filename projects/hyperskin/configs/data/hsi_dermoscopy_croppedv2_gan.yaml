@@ -10,16 +10,16 @@ data:
         melanoma: 0
         dysplastic_nevi: 1
       filter_classes: [
-        # "melanoma", 
-        "dysplastic_nevi"
+        "melanoma", 
+        # "dysplastic_nevi"
       ]
     allowed_labels: [
       "melanoma", 
-      "dysplastic_nevi"
+      # "dysplastic_nevi"
     ]
     train_val_test_split: [0.7, 0.15, 0.15]
     image_size: 256
-    batch_size: 30
+    batch_size: 16
     num_workers: 8
     pin_memory: True
     data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks

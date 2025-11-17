@@ -7,12 +7,15 @@ data:
       task: 
         return_image: True
         return_mask: False
-        return_label: False
+        return_label: True
         binary_classification: True
         label_mapping:
           melanoma: 0
           dysplastic_nevi: 1
-        filter_classes: [melanoma, dysplastic_nevi]
+        filter_classes: [
+          "melanoma", 
+          "dysplastic_nevi"
+          ]
 
       train_val_test_split: [0.7, 0.15, 0.15]
       image_size: 256
@@ -31,8 +34,9 @@ data:
       range_mode: '-1_1'
       infinite_train: True
       normalize_mask_tanh: True
-      allowed_labels: [melanoma, 
-      # dysplastic_nevi
+      allowed_labels: [
+        # "melanoma", 
+        "dysplastic_nevi"
       ]
 
       transforms:
@@ -70,7 +74,7 @@ data:
       task: 
         return_image: True
         return_mask: False
-        return_label: False
+        return_label: True
         binary_classification: True
         label_type: binary
       train_val_test_split: [1, 0, 0]
@@ -80,8 +84,9 @@ data:
       pin_memory: True
       # data_dir: data/isic2019_cropped_256
       data_dir: data/milk10k_melanoma_nevus_cropped_256
-      allowed_labels: [melanoma, 
-      # melanocytic_nevus
+      allowed_labels: [
+        # "melanoma", 
+        "melanocytic_nevus"
       ]
       # global_max: [255, 255, 255]
       # global_min: [0, 0, 0]

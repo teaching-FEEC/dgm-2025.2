@@ -6,8 +6,12 @@ model:
     ndf: 64
     ngf: 64
     nz: 256
-    nlr: 0.0001
-    freeze_d: 3  # Freeze first N layers of the discriminator. Set to 0 to not freeze any layer.
+    nlr: 0.0002
+    # use_barlow_twins: True
+    # barlow_twins_weight:  0.005
+    # barlow_twins_lambd: 0.0051
+    # barlow_twins_projector_dim: 2048
+    # freeze_d: 3  # Freeze first N layers of the discriminator. Set to 0 to not freeze any layer.
     # nlr_G: 0.0002
     # nlr_D: 0.0001
     # hinge_loss_rand_weight: True
