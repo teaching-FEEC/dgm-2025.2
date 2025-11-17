@@ -13,15 +13,26 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 | Aline Yoshida Machado | 265732 | Physics Engineering|
 
 ## Abstract / Project Description
-Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. Thanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral tumor datasets are scarce, which often leads melanoma classification models to overfit or perform poorly in subsampled classes. Therefore, the main goal of this project is to construct a generative ai model that creates a synthetic hyperspectral dermoscopy dataset. More specifically, we hope that a classifier trained with both synthetic and real hyperspectral images, outperform a classifier trained with only real images. 
+Hyperspectral Imaging (HSI) combines imaging and spectroscopy, giving each pixel a continuous spectrum across wavelengths. HSI captures how light interacts with molecules, as their composition, vibrations, and structure affect photon behavior. These light–matter interactions create distinct spectral patterns that act like unique “fingerprints” for each material. Thanks to its ability to distinguish different materials, tissues, and substances, Hyperspectral Imaging (HSI) has become a valuable tool in Remote Sensing, Agriculture, and Medicine. In medicine, its capacity to go beyond standard RGB imaging is mainly used to detect tumors. However, publicly available hyperspectral tumor datasets are scarce, which often leads melanoma classification models to overfit or perform poorly in subsampled classes. Therefore, the main goal of this project is to construct a generative ai model that creates a synthetic hyperspectral dermoscopy dataset. More specifically, we investigated how synthetic hyperspectral images affect the performance of a melanoma classifier, hoping that a classifier trained with both synthetic and real hyperspectral images, would outperform a classifier trained with only real images. 
 
 To test this hypothesis, we trained generative models, including SHSGAN, DCGAN, FastGAN and VAE, to produce realistic hyperspectral melanoma images and evaluated their quality using spectral and perceptual metrics. Among them, FastGAN achieved the best balance between spectral accuracy and structural realism, generating synthetic lesions that closely resembled real samples. These synthetic images were then integrated into the training of melanoma classifiers based on DenseNet and ResNet architectures. The classifiers trained with both real and synthetic data outperformed those trained solely on real data, achieving higher validation accuracy (0.84 vs. 0.79) and F1-score (0.89 vs. 0.85).
 
-### Main goal
-Therefore, the main goal of this project is to construct a generative ai model that learns the distribution of real hyperspectral images and through them is able to create a synthetic hyperspectral melanoma dataset. Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma. 
 
+### Goal
+Therefore, the main goal of this project is to construct a generative ai model that learns the distribution of real hyperspectral images and through them is able to create a synthetic hyperspectral melanoma dataset. Desired output: a synthetic hyperspectral dataset of skin lesions and melanoma. 
 #### Main Hypothesis 
 A classifier trained with synthetic AND real data will have better results than if only trained in real data
+
+#### Secondary Questions
+This work also explores the general use of hyperspectral synthetic data to improve classification. In order to support the use of synthetic images we also ask the following questions: 
+Is synthetic data actually necessary to improve classification? Or is it better to use regular data augmentation strategies? 
+Does it improve classification metrics when training a classifier from scratch with little real data? 
+Does it improve classification metrics of a generalist classifier? (pretrained in imagenet) 
+Does it improve classification metrics of a specialist classifier? (pretrained in RGB melanoma) 
+How much synthetic data should we use? 
+How does synthetic data quality affect classifier performance? 
+
+ 
 
 ### Presentation
 #### Slides
@@ -32,19 +43,10 @@ https://docs.google.com/presentation/d/16PthBsxWUrnjjb5saw3rDCTorvTyX7CcnbJKjngE
 - Dataset download link: https://drive.google.com/drive/folders/13ZXXxtUMjEzLAjoAqC19IJEc5RgpFf2f?usp=sharing
 
 
-### Generative Models
+### Literature Overview on Hyperspectral Generative Models
 
 #### SHS GAN [5]
-
-- The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes.
-
-- the RGB image is used as input to the Generator so that the synthetic HS cube preserves the spatial details and textures of the input image and also keeps the color properties coherent with what appears in the RGB.
-
-- The Critic is trained to evaluate whether the generated HS cubes are realistic. It does so by analyzing spatial patterns and also the smoothness and shape of spectral curves, which are emphasized by looking at the data in both the image and Fourier-transformed spectral domains.
-
-- In addition, the synthetic HS cube can be converted back into RGB using a deterministic transformation. This reconstructed RGB image is compared to the original input RGB, and differences are penalized during training. This step enforces consistency between the generated HS cube and the original RGB image.
-
-- It is used a WGAN training pipeline
+The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes. The RGB image is used as input to the Generator so that the synthetic HS cube preserves the spatial details and textures of the input image and also keeps the color properties coherent with what appears in the RGB. The Critic is trained to evaluate whether the generated HS cubes are realistic. It does so by analyzing spatial patterns and also the smoothness and shape of spectral curves, which are emphasized by looking at the data in both the image and Fourier-transformed spectral domains. In addition, the synthetic HS cube can be converted back into RGB using a deterministic transformation. This reconstructed RGB image is compared to the original input RGB, and differences are penalized during training. This step enforces consistency between the generated HS cube and the original RGB image. It is used a WGAN training pipeline
 
 ![SHS Architecture Diagram](images/SHS-GAN.png)
 
@@ -58,11 +60,7 @@ https://docs.google.com/presentation/d/16PthBsxWUrnjjb5saw3rDCTorvTyX7CcnbJKjngE
 - **Unsupervised Disentanglement:** A direct benefit of the SLE module is that the generator automatically learns to disentangle style and content, enabling style-mixing applications similar to StyleGAN without the added complexity.
 
 #### Autoencoder
-- The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation. A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space.
-- VAEs are especially adept at modeling complex, high-dimensional data and continuous latent spaces, making them extremely useful for tasks like generating diverse sets of similar images.
-- Palsson et al. [2] used a VAE paired with a GAN framework to generate high-resolution synthetic hyperspectral images.
-- Liu et al. [3] proposed a model inspired autoencoder (MIAE) to fuse low-resolution HSI with high-resolution RGB images to generate high-resolution HSI.
-- We used an AutoEncoder with a Convolutional Encoder and a UNet decoder
+The autoencoder is composed by an encoder and a decoder. The encoder compresses the input HSI image into a lower-dimensional latent representation, while the decoder reconstructs the original image from this representation. A variational autoencoder (VAE) is a type of autoencoder that learns a probabilistic mapping from the input data to a latent space, allowing for the generation of new samples by sampling from this latent space. VAEs are especially adept at modeling complex, high-dimensional data and continuous latent spaces, making them extremely useful for tasks like generating diverse sets of similar images. Palsson et al. [2] used a VAE paired with a GAN framework to generate high-resolution synthetic hyperspectral images. Liu et al. [3] proposed a model inspired autoencoder (MIAE) to fuse low-resolution HSI with high-resolution RGB images to generate high-resolution HSI. We used an AutoEncoder with a Convolutional Encoder and a UNet decoder
 
 
 ### Evaluating synthesis results
@@ -77,9 +75,7 @@ Measures the structural similarity between two images, focusing on luminance, co
 
 
 **Equation:**
-$`
-SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
-`$
+$`SSIM(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}`$
 where:
 - $`\mu_x, \mu_y`$ are the means of images $x$ and $y$
 - $`\sigma_x^2, \sigma_y^2`$ are their variances
@@ -94,13 +90,9 @@ Quantifies image reconstruction quality in terms of pixel-wise fidelity, how muc
 
 
 **Equation:**
-$`
-PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right)
-`$
+$` PSNR(x, y) = 10 \log_{10}\left( \frac{L^2}{MSE} \right) `$
 with
-$`
-MSE = \frac{1}{N}\sum_{i=1}^{N}(x_i - y_i)^2
-`$
+$`MSE = \frac{1}{N}\sum_{i=1}^{N}(x_i - y_i)^2`$
 where $`L`$ is the maximum possible pixel value (e.g., 1.0 or 255).
 - Higher PSNR → better image quality
 - Typical values:
@@ -115,12 +107,9 @@ It evaluates how close the overall statistics of generated images are to the rea
 In our context, we must use an adapted FID, once the pre trained weights are fit for a 3-channel RGB input. Since we have a 16 channel image, it is not possible to perform the inference of the model. Therefore, we used the Inception V3 model with the excpetion of the first layer. This layer, we adapted to a 16-channel input by replicating the kernel weights untill it reached the desired channel.
 
 **Equation:**
-
-
 $`
 FID = \|\mu_r - \mu_g\|_2^2 + \text{Tr}\left(\Sigma_r + \Sigma_g - 2(\Sigma_r \Sigma_g)^{1/2}\right)
 `$
-
 where:
 - $`\mu_r, \Sigma_r`$: mean and covariance of features from **real images**
 - $`\mu_g, \Sigma_g`$: mean and covariance of features from **generated images**
@@ -133,9 +122,7 @@ Used for hyperspectral images, SAM measures the spectral similarity between two 
 
 **Equation:**
 
-$`
-SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)
-`$
+$`SAM(x, y) = \arccos\left(\frac{x \cdot y}{\|x\| \, \|y\|}\right)`$
 where $x$ and $y$ are spectral vectors of a pixel in the reference and generated images.
 - **Units**: radians or degrees
 - **Lower SAM** → higher spectral similarity
@@ -165,7 +152,7 @@ where $x$ and $y$ are spectral vectors of a pixel in the reference and generated
 
 ### Workflow
 ![workflow](images/hypersynth_flux.png)
-Our methodology was designed to test whether the inclusion of synthetic hyperspectral images can improve tumor classification compared to training with only real data. As shown in the workflow, the process begins with the preprocessing of the hyperspectral dataset, where images are segmented and cropped in the region containing the lesion. The preprocessed data are then used in a generation stage, where four generative models—SHSGAN, DCGAN, FastGAN, and VAE—are trained to produce synthetic hyperspectral tumor images. These models learn the complex spectral and spatial characteristics of malignant tumors, generating synthetic melanoma samples as close to real as possible. The quality of these synthetic images is evaluated using standard generation metrics, including the Spectral Angle Mapper (SAM), Structural Similarity Index (SSIM), Peak Signal-to-Noise Ratio (PSNR), and Fréchet Inception Distance (FID), which assess both spectral and perceptual similarity to the real data.
+Our methodology was designed to test whether the inclusion of synthetic hyperspectral images can improve tumor classification compared to training with only real data. And if so, what are the experimental conditions it is able to do it. As shown in the workflow, the process begins with the preprocessing of the hyperspectral dataset, where images are segmented and cropped in the region containing the lesion. The preprocessed data are then used in a generation stage, where four generative models—SHSGAN, DCGAN, FastGAN, and VAE—are trained to produce synthetic hyperspectral tumor images. These models learn the complex spectral and spatial characteristics of malignant tumors, generating synthetic melanoma samples as close to real as possible. The quality of these synthetic images is evaluated using standard generation metrics, including the Spectral Angle Mapper (SAM), Structural Similarity Index (SSIM), Peak Signal-to-Noise Ratio (PSNR), and Fréchet Inception Distance (FID), which assess both spectral and perceptual similarity to the real data.
 
 Following image generation, two classification models are trained to distinguish malignant from benign tumors. The first classifier is trained only with real hyperspectral images, while the second combines real and synthetic images in its training set. For both cases, two deep convolutional architectures, DenseNet and ResNet, are employed, each trained under two conditions: using pre-trained RGB weights or from scratch directly on hyperspectral data. The performance of each classifier is assessed using classification metrics such as F1-score, Accuracy, and SpecAtSens (Specificity at Sensitivity).
 
@@ -173,6 +160,8 @@ Following image generation, two classification models are trained to distinguish
 ![Project Schedule](images/schedule.png)
 
 ## Experiments, Results, and Discussion of Results
+In this work, rather than 
+
 ### Data Preprocessing
 #### Semi-Automatic Segmentation of Skin Lesions
 * The primary goal of this step is to isolate skin lesions from the surrounding healthy skin in the hyperspectral images. This isolation is crucial for training the generative models, as it allows them to focus on learning the characteristics of the lesions without being influenced by irrelevant background information.
