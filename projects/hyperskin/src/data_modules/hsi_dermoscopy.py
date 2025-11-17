@@ -7,8 +7,6 @@ import torch
 from torch.utils.data import DataLoader
 from collections import Counter
 
-from src.data_modules.datasets.task_config import TaskConfig
-from src.samplers.finite import FiniteSampler
 
 if __name__ == "__main__":
     import pyrootutils
@@ -21,6 +19,8 @@ if __name__ == "__main__":
         cwd=False,
     ) #mudar o caminho raiz do projeto
 
+from src.data_modules.datasets.task_config import TaskConfig
+from src.samplers.finite import FiniteSampler
 from src.data_modules.base import BaseDataModule
 from src.samplers.infinite import (
     InfiniteBalancedBatchSampler,
@@ -793,68 +793,55 @@ class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
 
 
 if __name__ == "__main__":
-    # Example usage with sampling
+
+    # Example usage
     image_size = 256
     data_module = HSIDermoscopyDataModule(
         task="CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI",
         train_val_test_split=(0.7, 0.15, 0.15),
         batch_size=8,
+        global_max=[0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
+                  0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
+                  1.4947973, 1.4737314, 1.6318618, 1.7226081],
+        global_min=[0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
+                  0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
+                  0.01310135, 0.01476806, 0.01932094, 0.02020744],
         data_dir="data/hsi_dermoscopy",
         image_size=image_size,
         transforms={
             "train": [
                 {"class_path": "HorizontalFlip", "init_args": {"p": 0.5}},
                 {"class_path": "VerticalFlip", "init_args": {"p": 0.5}},
-                {
-                    "class_path": "SmallestMaxSize",
-                    "init_args": {"max_size": image_size},
-                },
-                {
-                    "class_path": "CenterCrop",
-                    "init_args": {
-                        "height": image_size,
-                        "width": image_size,
-                    },
-                },
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
             "val": [
-                {
-                    "class_path": "SmallestMaxSize",
-                    "init_args": {"max_size": image_size},
-                },
-                {
-                    "class_path": "CenterCrop",
-                    "init_args": {
-                        "height": image_size,
-                        "width": image_size,
-                    },
-                },
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
             "test": [
-                {
-                    "class_path": "SmallestMaxSize",
-                    "init_args": {"max_size": image_size},
-                },
-                {
-                    "class_path": "CenterCrop",
-                    "init_args": {
-                        "height": image_size,
-                        "width": image_size,
-                    },
-                },
+                {"class_path": "SmallestMaxSize", "init_args": {"max_size": image_size}},
+                {"class_path": "CenterCrop", "init_args": {"height": image_size, "width": image_size}},
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
         },
         google_drive_id="1BQWqSq5Q0xfu381VNwyVU8XlXaIy9ds9",
         # synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
-        # Example: Apply random undersampling
-        undersample_strategy="random",
-        # Example: Apply random oversampling
-        # oversample_strategy="random",
     )
     data_module.prepare_data()
     data_module.setup()
 
-    # The split statistics will be printed automatically after setup
+    # Export dataset example
+    data_module.export_dataset(
+        output_dir="export/hsi_dermoscopy_croppedv2_256_imagenet",
+        splits=["train", "val", "test"],
+        crop_with_mask=True,
+        bbox_scale=2,
+        structure="imagenet",
+        image_size=image_size,
+        # allowed_labels=["melanoma", "dysplastic_nevi"],
+        global_normalization=True,
+        export_cropped_masks=False,
+    )

@@ -20,6 +20,7 @@
         // "configs/data/hsi_dermoscopy_croppedv2_vae.yaml",
         // "configs/data/hsi_dermoscopy_croppedv2_aug_isic2019.yaml",
         "configs/data/joint_rgb_hsi_dermoscopy.yaml",
+        // "configs/data/hsi_dermoscopy_croppedv2_gan.yaml",
         // "configs/data/milk10k_cropped.yaml",
         // "configs/data/hsi_dermoscopy_seg.yaml",
         "-c",
@@ -34,6 +35,7 @@
         // "--trainer.logger.name",
         // "exp1"
         // "--ckpt_path=logs/hypersynth/j7od0bbk/checkpoints/step=0-val_MIFID=114.7889.ckpt",
+        // "--ckpt_path=logs/hypersynth/98xb02br/checkpoints/step=0-val_FID=80.2161_barlow.ckpt",
         "--trainer.logger=false"
       ],
       "justMyCode": false,
