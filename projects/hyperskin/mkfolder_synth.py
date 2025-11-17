@@ -195,7 +195,7 @@ def compute_selection_counts(
     # --------------------------- mixed_train -----------------------------
     if synth_mode == "mixed_train":
         if equity_mode == "mm-dn_balanced":
-            # Inverted distribution of real data: 2 MM : 1 DN
+            # Inverted distribution of real data: 2 MM : 1 DN,  100 MM and 50 DN
             # "And 100 imgs in MM" -> generalize to "use all MM" and deduce DN.
             n_mm = n_mm_avail
             n_dn = min(n_dn_avail, n_mm // 2)
@@ -211,7 +211,7 @@ def compute_selection_counts(
 
         elif equity_mode == "imbalanced":
             # Same "real-like" 1:2 ratio as before
-            k = min(n_mm_avail, n_dn_avail // 2)
+            k = min(n_mm_avail, n_dn_avail // 2) #100 DN and 50 MM 
             return k, 2 * k
 
         elif equity_mode == "real-synth_balanced":
