@@ -154,6 +154,8 @@ class HSIClassifierModule(pl.LightningModule):
         self.test_spec_at_sens = SpecificityAtSensitivity(min_sensitivity=self.hparams.min_sensitivity,
                                                           task=self.class_task,
                                                           num_classes=self.hparams.num_classes)
+        
+        self.val_f1_best = MaxMetric()
 
     def _get_tags_and_run_name(self):
         """Automatically derive tags and a run name from FastGANModule hyperparameters."""
@@ -349,6 +351,9 @@ class HSIClassifierModule(pl.LightningModule):
         sens_at_spec, threshold = self.val_spec_at_sens.compute()
         self.val_spec_at_sens_best(sens_at_spec)
         self.log(f"val/spec@sens={self.hparams.min_sensitivity}_best", self.val_spec_at_sens_best.compute())
+        
+        self.val_f1_best(self.val_f1.compute())
+        self.log("val/f1_best", self.val_f1_best.compute())
 
     def test_step(self, batch: Any, batch_idx: int):
         loss, preds, targets, logits = self.model_step(batch)

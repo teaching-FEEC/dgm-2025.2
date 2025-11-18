@@ -14,7 +14,7 @@ model:
     num_val_batches: 8
     log_images_on_step_n: 100
     val_check_interval: 100
-    aux_num_classes: 2
+    # aux_num_classes: 2
     model_opt:
       netG: "unet_256"
       netD: "basic"
