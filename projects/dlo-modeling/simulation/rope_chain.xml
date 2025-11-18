@@ -1,0 +1,288 @@
+<mujoco model="RopeNoComposite">
+  <size nconmax="2000" njmax="20000" nstack="500000"/>
+
+
+  <worldbody>
+    <geom name="ground" type="plane" size="0 0 1"/>
+      <body name="link_0" pos="0 0 0">
+        <freejoint/>
+        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+        <body name="link_1" pos="0 0 0.01">
+          <joint name="j_1" type="ball" damping="0.005"/>
+          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+          <body name="link_2" pos="0 0 0.01">
+            <joint name="j_2" type="ball" damping="0.005"/>
+            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+            <body name="link_3" pos="0 0 0.01">
+              <joint name="j_3" type="ball" damping="0.005"/>
+              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+              <body name="link_4" pos="0 0 0.01">
+                <joint name="j_4" type="ball" damping="0.005"/>
+                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                <body name="link_5" pos="0 0 0.01">
+                  <joint name="j_5" type="ball" damping="0.005"/>
+                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                  <body name="link_6" pos="0 0 0.01">
+                    <joint name="j_6" type="ball" damping="0.005"/>
+                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                    <body name="link_7" pos="0 0 0.01">
+                      <joint name="j_7" type="ball" damping="0.005"/>
+                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                      <body name="link_8" pos="0 0 0.01">
+                        <joint name="j_8" type="ball" damping="0.005"/>
+                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                        <body name="link_9" pos="0 0 0.01">
+                          <joint name="j_9" type="ball" damping="0.005"/>
+                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                          <body name="link_10" pos="0 0 0.01">
+                            <joint name="j_10" type="ball" damping="0.005"/>
+                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                            <body name="link_11" pos="0 0 0.01">
+                              <joint name="j_11" type="ball" damping="0.005"/>
+                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                              <body name="link_12" pos="0 0 0.01">
+                                <joint name="j_12" type="ball" damping="0.005"/>
+                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                <body name="link_13" pos="0 0 0.01">
+                                  <joint name="j_13" type="ball" damping="0.005"/>
+                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                  <body name="link_14" pos="0 0 0.01">
+                                    <joint name="j_14" type="ball" damping="0.005"/>
+                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                    <body name="link_15" pos="0 0 0.01">
+                                      <joint name="j_15" type="ball" damping="0.005"/>
+                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                      <body name="link_16" pos="0 0 0.01">
+                                        <joint name="j_16" type="ball" damping="0.005"/>
+                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                        <body name="link_17" pos="0 0 0.01">
+                                          <joint name="j_17" type="ball" damping="0.005"/>
+                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                          <body name="link_18" pos="0 0 0.01">
+                                            <joint name="j_18" type="ball" damping="0.005"/>
+                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                            <body name="link_19" pos="0 0 0.01">
+                                              <joint name="j_19" type="ball" damping="0.005"/>
+                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                              <body name="link_20" pos="0 0 0.01">
+                                                <joint name="j_20" type="ball" damping="0.005"/>
+                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                <body name="link_21" pos="0 0 0.01">
+                                                  <joint name="j_21" type="ball" damping="0.005"/>
+                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                  <body name="link_22" pos="0 0 0.01">
+                                                    <joint name="j_22" type="ball" damping="0.005"/>
+                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                    <body name="link_23" pos="0 0 0.01">
+                                                      <joint name="j_23" type="ball" damping="0.005"/>
+                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                      <body name="link_24" pos="0 0 0.01">
+                                                        <joint name="j_24" type="ball" damping="0.005"/>
+                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                        <body name="link_25" pos="0 0 0.01">
+                                                          <joint name="j_25" type="ball" damping="0.005"/>
+                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                          <body name="link_26" pos="0 0 0.01">
+                                                            <joint name="j_26" type="ball" damping="0.005"/>
+                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                            <body name="link_27" pos="0 0 0.01">
+                                                              <joint name="j_27" type="ball" damping="0.005"/>
+                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                              <body name="link_28" pos="0 0 0.01">
+                                                                <joint name="j_28" type="ball" damping="0.005"/>
+                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                <body name="link_29" pos="0 0 0.01">
+                                                                  <joint name="j_29" type="ball" damping="0.005"/>
+                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                  <body name="link_30" pos="0 0 0.01">
+                                                                    <joint name="j_30" type="ball" damping="0.005"/>
+                                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                    <body name="link_31" pos="0 0 0.01">
+                                                                      <joint name="j_31" type="ball" damping="0.005"/>
+                                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                      <body name="link_32" pos="0 0 0.01">
+                                                                        <joint name="j_32" type="ball" damping="0.005"/>
+                                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                        <body name="link_33" pos="0 0 0.01">
+                                                                          <joint name="j_33" type="ball" damping="0.005"/>
+                                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                          <body name="link_34" pos="0 0 0.01">
+                                                                            <joint name="j_34" type="ball" damping="0.005"/>
+                                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                            <body name="link_35" pos="0 0 0.01">
+                                                                              <joint name="j_35" type="ball" damping="0.005"/>
+                                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                              <body name="link_36" pos="0 0 0.01">
+                                                                                <joint name="j_36" type="ball" damping="0.005"/>
+                                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                <body name="link_37" pos="0 0 0.01">
+                                                                                  <joint name="j_37" type="ball" damping="0.005"/>
+                                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                  <body name="link_38" pos="0 0 0.01">
+                                                                                    <joint name="j_38" type="ball" damping="0.005"/>
+                                                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                    <body name="link_39" pos="0 0 0.01">
+                                                                                      <joint name="j_39" type="ball" damping="0.005"/>
+                                                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                      <body name="link_40" pos="0 0 0.01">
+                                                                                        <joint name="j_40" type="ball" damping="0.005"/>
+                                                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                        <body name="link_41" pos="0 0 0.01">
+                                                                                          <joint name="j_41" type="ball" damping="0.005"/>
+                                                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                          <body name="link_42" pos="0 0 0.01">
+                                                                                            <joint name="j_42" type="ball" damping="0.005"/>
+                                                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                            <body name="link_43" pos="0 0 0.01">
+                                                                                              <joint name="j_43" type="ball" damping="0.005"/>
+                                                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                              <body name="link_44" pos="0 0 0.01">
+                                                                                                <joint name="j_44" type="ball" damping="0.005"/>
+                                                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                <body name="link_45" pos="0 0 0.01">
+                                                                                                  <joint name="j_45" type="ball" damping="0.005"/>
+                                                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                  <body name="link_46" pos="0 0 0.01">
+                                                                                                    <joint name="j_46" type="ball" damping="0.005"/>
+                                                                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                    <body name="link_47" pos="0 0 0.01">
+                                                                                                      <joint name="j_47" type="ball" damping="0.005"/>
+                                                                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                      <body name="link_48" pos="0 0 0.01">
+                                                                                                        <joint name="j_48" type="ball" damping="0.005"/>
+                                                                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                        <body name="link_49" pos="0 0 0.01">
+                                                                                                          <joint name="j_49" type="ball" damping="0.005"/>
+                                                                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                          <body name="link_50" pos="0 0 0.01">
+                                                                                                            <joint name="j_50" type="ball" damping="0.005"/>
+                                                                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                            <body name="link_51" pos="0 0 0.01">
+                                                                                                              <joint name="j_51" type="ball" damping="0.005"/>
+                                                                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                              <body name="link_52" pos="0 0 0.01">
+                                                                                                                <joint name="j_52" type="ball" damping="0.005"/>
+                                                                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                <body name="link_53" pos="0 0 0.01">
+                                                                                                                  <joint name="j_53" type="ball" damping="0.005"/>
+                                                                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                  <body name="link_54" pos="0 0 0.01">
+                                                                                                                    <joint name="j_54" type="ball" damping="0.005"/>
+                                                                                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                    <body name="link_55" pos="0 0 0.01">
+                                                                                                                      <joint name="j_55" type="ball" damping="0.005"/>
+                                                                                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                      <body name="link_56" pos="0 0 0.01">
+                                                                                                                        <joint name="j_56" type="ball" damping="0.005"/>
+                                                                                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                        <body name="link_57" pos="0 0 0.01">
+                                                                                                                          <joint name="j_57" type="ball" damping="0.005"/>
+                                                                                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                          <body name="link_58" pos="0 0 0.01">
+                                                                                                                            <joint name="j_58" type="ball" damping="0.005"/>
+                                                                                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                            <body name="link_59" pos="0 0 0.01">
+                                                                                                                              <joint name="j_59" type="ball" damping="0.005"/>
+                                                                                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                              <body name="link_60" pos="0 0 0.01">
+                                                                                                                                <joint name="j_60" type="ball" damping="0.005"/>
+                                                                                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                <body name="link_61" pos="0 0 0.01">
+                                                                                                                                  <joint name="j_61" type="ball" damping="0.005"/>
+                                                                                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                  <body name="link_62" pos="0 0 0.01">
+                                                                                                                                    <joint name="j_62" type="ball" damping="0.005"/>
+                                                                                                                                    <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                    <body name="link_63" pos="0 0 0.01">
+                                                                                                                                      <joint name="j_63" type="ball" damping="0.005"/>
+                                                                                                                                      <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                      <body name="link_64" pos="0 0 0.01">
+                                                                                                                                        <joint name="j_64" type="ball" damping="0.005"/>
+                                                                                                                                        <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                        <body name="link_65" pos="0 0 0.01">
+                                                                                                                                          <joint name="j_65" type="ball" damping="0.005"/>
+                                                                                                                                          <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                          <body name="link_66" pos="0 0 0.01">
+                                                                                                                                            <joint name="j_66" type="ball" damping="0.005"/>
+                                                                                                                                            <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                            <body name="link_67" pos="0 0 0.01">
+                                                                                                                                              <joint name="j_67" type="ball" damping="0.005"/>
+                                                                                                                                              <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                              <body name="link_68" pos="0 0 0.01">
+                                                                                                                                                <joint name="j_68" type="ball" damping="0.005"/>
+                                                                                                                                                <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                                <body name="link_69" pos="0 0 0.01">
+                                                                                                                                                  <joint name="j_69" type="ball" damping="0.005"/>
+                                                                                                                                                  <geom type="capsule" fromto="0 0 0  0 0 0.01" size="0.01" friction="2.0 0.1 0.01" rgba="0.8 0.2 0.1 1"/>
+                                                                                                                                                </body>
+                                                                                                                                              </body>
+                                                                                                                                            </body>
+                                                                                                                                          </body>
+                                                                                                                                        </body>
+                                                                                                                                      </body>
+                                                                                                                                    </body>
+                                                                                                                                  </body>
+                                                                                                                                </body>
+                                                                                                                              </body>
+                                                                                                                            </body>
+                                                                                                                          </body>
+                                                                                                                        </body>
+                                                                                                                      </body>
+                                                                                                                    </body>
+                                                                                                                  </body>
+                                                                                                                </body>
+                                                                                                              </body>
+                                                                                                            </body>
+                                                                                                          </body>
+                                                                                                        </body>
+                                                                                                      </body>
+                                                                                                    </body>
+                                                                                                  </body>
+                                                                                                </body>
+                                                                                              </body>
+                                                                                            </body>
+                                                                                          </body>
+                                                                                        </body>
+                                                                                      </body>
+                                                                                    </body>
+                                                                                  </body>
+                                                                                </body>
+                                                                              </body>
+                                                                            </body>
+                                                                          </body>
+                                                                        </body>
+                                                                      </body>
+                                                                    </body>
+                                                                  </body>
+                                                                </body>
+                                                              </body>
+                                                            </body>
+                                                          </body>
+                                                        </body>
+                                                      </body>
+                                                    </body>
+                                                  </body>
+                                                </body>
+                                              </body>
+                                            </body>
+                                          </body>
+                                        </body>
+                                      </body>
+                                    </body>
+                                  </body>
+                                </body>
+                              </body>
+                            </body>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+  </worldbody>
+</mujoco>
