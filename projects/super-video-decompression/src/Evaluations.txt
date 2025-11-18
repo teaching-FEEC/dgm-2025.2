@@ -1,0 +1,19 @@
+1x:
+test_ultra_compact_x1_v2_pretrain
+test_8_35_compact_frank_v2_pretrain
+test_super_compact_x1_pretrain
+test_baseline_x1
+
+2x:
+
+test_ultra_compact_10_x2_pretrain
+test_8_35_compact_10_x2_pretrain
+test_super_compact_10_x2_pretrain
+test_baseline_10_x2
+
+2x_i:
+
+test_ultra_compact_pretrain_in_28i_x2
+test_8_35_compact_pretrain_in_28i_x2 - done
+test_super_compact_pretrain_in_28i_x2
+test_baseline_in_28i_x2

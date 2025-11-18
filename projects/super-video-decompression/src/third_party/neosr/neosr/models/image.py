@@ -973,6 +973,10 @@ class image(base):
             visuals = self.get_current_visuals()
             sr_img = tensor2img([visuals["result"]])
             metric_data["img"] = sr_img
+
+            lq_img = tensor2img([visuals["lq"]])
+            metric_data["img_lq"] = lq_img
+                
             if "gt" in visuals:
                 gt_img = tensor2img([visuals["gt"]])
                 metric_data["img2"] = gt_img

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import cv2
-from neosr.losses.CombinedLossSSIMCharbMSE import CombinedLossSSIMCharbMSE
+from neosr.losses.CombinedLossSSIMCharbMSEReduct import CombinedLossSSIMCharbMSE
 from neosr.utils.registry import LOSS_REGISTRY
 import os
 import json
@@ -126,5 +126,5 @@ class face_aware_combined_loss(nn.Module):
         if (faces_gt.shape[0] == 0) or (faces_pred.shape[0] == 0):
             return torch.tensor(0.0, device=pred.device, requires_grad=True)
         #print("Shapes:",faces_gt.shape, faces_pred.shape)
-        loss = (self.loss_fn(faces_pred,faces_gt).mean(dim=(1, 2, 3)) ) * self.alpha
+        loss = (self.loss_fn(faces_pred,faces_gt)) * self.alpha
         return loss * self.loss_weight

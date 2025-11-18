@@ -18,8 +18,28 @@ def compute_psnr(pred, target, max_val=1.0):
         return float('inf')
     return 10 * log10((max_val ** 2) / mse.item())
 
+def compute_psnr_batch(pred, target, max_val=1.0):
+    """
+    pred:   [N, C, H, W]
+    target: [N, C, H, W]
+    returns: tensor of shape [N]
+    """
 
-def patch_difference_psnr(pred, target, source, upscale, patch_size=20, alpha=1):
+    # MSE per patch (no reduction over batch)
+    mse = F.mse_loss(pred, target, reduction="none")   # shape [N, C, H, W]
+
+    # average over C,H,W to get one MSE per patch
+    mse = mse.mean(dim=[1, 2, 3])                      # shape [N]
+
+    # avoid division by zero
+    mse = torch.clamp(mse, min=1e-12)
+
+    psnr = 10 * torch.log10((max_val ** 2) / mse)
+
+    return psnr
+
+
+def patch_difference_psnr(pred, target, source, upscale, patch_size=20):
     B, C, H, W = target.shape
     unfold = torch.nn.Unfold(kernel_size=patch_size, stride=patch_size)
     fold = torch.nn.Fold(output_size=(H, W), kernel_size=patch_size, stride=patch_size)
@@ -28,66 +48,43 @@ def patch_difference_psnr(pred, target, source, upscale, patch_size=20, alpha=1)
         sourceCopy = F.interpolate(source, scale_factor=upscale, mode='bicubic')
     else:
         sourceCopy = source
-        
 
-    # Flatten patches: [B, C*patch_size*patch_size, num_patches]
-    pred_patches = unfold(pred)
+    # Unfold directly gives [B, C*patch_size*patch_size, num_patches]
+    pred_patches = unfold(pred)   # [B, C*P*P, N]
     target_patches = unfold(target)
     source_patches = unfold(sourceCopy)
-    
+
     num_patches = pred_patches.shape[-1]
-    
-    pred_patches_img = pred_patches.transpose(1, 2).reshape(B, num_patches, C, patch_size, patch_size)
-    target_patches_img = target_patches.transpose(1, 2).reshape(B, num_patches, C, patch_size, patch_size)
-    #source_patches_img = target_patches.transpose(1, 2).reshape(B, num_patches, C, patch_size, patch_size)
+    P = patch_size
 
+    # Reshape for loss computation: [B*N, C, P, P]
+    pred_patches_flat = pred_patches.transpose(1, 2).reshape(B * num_patches, C, P, P)
+    target_patches_flat = target_patches.transpose(1, 2).reshape(B * num_patches, C, P, P)
 
-    pred_patches_flat = pred_patches_img.reshape(B * num_patches, C, patch_size, patch_size)
-    target_patches_flat = target_patches_img.reshape(B * num_patches, C, patch_size, patch_size)
-
-    # Compute variance per patch (use unbiased=False for stability)
+    # Compute variance per patch (over C*P*P dimension)
     target_var = target_patches.var(dim=1, unbiased=False)  # [B, num_patches]
     target_diff = (abs(target_patches - source_patches)).mean(dim=1)
 
     # Compute MSE per patch
-    patch_psnr = compute_psnr(pred_patches_flat, target_patches_flat)
-    print ("Patch PSNR:", patch_psnr)
-
+    patch_psnr = compute_psnr_batch(pred_patches_flat, target_patches_flat)
     # Normalize difference (avoid division by zero)
-    diff_norm = target_diff / (target_diff.max(dim=1, keepdim=True)[0] + 1e-8)
+    diff_norm = target_diff / (target_diff.mean(dim=1, keepdim=True)[0] + 1e-8)
     # Compute weighted psnr
-    weights = 1.0 + diff_norm
-    #print(weights)
+    weights = diff_norm
     psnr = (weights * patch_psnr).mean()
-    var_norm = target_var / (target_var.max(dim=1, keepdim=True)[0] + 1e-8)
+    var_norm = target_var / (target_var.mean(dim=1, keepdim=True)[0] + 1e-8)
     # Compute weighted psnr
-    weights = 1.0 + var_norm
-    #print(weights)
+    weights =  var_norm
     var_psnr = (weights * patch_psnr).mean()
-    
+
     # Create a tensor filled with the variance values for each patch
     var_expanded = torch.repeat_interleave(
         var_norm.unsqueeze(1), patch_size * patch_size, dim=1
     )
-
-    # Fold back into image shape
-    variance_mask = fold(var_expanded) / (patch_size * patch_size)
-    # Normalize to [0,1] for visualization
-    variance_mask = (variance_mask - variance_mask.min()) / (variance_mask.max() - variance_mask.min() + 1e-8)
-
-    # Create a tensor filled with the diff values for each patch
-    diff_expanded = torch.repeat_interleave(
-        diff_norm.unsqueeze(1), patch_size * patch_size, dim=1
-    )
-
-    # Fold back into image shape
-    diff_mask = fold(diff_expanded) / (patch_size * patch_size)
-    # Normalize to [0,1] for visualization
-    diff_mask = (diff_mask - diff_mask.min()) / (diff_mask.max() - diff_mask.min() + 1e-8)
     
-    print("Non Weightedpsnr:", patch_psnr* alpha)
+    print("Non Weightedpsnr:", patch_psnr.mean())
 
-    return psnr * alpha,var_psnr*alpha, variance_mask, diff_mask
+    return psnr , var_psnr, patch_psnr.mean() #, variance_mask, diff_mask
 
 
 import torch
@@ -125,10 +122,10 @@ def test_patch_difference_psnr():
     #plt.show()
     #plt.imshow(img2.permute(0, 2, 3, 1)[0,:,:,:], cmap="gray")
     #plt.show()
-    psnr,var_psnr, variance_mask, difference_mask = patch_difference_psnr(img1, img2, img1,upscale=1, patch_size=20, alpha=50) #, mask
-    print("Final Patch Difference psnr:",psnr)
+    diff_psnr,var_psnr,simple_psnr, variance_mask, difference_mask = patch_difference_psnr(img1, img2, img1,upscale=1, patch_size=20) #, mask
+    print("Final Patch Difference psnr:",diff_psnr)
     print("Final Patch Variance psnr:",var_psnr)
-    '''
+    
     # Visualize (single image)
     import matplotlib.pyplot as plt
     plt.imshow(variance_mask[0,0].detach().cpu(), cmap='magma')
@@ -148,7 +145,6 @@ def test_patch_difference_psnr():
     # Convert mask to numpy
     mask_np = difference_mask[0, 0].detach().cpu().numpy()
     mask_np = (mask_np - mask_np.min()) / (mask_np.max() - mask_np.min())  # normalize 0–1
-
     
     # Overlay
     plt.figure(figsize=(10, 5))
@@ -168,7 +164,7 @@ def test_patch_difference_psnr():
     plt.title("Variance Mask Overlay (α=0.5)")
     plt.axis("off")
     plt.show()
-'''
+
 
 
 
