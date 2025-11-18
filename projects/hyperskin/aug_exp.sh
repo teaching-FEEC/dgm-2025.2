@@ -15,8 +15,9 @@ python src/main.py fit -c configs/data/hsi_dermoscopy_croppedv2_notaug_batchr.ya
 # no transforms data augmentation, no pretraining, YES synth data, no balanced sampling, no focal loss
 python src/main.py fit -c configs/data/hsi_dermoscopy_croppedv2_augsynth.yaml -c configs/model/densenet201_fromscratch.yaml
 
-# transforms data augmentation, no pretraining, no synth data, no balanced sampling, no focal loss
+
+# transforms data augmentation, no pretraining, YES synth data, no balanced sampling, no focal loss
 python src/main.py fit -c configs/data/hsi_dermoscopy_croppedv2_augsynth.yaml -c configs/model/densenet201_fromscratch.yaml
 
 # transforms data augmentation, no pretraining, no synth data, no balanced sampling, no focal loss
-python src/main.py fit -c configs/data/hsi_dermoscopy_croppedv2_aug.yaml -c configs/model/densenet201_fromscratch_lr0001.yaml
+python src/main.py fit -c configs/data/hsi_dermoscopy_croppedv2_aug.yaml -c configs/model/densenet201_fromscratch.yaml 
