@@ -20,26 +20,6 @@ data:
     
     transforms:
       train:
-      - class_path: ShiftScaleRotate
-        init_args:
-          shift_limit: 0.1
-          scale_limit: 0
-          rotate_limit: 4
-          interpolation: 2
-          p: 0.5
-      - class_path: RandomCropFromBorders
-        init_args:
-          crop_left: 0.2
-          crop_right: 0.2
-          crop_top: 0.2
-          crop_bottom: 0.2
-          p: 0.5
-      - class_path: HorizontalFlip
-        init_args:
-          p: 0.5
-      - class_path: VerticalFlip
-        init_args:
-          p: 0.5
       - class_path: SmallestMaxSize
         init_args:
           max_size: ${data.init_args.image_size}

@@ -10,7 +10,7 @@ data:
     data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
  
     google_drive_id: 1PNk7Eyv7YfKGCabyC2OkIO7blZcmYJqw
-    balanced_sampling: False
+    balanced_sampling: True
     global_max: [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
                   0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
                   1.4947973, 1.4737314, 1.6318618, 1.7226081]
@@ -20,26 +20,6 @@ data:
     
     transforms:
       train:
-      - class_path: ShiftScaleRotate
-        init_args:
-          shift_limit: 0.1
-          scale_limit: 0
-          rotate_limit: 4
-          interpolation: 2
-          p: 0.5
-      - class_path: RandomCropFromBorders
-        init_args:
-          crop_left: 0.2
-          crop_right: 0.2
-          crop_top: 0.2
-          crop_bottom: 0.2
-          p: 0.5
-      - class_path: HorizontalFlip
-        init_args:
-          p: 0.5
-      - class_path: VerticalFlip
-        init_args:
-          p: 0.5
       - class_path: SmallestMaxSize
         init_args:
           max_size: ${data.init_args.image_size}
