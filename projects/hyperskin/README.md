@@ -180,17 +180,17 @@ Additionally, each channel of the hyperspectral images is normalized using min-m
 ### Classifier Training
 The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Thirteen experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
 
-1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.7619)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.37**, showing that the model performed best when trained without balancing.
-2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7241**, with an **accuracy of 0.700** and **Spec@Sens of 0.34**, indicating that reweighting did not generalize well to minority melanoma cases.
-3. Applied **Batch Regularization**, reaching an F1-score of **0.6923**, **accuracy of 0.750**, and **Spec@Sens of 0.36**. Although this slightly stabilized training, it did not improve the class balance.
-4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7407**, **accuracy of 0.675**, and **Spec@Sens of 0.35**. The combined method recovered some performance but still lagged behind the baseline.
+1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8136)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.2532**, showing that the model performed best when trained without balancing.
+2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7796**, with an **accuracy of 0.675** and **Spec@Sens of 0.243**, indicating that reweighting did not generalize well to minority melanoma cases.
+3. Applied **Batch Regularization**, reaching an F1-score of **0.8125**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
+4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7451**, **accuracy of 0.675**, and **Spec@Sens of 0.227**. The combined method recovered some performance but still lagged behind the baseline.
 
 | Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
 |:--|:--:|:--:|:--:|:--:|:--:|:--|
-| 1 | DenseNet201 | None | **0.7619** | 0.725 | **0.37** | Baseline; best overall F1 and balanced performance |
-| 2 | DenseNet201 | Focal Loss | 0.7241 | 0.700 | 0.34 | Reweighting reduced sensitivity balance |
-| 3 | DenseNet201 | Batch Regularization | 0.6923 | **0.750** | 0.36 | Stable but lower overall F1 |
-| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7407 | 0.675 | 0.35 | Slight recovery, still below baseline |
+| 1 | DenseNet201 | None | **0.8136** | **0.725** | 0.2532 | Baseline; best overall F1 and performance |
+| 2 | DenseNet201 | Focal Loss | 0.7796 | 0.675 | 0.2431 | Reweighting reduced sensitivity balance |
+| 3 | DenseNet201 | Batch Regularization | 0.8125 | 0.70 | 0.26 | Stable but lower overall F1 |
+| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7451 | 0.675 | 0.227 | Slight recovery, still below baseline |
 
 The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques. These findings indicate that synthetic data generation is a more promising path forward. The next experimental stage investigates whether GAN- or VAE-based synthetic hyperspectral images can enrich the training set and outperform conventional balancing strategies, particularly for minority melanoma detection.
 
