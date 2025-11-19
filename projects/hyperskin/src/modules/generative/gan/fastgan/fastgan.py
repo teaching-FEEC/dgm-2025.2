@@ -849,7 +849,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         # load barlow projector state dict if applicable
         if self.hparams.use_barlow_twins and "barlow_projector" in checkpoint:
             self.barlow_projector.load_state_dict(checkpoint["barlow_projector"])
-        self.avg_param_G = [p.clone().to(self.device) for p in checkpoint["avg_param_G"]]
+            
+        if "avg_param_G" in checkpoint:
+            self.avg_param_G = [p.clone().to(self.device) for p in checkpoint["avg_param_G"]]
 
 if __name__ == "__main__":
     # Simple test to instantiate the module
