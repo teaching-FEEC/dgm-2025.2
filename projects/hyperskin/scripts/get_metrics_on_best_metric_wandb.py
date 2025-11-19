@@ -8,7 +8,7 @@ import pandas as pd
 def get_best_metric_step(run, best_key="val/f1", maximize=True):
     """
     Finds the step where best_key (e.g., val/f1 or val/FID) is optimal.
-    If maximize=True, chooses the highest value; otherwise, chooses the lowest.
+    If maximize=True, chooses the highest value; otherwise, the lowest.
     Returns the step number, metric value, and all val/ metrics at that step.
     """
     history = run.history(samples=10000, pandas=True)
@@ -39,11 +39,7 @@ def get_best_metric_step(run, best_key="val/f1", maximize=True):
 
 
 def extract_run_ids_from_file(file_path):
-    """
-    Parses a file of W&B run URLs and extracts unique run IDs.
-    Example URL:
-      https://wandb.ai/entity/project/runs/98xb02br
-    """
+    """Parses a file of W&B run URLs and extracts unique run IDs."""
     with open(file_path, "r") as f:
         lines = f.readlines()
 
@@ -58,11 +54,27 @@ def extract_run_ids_from_file(file_path):
     return run_ids
 
 
+def compute_specificity_from_prec_recall(precision, recall, prevalence):
+    """
+    Computes specificity when precision, recall, and prevalence are known.
+    specificity = 1 - (recall * prevalence * (1 - precision) / precision) / (1 - prevalence)
+    """
+    if precision <= 0 or precision > 1 or recall < 0 or recall > 1:
+        return None
+    try:
+        return 1 - (
+            (recall * prevalence * (1 - precision) / precision)
+            / (1 - prevalence)
+        )
+    except ZeroDivisionError:
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Finds the step with the best metric (e.g., val/f1, val/FID, etc.) "
-            "for given W&B runs, prints all val/* metrics, and saves a CSV summary."
+            "Finds the step with the best metric for given W&B runs, "
+            "prints all val/* metrics, and saves a CSV summary."
         )
     )
     parser.add_argument(
@@ -91,31 +103,32 @@ def main():
         "--columns",
         nargs="+",
         help=(
-            "List of validation metrics to include and their order in the CSV. "
-            "If omitted, all discovered 'val/*' metrics will be included automatically."
+            "List of validation metrics to include in the CSV. "
+            "If omitted, all discovered 'val/*' metrics will be included."
         ),
     )
     parser.add_argument(
         "--maximize",
         action="store_true",
         default=True,
-        help="If set, maximize the metric (use for scores like F1, accuracy). "
-            "Use --no-maximize to minimize instead (for metrics like FID or loss).",
+        help="If set, maximize the metric (e.g. F1, accuracy).",
     )
-    parser.add_argument(
-        "--no-maximize",
-        dest="maximize",
-        action="store_false",
-    )
+    parser.add_argument("--no-maximize", dest="maximize", action="store_false")
     parser.add_argument(
         "run_ids",
         nargs="*",
-        help="Optional: list of W&B run IDs to process (overrides --file).",
+        help="Optional: list of W&B run IDs (overrides --file).",
     )
     parser.add_argument(
         "--include_meta",
         action="store_true",
-        help="Include 'run_id' and 'best_step' columns in the CSV (default: off).",
+        help="Include 'run_id' and 'best_step' columns in the CSV.",
+    )
+    parser.add_argument(
+        "--prevalence",
+        type=float,
+        default=0.674418605,
+        help="Class prevalence (default: 0.674418605).",
     )
     args = parser.parse_args()
 
@@ -132,7 +145,6 @@ def main():
     results = []
     discovered_metrics = set()
 
-    # Process runs
     for run_id in run_ids:
         print(f"\n=== Processing run: {run_id} ===")
         run = api.run(f"{entity}/{project}/{run_id}")
@@ -142,10 +154,26 @@ def main():
 
         step, best_value, val_metrics = result
 
+        # --- Check or derive specificity ---
+        if "val/specificity" not in val_metrics:
+            prec = val_metrics.get("val/prec")
+            rec = val_metrics.get("val/rec")
+            if prec is not None and rec is not None:
+                spec = compute_specificity_from_prec_recall(prec, rec, args.prevalence)
+                if spec is not None:
+                    val_metrics["val/specificity"] = spec
+                    print(
+                        f"🧮 Derived val/specificity = {spec:.6f} "
+                        f"(from val/prec={prec:.4f}, val/rec={rec:.4f}, prevalence={args.prevalence})"
+                    )
+                else:
+                    print("⚠️ Could not compute specificity (invalid values).")
+            else:
+                print("ℹ️ val/specificity, val/prec, or val/rec missing — cannot derive specificity.")
+
         print(f"Best step: {step}")
         print(f"{args.best_key}: {best_value:.6f}")
 
-        print("Other validation metrics at that step:")
         for k, v in val_metrics.items():
             if k != args.best_key:
                 print(f"  {k}: {v}")
@@ -162,11 +190,10 @@ def main():
 
     df = pd.DataFrame(results)
 
-# Determine final column order (only metrics by default)
+    # Determine final column order
     if args.columns:
         final_columns = args.columns
     else:
-        # Automatically include all val/* metrics, sorted alphabetically
         final_columns = sorted([c for c in discovered_metrics if c.startswith("val/")])
         print(
             f"ℹ️ No --columns provided. Using discovered columns ({len(final_columns)}):"
@@ -174,19 +201,10 @@ def main():
         for c in final_columns:
             print(f"  {c}")
 
-    # Ensure all expected columns exist (fill missing with NaN)
     for key in final_columns:
         if key not in df.columns:
             df[key] = float("nan")
 
-    # === Optional inclusion of run_id and best_step ===
-    parser.add_argument(
-        "--include-meta",
-        action="store_true",
-        help="Include 'run_id' and 'best_step' columns in the CSV.",
-    )
-
-    # If include-meta is given, prepend the columns; otherwise, skip them
     if args.include_meta:
         ordered_columns = ["run_id", "best_step"] + final_columns
     else:
@@ -198,8 +216,6 @@ def main():
     df.to_csv(args.csv, sep=args.separator, decimal=args.decimal, index=False)
     print("✅ CSV saved.")
 
-# Example usage:
-# python scripts/get_metrics_on_best_metric_wandb.py --file "wandb_runs.txt" --best_key val/FID --columns val/SSIM val/SAM val/PSNR val/FID val/RASE val/TV --no-maximize
-# python scripts/get_metrics_on_best_metric_wandb.py --file "wandb_runs.txt" --columns val/spec@sens=0.95 val/f1 val/acc val/prec val/rec val/specificity
+
 if __name__ == "__main__":
     main()

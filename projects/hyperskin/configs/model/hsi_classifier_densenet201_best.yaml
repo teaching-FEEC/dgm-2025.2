@@ -31,7 +31,7 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
     - class_path: callbacks.FixedModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-val/f1={val/f1:.4f}
+        filename: epoch={epoch:02d}-val_f1={val/f1:.4f}
         monitor: val/f1
         verbose: true
         save_last: true

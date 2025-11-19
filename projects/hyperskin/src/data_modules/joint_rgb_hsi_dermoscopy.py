@@ -38,7 +38,7 @@ class JointRGBHSIDataModule(pl.LightningDataModule):
         num_workers: int = 8,
         pin_memory: bool = False,
         rgb_only: bool = False,
-        pred_num_samples: int | None = 100,
+        pred_num_samples: int | None = None,
     ):
         super().__init__()  # Ensure Lightning internal hooks exist
 
