@@ -45,6 +45,20 @@ class NormalizeByMinMax(ImageOnlyTransform):
             raise ValueError(
                 f"Expected {len(self.mins)} channels, found {img.shape[0]}"
             )
+            
+        # Tolerance for float precision (1e-1)
+        tol = 1e-1
+
+        # Check if image values are (approximately) in [0, 1] or [-1, 1]
+        all_in_0_1 = torch.all((img >= -tol) & (img <= 1 + tol))
+        if (self.range_mode == "0_1" and all_in_0_1):
+            return img
+        
+        # if img is in [0, 1] and range_mode is "-1_1", convert to [-1, 1]
+        if self.range_mode == "-1_1" and all_in_0_1 and torch.all(img >= 0):
+            img = img * 2.0 - 1.0
+            img = torch.clamp(img, -1.0, 1.0)
+            return img
 
         device = img.device
         mins = self.mins.to(device)

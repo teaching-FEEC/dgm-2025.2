@@ -30,8 +30,8 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
     - class_path: callbacks.FixedModelCheckpoint
       init_args:
-        filename: epoch={epoch:02d}-val_spec@sens={val/spec@sens=0.95:.4f}
-        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        filename: epoch={epoch:02d}-val_f1={val/f1:.4f}
+        monitor: val/f1
         verbose: true
         save_last: true
         mode: max
@@ -39,7 +39,7 @@ trainer:
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     - class_path: EarlyStopping
       init_args:
-        monitor: val/spec@sens=${model.init_args.min_sensitivity}
+        monitor: val/f1
         min_delta: 0.005
         patience: 100
         verbose: true

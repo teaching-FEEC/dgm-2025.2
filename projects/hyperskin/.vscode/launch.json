@@ -8,7 +8,6 @@
       "program": "${file}",
       "console": "integratedTerminal"
     },
-    // python scripts/evaluate_generators.py --fake_data_dirs gen_samples/ac_cyclegan_ju3w3sw1 gen_samples/cyclegan_melanoma_i3nz2pqi gen_samples/fastgan_melanoma_j7od0bbk gen_samples/fastgan_melanoma_nevi_j7od0bbk_3113cnnm gen_samples/fastgan_nevi_3113cnnm gen_samples/fastgan_pretrained_melanoma_0ta2r1jy gen_samples/fastgan_pretrained_melanoma_nevi_0ta2r1jy_1r91ijoj gen_samples/fastgan_pretrained_nevi_1r91ijoj gen_samples/spade_fastgan_melanoma_16ztzy8j
     {
       "name": "Debug Evaluate Generators",
       "type": "debugpy",
@@ -16,15 +15,15 @@
       "program": "scripts/evaluate_generators.py",
       "args": [
         "--fake_data_dirs",
-        "gen_samples/ac_cyclegan_ju3w3sw1",
-        "gen_samples/cyclegan_melanoma_i3nz2pqi",
-        "gen_samples/fastgan_melanoma_j7od0bbk",
-        "gen_samples/fastgan_melanoma_nevi_j7od0bbk_3113cnnm",
-        "gen_samples/fastgan_nevi_3113cnnm",
-        "gen_samples/fastgan_pretrained_melanoma_0ta2r1jy",
-        "gen_samples/fastgan_pretrained_melanoma_nevi_0ta2r1jy_1r91ijoj",
-        "gen_samples/fastgan_pretrained_nevi_1r91ijoj",
-        "gen_samples/spade_fastgan_melanoma_16ztzy8j"
+        "data/gen_samples/ac_cyclegan_ju3w3sw1",
+        "data/gen_samples/cyclegan_melanoma_i3nz2pqi",
+        "data/gen_samples/fastgan_melanoma_j7od0bbk",
+        "data/gen_samples/fastgan_melanoma_nevi_j7od0bbk_3113cnnm",
+        "data/gen_samples/fastgan_nevi_3113cnnm",
+        "data/gen_samples/fastgan_pretrained_melanoma_0ta2r1jy",
+        "data/gen_samples/fastgan_pretrained_melanoma_nevi_0ta2r1jy_1r91ijoj",
+        "data/gen_samples/fastgan_pretrained_nevi_1r91ijoj",
+        "data/gen_samples/spade_fastgan_melanoma_16ztzy8j"
       ],
       "justMyCode": false,
       "console": "integratedTerminal",

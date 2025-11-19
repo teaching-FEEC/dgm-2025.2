@@ -1,5 +1,6 @@
 import os
 import argparse
+from matplotlib import pyplot as plt
 import torch
 import numpy as np
 from torch import nn
@@ -19,6 +20,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 
 import pyrootutils
 
+
 root = pyrootutils.setup_root(
     search_from=__file__,
     indicator=".project-root",
@@ -26,6 +28,7 @@ root = pyrootutils.setup_root(
     dotenv=True,
 )
 
+from src.utils.spectra_plot import MeanSpectraMetric
 from src.data_modules.hsi_dermoscopy import HSIDermoscopyDataModule
 from src.metrics.image_precision_recall import ImagePrecisionRecallMetric
 from src.metrics.inception import InceptionV3Wrapper
@@ -66,10 +69,6 @@ def get_hsi_dataset(data_dir: str, allowed_labels=None):
     datamodule.setup()
     dataset = datamodule.all_dataloader().dataset
     
-    if isinstance(dataset, torch.utils.data.ConcatDataset):
-        raise ValueError("The dataset is a ConcatDataset. Please provide a directory with a single dataset.")
-    if isinstance(dataset, torch.utils.data.Subset):
-        dataset = dataset.dataset
     return dataset
 
 
@@ -101,9 +100,12 @@ class HSIValidationModule:
         self.precision_recall = ImagePrecisionRecallMetric(feature_extractor).to(
             self.device
         )
+        
+        self.mean_spectra_metric = MeanSpectraMetric().to(self.device)
 
     @torch.no_grad()
-    def run_validation(self, real_dataset, fake_dataset, batch_size=8):
+    def run_validation(self, real_dataset, fake_dataset, output_dir="validation_images",
+                       batch_size=8):
         self.fid.reset()
         self.sam.reset()
         self.rase.reset()
@@ -132,6 +134,20 @@ class HSIValidationModule:
                 if isinstance(fake_batch, dict)
                 else fake_batch[0].to(self.device)
             )
+            
+            # assert that both real_images and fake_images are in the range [-1, 1]
+            assert torch.min(real_images) >= -1.0 and torch.max(real_images) <= 1.0, f"Real images are not in the range [-1, 1]. Min: {torch.min(real_images)}, Max: {torch.max(real_images)}"
+            assert torch.min(fake_images) >= -1.0 and torch.max(fake_images) <= 1.0, f"Fake images are not in the range [-1, 1]. Min: {torch.min(fake_images)}, Max: {torch.max(fake_images)}"
+            
+            # assert that there are negative values in both real_images and fake_images
+            assert torch.min(real_images) < 0.0, "Real images do not contain negative values."
+            assert torch.min(fake_images) < 0.0, "Fake images do not contain negative values."
+            
+            # === Optional: Extract masks and labels if they exist ===
+            real_masks = real_batch.get("mask").to(self.device) if isinstance(real_batch, dict) and "mask" in real_batch else None
+            fake_masks = fake_batch.get("mask").to(self.device) if isinstance(fake_batch, dict) and "mask" in fake_batch else None
+            real_labels = real_batch.get("label").to(self.device) if isinstance(real_batch, dict) and "label" in real_batch else None
+            fake_labels = fake_batch.get("label").to(self.device) if isinstance(fake_batch, dict) and "label" in fake_batch else None
 
             batch_size = min(real_images.shape[0], fake_images.shape[0])
             real_images, fake_images = real_images[:batch_size], fake_images[:batch_size]
@@ -159,9 +175,23 @@ class HSIValidationModule:
             psnr_vals.append(psnr_val.item())
             ssim_vals.append(ssim_val.item())
             tv_vals.append(tv_val.item())
+            
+            self.mean_spectra_metric.update(real_images, is_fake=False, masks=real_masks, labels=real_labels)
+            self.mean_spectra_metric.update(fake_images, is_fake=True, masks=fake_masks, labels=fake_labels)
 
         fid_score = self.fid.compute().item()
         pr_scores = self.precision_recall.compute()
+    
+        # === Save Mean Spectra Plot ===
+        os.makedirs(output_dir, exist_ok=True)
+        fig = self.mean_spectra_metric.plot()
+        if fig is not None:
+            save_path = os.path.join(output_dir, f"{dataset_name}_mean_spectra.png")
+            fig.savefig(save_path, bbox_inches="tight", dpi=150)
+            plt.close(fig)
+            print(f"✅ Mean spectra plot saved to: {save_path}")
+        else:
+            print("⚠️ No valid mean spectra plot could be generated.")
 
         return {
             "SAM_mean": np.mean(sam_vals),
@@ -231,7 +261,17 @@ if __name__ == "__main__":
         allowed_labels = None
         # get labels from fake dataset and check if it contains melanoma and dysplastic nevi
         # print the dataset class names
-        fake_labels = fake_dataset.labels
+        # iterate over the fake dataset and collect all labels
+        fake_labels = set()
+        for i in range(len(fake_dataset)):
+            item = fake_dataset[i]
+            if 0 in fake_labels and 1 in fake_labels:
+                break  # both labels found
+            if isinstance(item, dict) and "label" in item:
+                label = item["label"].item()
+            else:
+                label = item[1]  # assuming label is the second item
+            fake_labels.add(label)
         
         # if fake dataset contains only one of the two labels, set allowed_labels accordingly
         if 0 in fake_labels and 1 not in fake_labels:

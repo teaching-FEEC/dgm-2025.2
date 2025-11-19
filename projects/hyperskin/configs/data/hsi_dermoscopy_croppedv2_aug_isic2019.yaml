@@ -23,7 +23,7 @@ data:
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_spade_fsgan # concatena os datasets
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_cyclegan
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan # concatena os datasets
-    synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_cyclegan_pretrained
+    # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_cyclegan_pretrained
     # synthetic_data_dir: data/hsi_dermoscopy_croppedv2_256_synth_fsgan_pretrained
     
     transforms:
