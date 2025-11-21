@@ -7,8 +7,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 from IPython.display import HTML
 import random
-# This import needs to point to where base_model.py is.
-# Assuming it is in 'models/' directory.
 from models.base_model import BaseRopeModel
 
 def center_data(*tensors):
@@ -273,63 +271,3 @@ def set_seed(seed: int = 42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-def rope_loss(pred, tgt, src):
-    # Standard MSE on position + delta
-    mse_pos = torch.nn.functional.mse_loss(pred, tgt)
-    mse_delta = torch.nn.functional.mse_loss(pred - src, tgt - src)
-    return mse_pos + mse_delta
-
-# --- vvvv NEW WEIGHTED LOSS FUNCTION vvvv ---
-def weighted_rope_loss(pred, tgt, src, action):
-    """
-    Loss function that applies higher penalty to the link that was acted upon,
-    and decaying penalty for neighboring links.
-    
-    Args:
-        pred: (B, L, 3) Predicted state
-        tgt:  (B, L, 3) Target state
-        src:  (B, L, 3) Source state (used for delta loss)
-        action: (B, 4) or (B, L, 4)
-    """
-    B, L, _ = pred.shape
-    device = pred.device
-    
-    # 1. Identify the index of the acted link for each batch item
-    if action.dim() == 2: # Dense (B, 4) -> [dx, dy, dz, link_id]
-        link_indices = action[:, 3].long().clamp(0, L - 1)
-    else: # Sparse (B, L, 4)
-        link_indices = torch.argmax(action[:, :, 3], dim=1)
-        
-    # 2. Create a spatial weight mask (B, L)
-    # Create a range [0, 1, ..., L-1]
-    seq_indices = torch.arange(L, device=device).unsqueeze(0).expand(B, L) # (B, L)
-    link_indices_exp = link_indices.unsqueeze(1).expand(B, L) # (B, L)
-    
-    # Calculate distance from the acted link |i - center|
-    dist = torch.abs(seq_indices - link_indices_exp).float()
-    
-    # Create Gaussian-like weights
-    # Center (dist=0) gets weight 1.0, dist=5 gets e^-1 (~0.36), etc.
-    sigma = 5.0 
-    gaussian_weights = torch.exp(- (dist**2) / (2 * sigma**2))
-    
-    # Apply Base Weight + Gaussian Boost
-    # Base weight = 1.0 (standard physics)
-    # Boost = up to 5.0 extra weight at the center
-    # Total weight at center = 6.0, Total weight far away = 1.0
-    final_weights = 1.0 + (5.0 * gaussian_weights) # (B, L)
-    
-    # Expand weights to (B, L, 1) for broadcasting against (x,y,z)
-    final_weights = final_weights.unsqueeze(-1)
-    
-    # 3. Calculate Squared Errors
-    pos_error = (pred - tgt) ** 2
-    delta_error = ((pred - src) - (tgt - src)) ** 2
-    
-    # 4. Apply Weights
-    weighted_pos_error = pos_error * final_weights
-    weighted_delta_error = delta_error * final_weights
-    
-    # 5. Mean reduction
-    return weighted_pos_error.mean() + weighted_delta_error.mean()

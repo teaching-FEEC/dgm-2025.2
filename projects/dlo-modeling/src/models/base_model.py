@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np 
 
-
 class BaseRopeModel(nn.Module):
     """Abstract base class for rope prediction models."""
 
@@ -17,13 +16,18 @@ class BaseRopeModel(nn.Module):
         raise NotImplementedError("Each child model must implement its own forward method.")
 
     def _compute_loss(self, criterion, pred, tgt, src, action):
-        """Helper to call criterion with correct arguments"""
-        if criterion.__code__.co_argcount >= 4:
+        """Helper to call criterion with correct arguments robustly"""
+        # 1. Try passing everything
+        try:
             return criterion(pred, tgt, src, action)
-        elif criterion.__code__.co_argcount == 3:
-            return criterion(pred, tgt, src)
-        else:
-            return criterion(pred, tgt)
+        # Catch TypeError (wrong arg count) AND RuntimeError (boolean value of tensor)
+        except (TypeError, RuntimeError):
+            # 2. Try passing pred, tgt, src
+            try:
+                return criterion(pred, tgt, src)
+            except (TypeError, RuntimeError):
+                # 3. Fallback to standard loss
+                return criterion(pred, tgt)
 
     def train_model(
         self,
@@ -36,7 +40,8 @@ class BaseRopeModel(nn.Module):
         checkpoint_path=None,
         criterion=None,
         decoder_inputs=None,
-        patience=5 
+        early_stopping = False,
+        patience=5,
     ):
         self.to(device)
         optimizer = optim.Adam(self.parameters(), lr=lr)
@@ -64,7 +69,6 @@ class BaseRopeModel(nn.Module):
                 except TypeError:
                     pred = self(src, action_map)
 
-                # --- Updated Loss Call ---
                 loss = self._compute_loss(criterion, pred, tgt, src, action_map)
 
                 loss.backward()
@@ -77,34 +81,40 @@ class BaseRopeModel(nn.Module):
             val_loss = self.evaluate_model(val_dataset, device, batch_size=batch_size, criterion=criterion)
             print(f"Epoch {epoch+1}: Train Loss={train_loss:.6f} | Val Loss={val_loss:.6f}")
 
-            # 2. Save best model (NOW it can use val_loss)
+            # 2. Save best model
             if checkpoint_path and val_loss < best_val_loss:
                 best_val_loss = val_loss
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
                 torch.save(self.state_dict(), checkpoint_path)
-                print(f"Saved new best checkpoint at {checkpoint_path}")
+                print(f"✅ Saved new best checkpoint at {checkpoint_path}")
                 epochs_no_improve = 0 
             else:
                 epochs_no_improve += 1 
 
             # 3. Early Stopping Check
-            if epochs_no_improve >= patience:
+            if epochs_no_improve >= patience and early_stopping:
                 print(f"Early stopping triggered after {patience} epochs with no improvement.")
                 break 
 
         return self
 
-    def evaluate_model(self, test_dataset, device, batch_size=64, criterion = None):
+    def evaluate_model(self, test_dataset, device, batch_size=64, checkpoint_path=None, criterion=None):
         """
         Calculates loss on the data *as-is* (e.g., normalized loss).
         """
         self.to(device)
-        self.eval()
         
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            self.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
+        self.eval()
         loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
         total_loss = 0.0
         
         if criterion is None:
-            criterion = nn.functional.mse_loss
+            criterion = nn.MSELoss()
 
         with torch.no_grad():
             for src, action_map, tgt_seq in loader:
@@ -115,11 +125,11 @@ class BaseRopeModel(nn.Module):
                 except TypeError:
                     pred = self(src, action_map)
 
-                # --- Updated Loss Call ---
                 loss = self._compute_loss(criterion, pred, tgt, src, action_map)
 
                 total_loss += loss.item()
         return total_loss / len(loader)
+
 
     def evaluate_model_denormalized(
         self, 
@@ -128,12 +138,18 @@ class BaseRopeModel(nn.Module):
         train_mean, 
         train_std, 
         batch_size=64, 
+        checkpoint_path=None,
         criterion=None
     ):
         """
         Calculates loss in the *original, unnormalized* coordinate space.
         """
         self.to(device)
+        
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            self.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
         self.eval()
         
         train_mean = train_mean.to(device)
@@ -144,7 +160,7 @@ class BaseRopeModel(nn.Module):
         total_loss = 0.0
         
         if criterion is None:
-            criterion = nn.functional.mse_loss
+            criterion = nn.MSELoss()
 
         with torch.no_grad():
             for src_norm, action_map, tgt_seq_norm in loader:
@@ -160,9 +176,6 @@ class BaseRopeModel(nn.Module):
                 tgt_denorm = tgt_norm * (train_std + epsilon) + train_mean
                 src_denorm = src_norm * (train_std + epsilon) + train_mean
 
-                # --- Updated Loss Call ---
-                # Note: we pass action_map (raw) even though data is denorm. 
-                # This is fine as action_map indices are invariant to norm.
                 loss = self._compute_loss(criterion, pred_denorm, tgt_denorm, src_denorm, action_map)
 
                 total_loss += loss.item()
@@ -176,6 +189,7 @@ class BaseRopeModel(nn.Module):
         device,
         steps,
         criterion,
+        checkpoint_path=None,
         denormalize_stats=None, 
         num_rollouts=100      
     ):
@@ -183,6 +197,11 @@ class BaseRopeModel(nn.Module):
         Calculates autoregressive rollout loss.
         """
         self.to(device)
+
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            self.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
         self.eval()
         
         total_loss = 0.0
@@ -226,10 +245,8 @@ class BaseRopeModel(nn.Module):
                         tgt_denorm = tgt_norm * (train_std + epsilon) + train_mean
                         src_denorm = current_state_norm * (train_std + epsilon) + train_mean
                         
-                        # Updated Loss Call
                         loss = self._compute_loss(criterion, pred_denorm, tgt_denorm, src_denorm, current_action)
                     else:
-                        # Updated Loss Call
                         loss = self._compute_loss(criterion, pred_next_state_norm, tgt_norm, current_state_norm, current_action)
                     
                     step_losses.append(loss.item())
