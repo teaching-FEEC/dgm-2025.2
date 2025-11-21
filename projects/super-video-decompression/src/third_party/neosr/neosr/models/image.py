@@ -939,6 +939,10 @@ class image(base):
         # zero self.metric_results
         if with_metrics:
             self.metric_results = dict.fromkeys(self.metric_results, 0)
+            if (self.opt["val"]["metrics"].get("calculate_patch_difference_psnr")):
+                self.metric_results["psnr_2"] = 0
+                self.metric_results["patch_variance_psnr"] = 0
+                self.metric_results["patch_difference_psnr"] = 0
 
         if use_pbar:
             pbar = tqdm(
@@ -974,8 +978,8 @@ class image(base):
             sr_img = tensor2img([visuals["result"]])
             metric_data["img"] = sr_img
 
-            lq_img = tensor2img([visuals["lq"]])
-            metric_data["img_lq"] = lq_img
+            #lq_img = tensor2img([visuals["lq"]])
+            #metric_data["img_lq"] = lq_img
                 
             if "gt" in visuals:
                 gt_img = tensor2img([visuals["gt"]])
@@ -1031,7 +1035,15 @@ class image(base):
                 # calculate metrics
                 for name, opt_ in self.opt["val"]["metrics"].items():
                     with torch.inference_mode():
-                        self.metric_results[name] += calculate_metric(metric_data, opt_)  # type: ignore[reportOperatorIssue]
+                        #print("Metric Name:",name)
+                        if (name=="calculate_patch_difference_psnr"):
+                            #print("Calculating Patch PSNR ====================================")
+                            patch_difference_psnr,patch_variance_psnr,psnr = calculate_metric(metric_data, opt_)
+                            self.metric_results["psnr_2"] += psnr
+                            self.metric_results["patch_variance_psnr"] += patch_variance_psnr
+                            self.metric_results["patch_difference_psnr"] += patch_difference_psnr
+                        else:
+                            self.metric_results[name] += calculate_metric(metric_data, opt_)  # type: ignore[reportOperatorIssue]
             if use_pbar:
                 pbar.update(1)  # type: ignore[reportPossiblyUnboundVariable]
                 pbar.set_description(f"{tc.light_green}Inferring on {img_name}{tc.end}")  # type: ignore[reportPossiblyUnboundVariable]
@@ -1041,7 +1053,7 @@ class image(base):
 
         if with_metrics:
             for metric in self.metric_results:
-                self.metric_results[metric] = self.metric_results[metric] / _idx + 1  # type: ignore[reportPossiblyUnboundVariable]
+                self.metric_results[metric] = self.metric_results[metric] / (_idx + 1)  # type: ignore[reportPossiblyUnboundVariable]
                 # update the best metric result
                 self._update_best_metric_result(
                     dataset_name, metric, self.metric_results[metric], current_iter

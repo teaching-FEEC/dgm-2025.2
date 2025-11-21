@@ -107,6 +107,8 @@ class base:
     def _update_best_metric_result(
         self, dataset_name, metric: str, val, current_iter: int
     ) -> None:
+        if (self.best_metric_results[dataset_name].get(metric) is None):
+            self.best_metric_results[dataset_name][metric] = {"better": "higher", "val": float("-inf"), "iter": -1}
         if self.best_metric_results[dataset_name][metric]["better"] == "higher":
             if val >= self.best_metric_results[dataset_name][metric]["val"]:
                 self.best_metric_results[dataset_name][metric]["val"] = val

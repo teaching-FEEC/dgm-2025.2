@@ -31,8 +31,10 @@ def compute_psnr_batch(pred, target):
     mse = torch.clamp(mse, min=1e-12)
 
     psnr = 10 * torch.log10((255 ** 2) / mse)
-    if (psnr == float('inf')):
-        return 50.0
+    #if (psnr == float('inf')):
+    #    return 50.0
+    if (psnr == float('inf')).any():
+        psnr[psnr == float('inf')] = 50
     return psnr
 
 @METRIC_REGISTRY.register()
@@ -131,7 +133,8 @@ def calculate_patch_difference_psnr(
     weights =  var_norm
     var_psnr = (weights * patch_psnr).mean()
     
-    print("Non Weightedpsnr:", patch_psnr.mean())
+    
+    #print("Non Weightedpsnr:", patch_psnr.mean())
 
     return psnr, var_psnr, patch_psnr.mean()
 
