@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 import os
-from torch.utils.data import TensorDataset
+import sys
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
@@ -54,27 +55,49 @@ def normalize_data(src_train, tgt_train, src_val, tgt_val, src_test, tgt_test):
         train_mean, train_std
     )
 
-def load_data_from_npz(seed=42):
+
+def load_and_split_data(
+    data_path,
+    seed=42, 
+    create_demo_set=False, 
+    demo_size=100,
+    train_ratio=0.8,
+    val_ratio=0.1,
+):
     """
-    Loads and splits data from an NPZ file into raw numpy arrays.
-    Normalization is no longer done here.
-    The test set is NOT shuffled, to allow for rollouts.
+    Loads data from NPZ, detects dimensions, and splits into Train/Val/Test.
+    Conditionally creates and returns a sequential Demo set.
+
+    Args:
+        seed (int): Random seed for reproducibility.
+        create_demo_set (bool): If True, reserves the last N items for a demo set and returns it.
+        demo_size (int): Number of items to reserve for the demo set.
+        train_ratio (float): Proportion of non-demo data used for training.
+        val_ratio (float): Proportion of non-demo data used for validation.
+
+    Returns:
+        If create_demo_set is True:
+            (train_set, val_set, test_set, demo_set, USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
+        
+        If create_demo_set is False:
+            (train_set, val_set, test_set, USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
+            
+        *Each set is a tuple: (src_data, act_data, tgt_data)
     """
     print("Loading data from NPZ...")
     
-    # === Path as requested ===
-    data_path = 'src/data/rope_state_action_next_state_mil.npz'
+    # === Path Definition ===
     
     if not os.path.exists(data_path):
         print(f"Error: Data file not found at {data_path}")
-        print("Please check that the file exists in the 'src/data' folder.")
+        print(f"Please check that the file exists in the '{''.join(data_path.split('/')[:-1])}' folder.")
         sys.exit(1)
         
-    data = np.load(data_path)
+    data = np.load(data_path, allow_pickle=True)
     
-    # Keys as per your description
-    states_key = 'states'         
-    actions_key = 'actions'       
+    # === Key Extraction ===
+    states_key = 'states'          
+    actions_key = 'actions'        
     next_states_key = 'next_states' 
 
     try:
@@ -86,7 +109,6 @@ def load_data_from_npz(seed=42):
         print(f"Available keys are: {list(data.keys())}")
         sys.exit(1)
 
-    # --- Auto-detect data properties ---
     if act_data.ndim == 3:
         print("Detected 3D sparse action data (N, L, D)")
         USE_DENSE_ACTION = False
@@ -98,41 +120,67 @@ def load_data_from_npz(seed=42):
     
     SEQ_LEN = src_data.shape[1] # (N, L, 3) -> L
     
-    # --- Split Data (Numpy) ---
     print("Splitting data...")
-    total_size = len(src_data)
     
-    # We split indices sequentially first
+    total_size = len(src_data)
     all_indices = np.arange(total_size)
     
-    train_size = int(total_size * 0.8)
-    val_size = int(total_size * 0.1)
-    
-    # Split indices sequentially
-    train_val_indices = all_indices[:train_size + val_size]
-    test_indices = all_indices[train_size + val_size:] # Kept in order
-    
-    # Shuffle only the train/val indices
-    np.random.seed(seed)
-    np.random.shuffle(train_val_indices)
-    
-    # Get final train and val indices
-    train_indices = train_val_indices[:train_size]
-    val_indices = train_val_indices[train_size:]
-    
-    # Split numpy arrays
-    src_train, act_train, tgt_train = src_data[train_indices], act_data[train_indices], tgt_data[train_indices]
-    src_val,   act_val,   tgt_val   = src_data[val_indices],   act_data[val_indices],   tgt_data[val_indices]
-    src_test,  act_test,  tgt_test  = src_data[test_indices],  act_data[test_indices],  tgt_data[test_indices]
+    # 1. Handle Demo Set (Sequential from the end)
+    if create_demo_set:
+        # Ensure we don't take more than we have
+        if demo_size >= total_size:
+             raise ValueError("Demo size cannot be larger than total dataset.")
+             
+        pool_indices = all_indices[:-demo_size]
+        demo_indices = all_indices[-demo_size:]
+        print(f"Reserving last {demo_size} samples for Sequential Demo set.")
+    else:
+        pool_indices = all_indices
+        # demo_indices is unused if create_demo_set is False
+        print("No Demo set reserved.")
 
-    print(f"Data split: {len(src_train)} train, {len(src_val)} val, {len(src_test)} test (Test set is sequential)")
+    np.random.seed(seed)
+    np.random.shuffle(pool_indices)
     
-    return (
-        src_train, act_train, tgt_train,
-        src_val,   act_val,   tgt_val,
-        src_test,  act_test,  tgt_test,
-        USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
-    )
+    pool_size = len(pool_indices)
+    n_train = int(pool_size * train_ratio)
+    n_val = int(pool_size * val_ratio)
+    
+    train_indices = pool_indices[:n_train]
+    val_indices = pool_indices[n_train : n_train + n_val]
+    test_indices = pool_indices[n_train + n_val:]
+    
+    def extract_set(indices):
+        return src_data[indices], act_data[indices], tgt_data[indices]
+
+    src_train, act_train, tgt_train = extract_set(train_indices)
+    src_val,   act_val,   tgt_val   = extract_set(val_indices)
+    src_test,  act_test,  tgt_test  = extract_set(test_indices)
+
+    print(f"Data split complete:")
+    print(f"  Train: {len(src_train)}")
+    print(f"  Val:   {len(src_val)}")
+    print(f"  Test:  {len(src_test)} (Randomly selected)")
+
+    if create_demo_set:
+        src_demo, act_demo, tgt_demo = extract_set(demo_indices)
+        print(f"  Demo:  {len(src_demo)} (Sequential)")
+        
+        return (
+            src_train, act_train, tgt_train,
+            src_val,   act_val,   tgt_val,
+            src_test,  act_test,  tgt_test,
+            src_demo,  act_demo,  tgt_demo,
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
+    else:
+        return (
+            src_train, act_train, tgt_train,
+            src_val,   act_val,   tgt_val,
+            src_test,  act_test,  tgt_test,
+            # Demo tuple omitted
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
 
 def plot_model_comparison(
     models_dict: dict[str, BaseRopeModel],
@@ -260,10 +308,6 @@ def plot_model_comparison(
         except Exception as e:
             print(f"Error saving plot: {e}")
     plt.close(fig) # Close to save memory
-
-def split_data(rope_states, actions, train_ratio=0.8, val_ratio=0.1, shuffle = True ,seed=42):
-    # Unused legacy function
-    pass
 
 def set_seed(seed: int = 42):
     random.seed(seed)

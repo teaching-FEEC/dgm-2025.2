@@ -3,22 +3,24 @@ import numpy as np
 import sys
 import os
 from torch.utils.data import TensorDataset
-
 # --- 1. Path Setup ---
-sys.path.append(os.path.abspath('src'))
-sys.path.append(os.path.abspath('src/models'))
-
+# Get the directory where main.py is located
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, 'src'))
+# FIX 1: Add 'models' to path so internal files can find 'base_model' directly
+sys.path.append(os.path.join(current_dir, 'src', 'models'))
 # --- 2. Imports from your files ---
 try:
     from models.rope_bert import RopeBERT
     from models.rope_bilstm import RopeBiLSTM
     from models.rope_transformer import RopeTransformer
     # Import weighted_rope_loss
-    from utils import (
-        set_seed, plot_model_comparison, weighted_rope_loss, load_data_from_npz,
+    from src.losses import RopeLoss, WeightedRopeLoss, PhysicsInformedRopeLoss
+    from src.utils import (
+        set_seed, plot_model_comparison, load_and_split_data,
         normalize_data, center_data
     )
-    from models.base_model import BaseRopeModel
 except ImportError as e:
     print(f"Error: Could not import necessary modules.")
     print("Please ensure 'main.py' is in the root directory (above 'src')")
@@ -66,7 +68,8 @@ def main():
     all_test_losses_normalized = {}
     all_test_losses_denormalized = {}
     all_test_losses_rollout = {} 
-
+    
+    data_path = '/home/lucasvd/lucasvd/IA_generativa_multimodal/rope_prediction/datasets/rope_state_action_next_state.npz'
     # 1. Load Data (Raw)
     try:
         (
@@ -74,7 +77,7 @@ def main():
             src_val_raw_np,   act_val_raw_np,   tgt_val_raw_np,
             src_test_raw_np,  act_test_raw_np,  tgt_test_raw_np,
             USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
-        ) = load_data_from_npz(seed=SEED)
+        ) = load_and_split_data(data_path=data_path, seed=SEED)
         
     except Exception as e:
         print(f"\n---!! An error occurred while loading data: {e}")
@@ -177,7 +180,7 @@ def main():
                 epochs=EPOCHS,
                 lr=LR,
                 checkpoint_path=checkpoint_path, 
-                criterion=weighted_rope_loss # <-- USE NEW LOSS
+                criterion=WeightedRopeLoss() # <-- USE NEW LOSS
             )
             
             print(f"Loading best weights for {name} from {checkpoint_path}")
@@ -199,7 +202,7 @@ def main():
                 test_dataset=test_ds_single_step,
                 device=DEVICE,
                 batch_size=BATCH_SIZE,
-                criterion=weighted_rope_loss # <-- USE NEW LOSS
+                criterion=WeightedRopeLoss() # <-- USE NEW LOSS
             )
             norm_losses[name] = norm_loss
             print(f"  Normalized Test Loss (t+1) ({name} @ {norm_type}): {norm_loss:.6f}")
@@ -212,7 +215,7 @@ def main():
                     train_mean=plot_mean, 
                     train_std=plot_std,
                     batch_size=BATCH_SIZE,
-                    criterion=weighted_rope_loss # <-- USE NEW LOSS
+                    criterion=WeightedRopeLoss() # <-- USE NEW LOSS
                 )
                 denorm_losses[name] = denorm_loss
                 print(f"Denormalized Test Loss (t+1) ({name} @ {norm_type}): {denorm_loss:.6f}")
@@ -227,7 +230,7 @@ def main():
                 test_tgt_tensor=tgt_test,
                 device=DEVICE,
                 steps=1000,
-                criterion=weighted_rope_loss, # <-- USE NEW LOSS
+                criterion=WeightedRopeLoss(), # <-- USE NEW LOSS
                 denormalize_stats=denorm_stats_for_rollout,
                 num_rollouts=100
             )
