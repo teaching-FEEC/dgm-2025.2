@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from torch.distributions import Normal, kl
 from base_model import BaseRopeModel 
 from tqdm import tqdm
+
 class Encoder(nn.Module):
     """
     Encodes the rope state S_t (B, L, 3) into an embedding e_t (B, d_embed).
