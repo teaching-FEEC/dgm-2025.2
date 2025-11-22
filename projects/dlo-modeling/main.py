@@ -1,4 +1,5 @@
 import torch
+from torch import nn
 import numpy as np
 import sys
 import os
@@ -174,7 +175,7 @@ def main():
             model.train_model(
                 train_dataset=train_ds, val_dataset=val_ds, device=DEVICE,
                 batch_size=BATCH_SIZE, epochs=EPOCHS, lr=LR,
-                checkpoint_path=checkpoint_path, criterion=WeightedRopeLoss() 
+                checkpoint_path=checkpoint_path, criterion=PhysicsInformedRopeLoss(w_pos=1.0, w_vel=1.0, w_stretch=1.5, w_bend=1.0, w_overlap=0.00)
             )
             
             # Reload best for Eval
@@ -185,7 +186,7 @@ def main():
             # 1. Normalized
             n_loss = model.evaluate_model(
                 test_dataset=test_ds, device=DEVICE, batch_size=BATCH_SIZE,
-                criterion=WeightedRopeLoss()
+                criterion=nn.MSELoss()
             )
             norm_losses[name] = n_loss
             
@@ -193,7 +194,7 @@ def main():
             dn_loss = model.evaluate_model_denormalized(
                 test_dataset=test_ds, device=DEVICE,
                 train_mean=train_mean, train_std=train_std,
-                batch_size=BATCH_SIZE, criterion=WeightedRopeLoss() 
+                batch_size=BATCH_SIZE, criterion=nn.MSELoss() 
             )
             denorm_losses[name] = dn_loss
             
@@ -201,7 +202,7 @@ def main():
             r_loss = model.evaluate_autoregressive_rollout(
                 test_src_tensor=src_test_raw, test_act_tensor=act_test_raw,
                 test_tgt_tensor=tgt_test_raw, device=DEVICE, steps=1000,
-                criterion=WeightedRopeLoss(), denormalize_stats=denorm_stats_for_rollout,
+                criterion=nn.MSELoss(), denormalize_stats=denorm_stats_for_rollout,
                 num_rollouts=100
             )
             rollout_losses[name] = r_loss
@@ -243,7 +244,7 @@ def main():
         # Eval Dreamer
         d_loss, d_recon, d_kl = dreamer_model.evaluate_model(
             dreamer_test_ds, DEVICE, batch_size=350,
-            checkpoint_path=dreamer_ckpt_path, criterion=dreamer_config["recon_loss_fn"]
+            checkpoint_path=dreamer_ckpt_path, criterion=nn.MSELoss()
         )
         norm_losses["Dreamer"] = d_loss
         denorm_losses["Dreamer"] = "N/A" 
