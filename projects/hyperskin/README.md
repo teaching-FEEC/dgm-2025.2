@@ -161,9 +161,21 @@ where $x$ and $y$ are spectral vectors of a pixel in the reference and generated
 ---
 
 # Experiments, Results, and Discussion of Results
-In this work, we hope to provide a more general evaluation of how synthetic images influence classification, and to do so we are going to answer not only the primary hypothesis but also the secondary research questions. In the first part of this session we discuss the experimental details to generate the synthetic images and in the second part of this session we discuss the main and secondary research questions this work aims to answer
+Our aim in this work is to offer a comprehensive understanding of how synthetic images influence classification. For that reason, we examine both our main hypothesis and the related secondary questions. This session is divided into two main components. The first describes the experimental process behind generating synthetic hyperspectral images, and the second examines the main and secondary research questions that this work aims to answer.
 
 ### Generative Model Training
+
+#### Data Augmentations During Generative Model Training
+During the model training phase, the cropped hyperspectral images undergo a series of augmentations using the `albumentations` library. These augmentations are vital for addressing data scarcity and improving the model's generalization capabilities.
+The applied augmentations include:
+* **ShiftScaleRotate:** Randomly shifts, scales, and rotates the image.
+* **RandomCrop:** Takes a random crop from the image.
+* **VerticalFlip:** Flips the image vertically.
+* **HorizontalFlip:** Flips the image horizontally.
+After the augmentations are applied, the images undergo a final transformation to standardize their size and shape for model input:
+* **SmallestMaxSize:** The image is resized such that its smallest dimension matches a predefined target size (e.g., 224 pixels).
+* **CenterCrop:** A center crop is then applied to make the image perfectly square (e.g., 224x224 pixels) and of the appropriate dimensions for the input layer of the neural network model.
+Additionally, each channel of the hyperspectral images is normalized using min-max normalization based on pre-calculated global minimum and maximum values for each channel across the entire dataset. This normalization ensures that the pixel values for each channel are scaled to a consistent range, typically between 0 and 1, which is crucial for stable and efficient training of the neural network models.
 
 #### SHS GAN
 The SHS-GAN experiment was initially used to synthesize 64×64 hyperspectral images of melanoma. The main goal was to reproduce and understand the implementation described in the reference paper, which proposed several techniques for handling hyperspectral data.
@@ -217,28 +229,14 @@ Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input co
 ## Classifier Training with Synthetic Data 
 
 ### Is synthetic data truly necessary to improve classification performance, or can conventional data augmentation methods achieve similar gains?
-#### Data Augmentations During Training
-During the model training phase, the cropped hyperspectral images undergo a series of augmentations using the `albumentations` library. These augmentations are vital for addressing data scarcity and improving the model's generalization capabilities.
 
-The applied augmentations include:
-* **ShiftScaleRotate:** Randomly shifts, scales, and rotates the image.
-* **RandomCrop:** Takes a random crop from the image.
-* **VerticalFlip:** Flips the image vertically.
-* **HorizontalFlip:** Flips the image horizontally.
+The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes.Experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
 
-After the augmentations are applied, the images undergo a final transformation to standardize their size and shape for model input:
-
-* **SmallestMaxSize:** The image is resized such that its smallest dimension matches a predefined target size (e.g., 224 pixels).
-* **CenterCrop:** A center crop is then applied to make the image perfectly square (e.g., 224x224 pixels) and of the appropriate dimensions for the input layer of the neural network model.
-
-Additionally, each channel of the hyperspectral images is normalized using min-max normalization based on pre-calculated global minimum and maximum values for each channel across the entire dataset. This normalization ensures that the pixel values for each channel are scaled to a consistent range, typically between 0 and 1, which is crucial for stable and efficient training of the neural network models.
-
-The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Thirteen experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
-
-1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8136)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.2532**, showing that the model performed best when trained without balancing.
-2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7796**, with an **accuracy of 0.675** and **Spec@Sens of 0.243**, indicating that reweighting did not generalize well to minority melanoma cases.
-3. Applied **Batch Regularization**, reaching an F1-score of **0.8125**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
+1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8852)**, along with an **accuracy of 0.8372** and **specificity at sensitivity (Spec@Sens)** of **0.31**, showing that the model performed best when trained without balancing.
+2. Applied **Batch Regularization**, reaching an F1-score of **0.8571**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
+3. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.8571**, with an **accuracy of xxx** and **Spec@Sens of xxx**, indicating that reweighting did not generalize well to minority melanoma cases.
 4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7451**, **accuracy of 0.675**, and **Spec@Sens of 0.227**. The combined method recovered some performance but still lagged behind the baseline.
+5. Used **synthetic data** without any other data augmentation strategies, resulting in the highest F1-score of 0,900
 
 | Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
 |:--|:--:|:--:|:--:|:--:|:--:|:--|
@@ -270,13 +268,16 @@ From a training perspective, balancing the data appeared to stabilize convergenc
 
 In summary, integrating FastGAN-generated hyperspectral melanoma samples into the training set led to a measurable improvement in classification performance. The balanced model achieved perfect recall and higher overall validation accuracy compared to the model trained on real data alone. Although the slight drop in specificity indicates a small increase in false positives, the results strongly suggest that GAN-based data augmentation is an effective strategy for addressing class imbalance in hyperspectral dermoscopy classification tasks.  
 
-Does synthetic data improve the performance of a generalist classifier pretrained on large-scale datasets such as ImageNet?
-- Does it also benefit a specialist classifier pretrained on RGB melanoma images?
-- What is the optimal proportion of synthetic data to mix with real data during training?
-- How does the quality of synthetic images influence downstream classifier performance?
+### Does synthetic data improve the performance of a generalist classifier pretrained on large-scale datasets such as ImageNet?
+
+### Does it also benefit a specialist classifier pretrained on RGB melanoma images?
+
+### What is the optimal proportion of synthetic data to mix with real data during training?
+
+### How does the quality of synthetic images influence downstream classifier performance?
 
 
-## Conclusion
+# Conclusion
 Our results show that classifiers trained with synthetic hyperspectral data perform better than those relying only on standard data augmentation or regularization. Adding GAN-generated melanoma images helped the models generalize better and improved sensitivity, especially for underrepresented classes. We also found that architectures built for high-resolution image generation, like FastGAN, work better than those designed specifically for hyperspectral synthesis—likely because our dataset has higher spatial resolution (256×256) and fewer spectral channels than typical HSI data. Overall, GANs outperformed VAEs on small, high-resolution datasets, producing sharper and more realistic lesion details.
 Next, we plan to test classification models trained purely on synthetic data against real samples, use large RGB skin lesion datasets to generate more diverse images, and explore CycleGAN and pretraining strategies to improve realism. Conditioning FastGAN on RGB images or binary masks may also help control lesion structure and further boost the quality of generated hyperspectral data.
 
