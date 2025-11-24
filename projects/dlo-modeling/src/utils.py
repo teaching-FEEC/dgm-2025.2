@@ -578,6 +578,7 @@ def animate_rope(
     device: torch.device = None,
     denormalize: bool = True,
     save: bool = False,
+    save_path = 'rope_animation.mp4',
     train_mean: torch.Tensor = None,
     train_std: torch.Tensor = None,
     dynamic_lim: bool = True,
@@ -700,8 +701,8 @@ def animate_rope(
     )
 
     if save:
-        ani.save("rope_animation.mp4", writer="ffmpeg", fps=6)
-        print("✅ Saved animation as rope_animation.mp4")
+        ani.save(save_path, writer="ffmpeg", fps=6)
+        print(f"Saved animation as {save_path}")
 
     plt.close(fig)
     return HTML(ani.to_jshtml())

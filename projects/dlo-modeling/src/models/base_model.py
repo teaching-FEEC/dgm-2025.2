@@ -106,7 +106,7 @@ class BaseRopeModel(nn.Module):
         self.to(device)
         
         if checkpoint_path and os.path.exists(checkpoint_path):
-            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            print(f"Loading best checkpoint from {checkpoint_path}")
             self.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
         self.eval()
@@ -147,7 +147,7 @@ class BaseRopeModel(nn.Module):
         self.to(device)
         
         if checkpoint_path and os.path.exists(checkpoint_path):
-            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            print(f"Loading best checkpoint from {checkpoint_path}")
             self.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
         self.eval()
@@ -199,7 +199,7 @@ class BaseRopeModel(nn.Module):
         self.to(device)
 
         if checkpoint_path and os.path.exists(checkpoint_path):
-            print(f"🔹 Loading best checkpoint from {checkpoint_path}")
+            print(f"Loading best checkpoint from {checkpoint_path}")
             self.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
         self.eval()
