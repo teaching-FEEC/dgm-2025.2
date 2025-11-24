@@ -237,8 +237,6 @@ Real-data augmentations and balancing strategies did not outperform the baseline
 
 The best performance came from using synthetic images. Training with synthetic hyperspectral data alone produced the highest F1-score (0.9000) and the highest specificity (0.7143). When synthetic samples were combined with traditional augmentations, results remained strong and continued to outperform the real-only augmented model.
 
-# Experiment Table
-
 | ID | Augmentation                       | Synthetic data | Val F1  | Specificity | 
 |:--:|:-----------------------------------|:--------------:|:-------:|:-----------:|
 | 1  | NONE                               | No             | 0.8852  | 0.6429      |
@@ -255,6 +253,14 @@ The experiments showed that traditional data balancing methods did not enhance t
 However, these results are not fully generalizable. When evaluated on the test dataset, all models showed lower F1-scores. Although the synthetic-data model (Test F1 = 0.75) performed better than the baseline without augmentation (Test F1 = 0.73), it was still surpassed by the focal loss model (Test F1 = 0.78). These differences highlight a substantial mismatch between the validation and test distributions, indicating that additional testing is needed to assess if using synthetic data outperforms traditional data-agumentation in real-world conditions. 
 
 ### Does the inclusion of synthetic samples enhance the performance of a classifier trained from scratch when only a small amount of real data is available?
+
+
+| ID | Arquitecture | Synthetic data | Val F1  | Val Specificity | Test F1 | Test Specificity |
+|:--:|:------------:|:--------------:|:-------:|:---------------:|:-------:|:----------------:|
+| 1  | Densenet201  | No             | 0.8852  | 0.6429          | 0.73    | 0.53             |
+| 2  | Densenet201  | Yes            | 0.9000  | 0.7143          | 0.75    | 0.26             |
+| 3  | EfficientNet | No             | 0.9000  | 0.7143          |         |                  |
+| 4  | EfficientNet | Yes            | 0.9000  | 0.7143          |         |                  |
 
 The objective of this experiment was to verify whether training a hyperspectral dermoscopy skin lesion classifier with additional synthetic melanoma data, generated using the FastGAN architecture, could improve performance in distinguishing melanoma from dysplastic nevi. The classifier was trained on the cropped hyperspectral images, the only difference between the two experiments being that the second training included synthetic melanoma samples to balance the dataset, ensuring that the number of melanoma and dysplastic nevi instances was equal.  
 
