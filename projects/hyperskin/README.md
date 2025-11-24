@@ -290,6 +290,18 @@ In summary, integrating FastGAN-generated hyperspectral melanoma samples into th
 
 ### What is the optimal proportion of synthetic data to mix with real data during training?
 
+To understand how much synthetic data should be used in training, we first checked whether synthetic melanoma (MM) and dysplastic nevi (DN) should be added in the same proportion as the real dataset or in a way that compensates for the real imbalance. Then, we tested how much synthetic melanoma should be added—either matching the number of real MM images or increasing it further. 
+The results show that the most effective strategy is to reinforce only the melanoma class. The highest F1-score (0.8438) occurred when 100 synthetic melanoma images were added without introducing synthetic DN, indicating that focused augmentation of the minority class is more beneficial than attempting to rebalance both classes. Configurations that included synthetic DN (such as 100MM/50DN or 50MM/100DN) produced lower or equal F1-scores, ranging from 0.8254 to 0.8387, and did not surpass the melanoma-only approach. Even when real and synthetic melanoma counts were matched (66MM real with 66 synthetic MM), performance did not improve further.
+Overall, targeted melanoma-only augmentation proved to be the most effective way to improve classifier performance in the mixed_train setting.
+
+| ID | Real MM | Real DN | Synth MM | Synth DN | F1     | Specificity  | Balanced Accuracy |
+|----|---------|---------|----------|----------|--------|--------------|-------------------|
+| 1  | 66      | 134     | 50       | 0        | 0.8254 | 0.4285714328 | 0.66256           |
+| 2  | 66      | 134     | 100      | 0        | 0.8438 | 0.4285714328 | 0.67980           |
+| 3  | 66      | 134     | 100      | 50       | 0.8254 | 0.4285714328 | 0.66256           |
+| 4  | 66      | 134     | 66       | 13       | 0.8387 | 0.5000000000 | 0.69828           |
+| 5  | 66      | 134     | 50       | 100      | 0.8387 | 0.5000000000 | 0.69828           |
+
 ### How does the quality of synthetic images influence downstream classifier performance?
 
 
