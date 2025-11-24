@@ -68,6 +68,31 @@ The generation stage is divided into two strategies. Unconditional models (SHSGA
 To understand how synthetic images influence malignant tumor classification, we evaluate two groups of classifiers: a generalist DenseNet, which benefits from ImageNet pretraining, and a specialist EfficientNet-b6, which incorporates prior knowledge from an RGB melanoma model trained on MILK10K. Both architectures are also tested when trained from scratch.
 Each classifier is trained twice. We begin by training the model only on real hyperspectral data to set a performance baseline. We then retrain the same architecture using an expanded dataset that includes both real and synthetic hyperspectral images. Comparing these two training conditions using metrics such as F1-score, Accuracy, and Specificity, reveals when and for which model types synthetic data provides a meaningful advantage.
 
+### Dataset Description
+| Dataset | Web Address | Descriptive Summary |
+| :--- | :--- | :--- |
+| A Hyperspectral Dermoscopy Dataset | https://github.com/heugyy/HSIDermoscopy | A dataset of 330 hyperspectral dermoscopy images for melanoma detection. Each image has 16 spectral bands (465 nm to 630 nm) and includes histopathologically validated cases of melanoma, dysplastic nevus, and other lesion types. |
+* **Size:** The dataset contains a total of **330 hyperspectral images**.
+* **Format:** Each raw image is converted into a **$256 \times 512 \times 16$ data cube**. Each image contains **16 spectral bands** covering the visible wavelength spectrum from **465 nm to 630 nm**. The paper also states that "Each band image is constituted of approximately $512 \times 272$ pixels".
+* **Annotation:** All 330 images are **histopathologically validated**, meaning the diagnosis for each image was confirmed by pathologists after a biopsy.
+* **Class Distribution:** 
+  * Melanoma: 85 images.
+  * Dysplastic Nevus: 175 images.
+  * Other Lesions: 70 images.
+* The "Other" category includes solar lentigo, IEC, nevi, and Seborrheic Keratosis.
+  
+### Data Preprocessing
+#### Semi-Automatic Segmentation of Skin Lesions
+* The primary goal of this step is to isolate skin lesions from the surrounding healthy skin in the hyperspectral images. This isolation is crucial for training the generative models, as it allows them to focus on learning the characteristics of the lesions without being influenced by irrelevant background information.
+* Initially, to facilitate the creation of segmentation masks, each 16-channel hyperspectral image is converted into a false RGB PNG image. This is achieved by calculating the average value across all 16 channels and repeating this average three times to create a grayscale-like RGB image. These false RGB images are exclusively used for the segmentation step.
+* We utilize Label Studio in conjunction with the Segment Anything Model 2 (SAM2) for semi-automatic annotation.
+* For every false RGB image, a segmentation mask is created for each skin lesion present. SAM2 assists in efficiently outlining the lesions, and human annotators refine these masks to ensure accuracy. Each distinct lesion within an image receives its own individual mask. This segmentation process is applied to all 330 images in the dataset.
+
+#### Cropped Hyperspectral Image Generation
+* After the segmentation masks are generated, we return to the original 16-channel hyperspectral images (not the false RGB versions).
+* For every segmented skin lesion mask within an image, we generate a corresponding cropped hyperspectral image, obtained from the bounding box of the segmentation mask.
+* To capture relevant neighboring skin information crucial for classification, the bounding box is scaled by a 50% margin. This ensures that the cropped image includes not just the lesion but also a surrounding area of skin.
+
 ### Evaluating synthesis results
 We would like for the generated images to be: clear, realistic and useful. 
 - Image Clarity/Quality : Peak Signal-to-Noise Ratio (PSNR)
@@ -135,39 +160,13 @@ where $x$ and $y$ are spectral vectors of a pixel in the reference and generated
 | **SAM** | Spectral | [0°, ∞°) | ↓ | Spectral shape similarity |
 ---
 
-### Dataset Description
-| Dataset | Web Address | Descriptive Summary |
-| :--- | :--- | :--- |
-| A Hyperspectral Dermoscopy Dataset | https://github.com/heugyy/HSIDermoscopy | A dataset of 330 hyperspectral dermoscopy images for melanoma detection. Each image has 16 spectral bands (465 nm to 630 nm) and includes histopathologically validated cases of melanoma, dysplastic nevus, and other lesion types. |
-* **Size:** The dataset contains a total of **330 hyperspectral images**.
-* **Format:** Each raw image is converted into a **$256 \times 512 \times 16$ data cube**. Each image contains **16 spectral bands** covering the visible wavelength spectrum from **465 nm to 630 nm**. The paper also states that "Each band image is constituted of approximately $512 \times 272$ pixels".
-* **Annotation:** All 330 images are **histopathologically validated**, meaning the diagnosis for each image was confirmed by pathologists after a biopsy.
-* **Class Distribution:** 
-  * Melanoma: 85 images.
-  * Dysplastic Nevus: 175 images.
-  * Other Lesions: 70 images.
-* The "Other" category includes solar lentigo, IEC, nevi, and Seborrheic Keratosis.
-
 ## Experiments, Results, and Discussion of Results
-In this work, rather than 
-
-### Data Preprocessing
-#### Semi-Automatic Segmentation of Skin Lesions
-* The primary goal of this step is to isolate skin lesions from the surrounding healthy skin in the hyperspectral images. This isolation is crucial for training the generative models, as it allows them to focus on learning the characteristics of the lesions without being influenced by irrelevant background information.
-* Initially, to facilitate the creation of segmentation masks, each 16-channel hyperspectral image is converted into a false RGB PNG image. This is achieved by calculating the average value across all 16 channels and repeating this average three times to create a grayscale-like RGB image. These false RGB images are exclusively used for the segmentation step.
-* We utilize Label Studio in conjunction with the Segment Anything Model 2 (SAM2) for semi-automatic annotation.
-* For every false RGB image, a segmentation mask is created for each skin lesion present. SAM2 assists in efficiently outlining the lesions, and human annotators refine these masks to ensure accuracy. Each distinct lesion within an image receives its own individual mask. This segmentation process is applied to all 330 images in the dataset.
-
-#### Cropped Hyperspectral Image Generation
-* After the segmentation masks are generated, we return to the original 16-channel hyperspectral images (not the false RGB versions).
-* For every segmented skin lesion mask within an image, we generate a corresponding cropped hyperspectral image, obtained from the bounding box of the segmentation mask.
-* To capture relevant neighboring skin information crucial for classification, the bounding box is scaled by a 50% margin. This ensures that the cropped image includes not just the lesion but also a surrounding area of skin.
+In this work, we hope to provide a more general evaluation of how synthetic images influence classification, and to do so we are going to answer not only the primary hypothesis but also the secondary research questions. In the first part of this session we discuss the experimental details to generate the synthetic images and in the second part of this session we discuss the main and secondary research questions this work aims to answer
 
 #### Data Augmentations During Training
 During the model training phase, the cropped hyperspectral images undergo a series of augmentations using the `albumentations` library. These augmentations are vital for addressing data scarcity and improving the model's generalization capabilities.
 
 The applied augmentations include:
-
 * **ShiftScaleRotate:** Randomly shifts, scales, and rotates the image.
 * **RandomCrop:** Takes a random crop from the image.
 * **VerticalFlip:** Flips the image vertically.
@@ -180,23 +179,6 @@ After the augmentations are applied, the images undergo a final transformation t
 
 Additionally, each channel of the hyperspectral images is normalized using min-max normalization based on pre-calculated global minimum and maximum values for each channel across the entire dataset. This normalization ensures that the pixel values for each channel are scaled to a consistent range, typically between 0 and 1, which is crucial for stable and efficient training of the neural network models.
 
-### Classifier Training
-The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Thirteen experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
-
-1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8136)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.2532**, showing that the model performed best when trained without balancing.
-2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7796**, with an **accuracy of 0.675** and **Spec@Sens of 0.243**, indicating that reweighting did not generalize well to minority melanoma cases.
-3. Applied **Batch Regularization**, reaching an F1-score of **0.8125**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
-4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7451**, **accuracy of 0.675**, and **Spec@Sens of 0.227**. The combined method recovered some performance but still lagged behind the baseline.
-
-| Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
-|:--|:--:|:--:|:--:|:--:|:--:|:--|
-| 1 | DenseNet201 | None | **0.8136** | **0.725** | 0.2532 | Baseline; best overall F1 and performance |
-| 2 | DenseNet201 | Focal Loss | 0.7796 | 0.675 | 0.2431 | Reweighting reduced sensitivity balance |
-| 3 | DenseNet201 | Batch Regularization | 0.8125 | 0.70 | 0.26 | Stable but lower overall F1 |
-| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7451 | 0.675 | 0.227 | Slight recovery, still below baseline |
-
-The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques. These findings indicate that synthetic data generation is a more promising path forward. The next experimental stage investigates whether GAN- or VAE-based synthetic hyperspectral images can enrich the training set and outperform conventional balancing strategies, particularly for minority melanoma detection.
-
 ### Generative Model Training
 
 #### SHS GAN
@@ -207,9 +189,7 @@ The Discriminator mirrors this structure using standard convolutional layers for
 Next, we progressively introduced the main components of SHS-GAN and evaluated their impact on image synthesis, adapting each modification to our context. In the first experiment, we replaced the 2D convolutional filters in the discriminator with 3D convolutions. Since hyperspectral data includes an additional spectral dimension, convolving in three dimensions allows the network to capture spectral correlations that 2D convolutions cannot. In the second experiment, we replaced **Batch Normalization** with **Spectral Normalization**, a regularization method that stabilizes GAN training. It constrains the spectral norm (the largest singular value of each layer’s weight matrix) to 1, thereby controlling the Lipschitz constant of the network and improving stability.In the third experiment, we added a spectral-frequency arm, which processes the same hyperspectral cube after applying a Fast Fourier Transform (FFT) along the spectral dimension. The resulting spectral-frequency representation is then combined with the spatial arm (which contains standard convolutions), as proposed in the reference model.During training, we observed that the model was highly sensitive to hyperparameters, and only a narrow set of configurations produced realistic results. Some combinations generated pure noise, while others yielded better synthetic images.  
 The batch size had a strong influence: given our dataset of approximately 70 melanoma images, small batch sizes (1, 2, or 4) produced plausible results, while larger batch sizes (≥16) led to unstable outputs and noise.
 
-The training followed the WGAN formulation, using two key hyperparameters: `gradient_penalty` and `n_critic`.  
-The gradient penalty enforces the Lipschitz continuity constraint on the discriminator, preventing it from developing excessively steep gradients. This results in smoother and more realistic training dynamics, reducing mode collapse and improving convergence.  
-The `n_critic` parameter defines how many times the critic is updated per generator update—commonly greater than one—to ensure the critic accurately estimates the Wasserstein distance before each generator step.  
+The training followed the WGAN formulation, using two key hyperparameters: `gradient_penalty` and `n_critic`.  The gradient penalty enforces the Lipschitz continuity constraint on the discriminator, preventing it from developing excessively steep gradients. This results in smoother and more realistic training dynamics, reducing mode collapse and improving convergence. The `n_critic` parameter defines how many times the critic is updated per generator update—commonly greater than one—to ensure the critic accurately estimates the Wasserstein distance before each generator step.  
 In our setup, we used a gradient penalty of 10 and n_critic = 2. Another crucial hyperparameter was the learning rate, set to approximately **1×10⁻⁵**.  
 Higher learning rates destabilized training, causing the generated images to fluctuate drastically across epochs, while extremely low rates resulted in persistent noise even after many epochs. Overall, our experiments indicate that incorporating 3D convolutional layers in the discriminator improves the synthesis of spectral characteristics, as shown in the comparison below. The spectral profiles generated using 3D convolutions are more consistent with the real data than those obtained with 2D convolutions.
 
@@ -249,6 +229,23 @@ Overall, the experiment demonstrates that FastGAN is a viable architecture for h
 Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 64. Loss function was set to have a term with a KL-divergence regularizer weighted by kld_weight = 1×10⁻², encouraging smooth, semantically meaningful latents while preserving spectral fidelity. Overall the results look like melanoma images but lack the details present in a realistic hyperspectral image. Spectral similarity was also achieved. 
 ![vaeimages](images/vae-results.png)
 ![vae_spectra](images/vae_spectra.png)
+
+### Classifier Training
+The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Thirteen experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
+
+1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8136)**, along with an **accuracy of 0.725** and **specificity at sensitivity (Spec@Sens)** of **0.2532**, showing that the model performed best when trained without balancing.
+2. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.7796**, with an **accuracy of 0.675** and **Spec@Sens of 0.243**, indicating that reweighting did not generalize well to minority melanoma cases.
+3. Applied **Batch Regularization**, reaching an F1-score of **0.8125**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
+4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7451**, **accuracy of 0.675**, and **Spec@Sens of 0.227**. The combined method recovered some performance but still lagged behind the baseline.
+
+| Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
+|:--|:--:|:--:|:--:|:--:|:--:|:--|
+| 1 | DenseNet201 | None | **0.8136** | **0.725** | 0.2532 | Baseline; best overall F1 and performance |
+| 2 | DenseNet201 | Focal Loss | 0.7796 | 0.675 | 0.2431 | Reweighting reduced sensitivity balance |
+| 3 | DenseNet201 | Batch Regularization | 0.8125 | 0.70 | 0.26 | Stable but lower overall F1 |
+| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7451 | 0.675 | 0.227 | Slight recovery, still below baseline |
+
+The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques. These findings indicate that synthetic data generation is a more promising path forward. The next experimental stage investigates whether GAN- or VAE-based synthetic hyperspectral images can enrich the training set and outperform conventional balancing strategies, particularly for minority melanoma detection.
 
 ### Classifier Training with Synthetic Data
 The objective of this experiment was to verify whether training a hyperspectral dermoscopy skin lesion classifier with additional synthetic melanoma data, generated using the FastGAN architecture, could improve performance in distinguishing melanoma from dysplastic nevi. The classifier was trained on the cropped hyperspectral images, the only difference between the two experiments being that the second training included synthetic melanoma samples to balance the dataset, ensuring that the number of melanoma and dysplastic nevi instances was equal.  
