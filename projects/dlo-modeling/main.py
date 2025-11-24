@@ -22,7 +22,7 @@ try:
     from src.data.rope_dataset import RopeDataset, RopeSequenceDataset 
     
     from src.utils import (
-        set_seed, plot_model_comparison, load_and_split_data, 
+        set_seed, plot_model_comparison, load_and_split_data, cleanup_memory
     )
 except ImportError as e:
     print(f"Error: Could not import necessary modules.")
@@ -71,15 +71,6 @@ def get_model_class_and_params(model_name, seq_len, use_dense, act_dim):
         return RopeTransformer, params
     
     return None, None
-
-def cleanup_memory(model=None):
-    """Forces memory release."""
-    if model is not None:
-        del model
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    print("  > Memory Cleaned.")
 
 def main():
     set_seed(SEED)
