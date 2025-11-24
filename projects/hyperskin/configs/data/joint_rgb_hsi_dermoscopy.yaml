@@ -35,8 +35,8 @@ data:
       infinite_train: True
       normalize_mask_tanh: True
       allowed_labels: [
-        # "melanoma", 
-        "dysplastic_nevi"
+        "melanoma", 
+        # "dysplastic_nevi"
       ]
 
       transforms:
@@ -85,8 +85,8 @@ data:
       # data_dir: data/isic2019_cropped_256
       data_dir: data/milk10k_melanoma_nevus_cropped_256
       allowed_labels: [
-        # "melanoma", 
-        "melanocytic_nevus"
+        "melanoma", 
+        # "melanocytic_nevus"
       ]
       # global_max: [255, 255, 255]
       # global_min: [0, 0, 0]

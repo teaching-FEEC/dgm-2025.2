@@ -89,6 +89,9 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
         aux_num_classes: Optional[int] = None,
         aux_loss_weight_d: float = 1.0,
         aux_loss_weight_g: float = 1.0,
+        
+        lambda_sam: float = 0.0,
+        lambda_spec_tv: float = 0.0,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -264,12 +267,12 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
 
         cycle_loss_A = F.l1_loss(rec_A, real_A)
         cycle_loss_B = F.l1_loss(rec_B, real_B)
-        cycle_loss = cycle_loss_A + cycle_loss_B
+        cycle_loss = (cycle_loss_A + cycle_loss_B) * self.hparams.lambda_cycle
 
         if self.hparams.lambda_perceptual > 0:
             cycle_loss_percept_A = self.percept_A(rec_A, real_A).sum()
             cycle_loss_percept_B = self.percept_B(rec_B, real_B).sum()
-            cycle_loss_percept = cycle_loss_percept_A + cycle_loss_percept_B
+            cycle_loss_percept = (cycle_loss_percept_A + cycle_loss_percept_B) * self.hparams.lambda_perceptual
         else:
             cycle_loss_percept_A = torch.tensor(0.0, device=self.device)
             cycle_loss_percept_B = torch.tensor(0.0, device=self.device)
@@ -293,13 +296,33 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
 
         aux_g_loss = aux_g_loss_A + aux_g_loss_B
         aux_g_loss = self.hparams.aux_loss_weight_g * aux_g_loss
-
+        
+        # SAM Cycle Loss (Consistency for HSI)
+        # Cosine similarity between reconstructed HSI and Real HSI
+        if self.hparams.lambda_sam > 0:
+            dot = (rec_B * real_B).sum(dim=1)
+            norm = torch.norm(rec_B, dim=1) * torch.norm(real_B, dim=1)
+            sam_loss = torch.acos(torch.clamp(dot / (norm + 1e-8), -1, 1)).mean()
+            sam_loss = sam_loss * self.hparams.lambda_sam
+        else:
+            sam_loss = torch.tensor(0.0, device=self.device)
+        
+        # Spectral TV Loss (Smoothness for generated HSI)
+        # Penalize jagged jumps between bands in fake_B
+        if self.hparams.lambda_spec_tv > 0:
+            spec_tv = torch.abs(fake_B[:, :-1, :, :] - fake_B[:, 1:, :, :]).mean()
+            spec_tv = spec_tv * self.hparams.lambda_spec_tv
+        else:
+            spec_tv = torch.tensor(0.0, device=self.device)
+        
         # ------------------ (4) Total generator loss ------------------
         g_loss = (
             adv_loss
-            + self.hparams.lambda_cycle * cycle_loss
-            + self.hparams.lambda_perceptual * cycle_loss_percept
+            + cycle_loss
+            + cycle_loss_percept
             + aux_g_loss
+            + sam_loss
+            + spec_tv
         )
 
         return {
@@ -316,6 +339,8 @@ class CycleGANModule(BasePredictorMixin, pl.LightningModule):
             "aux_g_loss_B": aux_g_loss_B,
             "aux_g_loss": aux_g_loss,
             "g_loss": g_loss,
+            "sam_loss": sam_loss,
+            "spec_tv": spec_tv,
         }
 
     def get_current_noise_std(self) -> float:

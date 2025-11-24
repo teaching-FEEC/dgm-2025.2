@@ -1,5 +1,5 @@
-#from typing import Any, Self
-from git import Optional
+# from typing import Any, Self
+from typing import Optional, List, Union
 import numpy as np
 import torch
 import torch.optim as optim
@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from src.data_modules.joint_rgb_hsi_dermoscopy import JointRGBHSIDataModule
 from src.losses.lpips import PerceptualLoss
+from src.losses.spectral import SpectralConsistencyLoss
 from src.metrics.inception import InceptionV3Wrapper
 from src.models.fastgan.fastgan import Generator, weights_init
 from src.models.timm import TIMMModel
@@ -47,7 +48,7 @@ from src.utils.utils import _iterate_val_loaders
 warnings.filterwarnings("ignore")
 
 
-policy = "color,translation"
+policy = "translation"
 
 
 def crop_image_by_part(image, part):
@@ -93,8 +94,8 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         num_val_batches: int = 8,
         pred_output_dir: str = "generated_samples",
         pred_hyperspectral: bool = True,
-        pred_global_min: Optional[float | list[float]] = None,
-        pred_global_max: Optional[float | list[float]] = None,
+        pred_global_min: Optional[Union[float, List[float]]] = None,
+        pred_global_max: Optional[Union[float, List[float]]] = None,
         # SPADE configuration
         use_spade: bool = False,
         spade_conditioning: str = "rgb_mask",
@@ -109,6 +110,11 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         barlow_twins_weight: float = 0.005,
         barlow_twins_lambd: float = 0.0051,
         barlow_twins_projector_dim: int = 2048,
+        # NEW: Spectral Consistency Configuration
+        use_spectral_consistency: bool = False,
+        sam_weight: float = 10.0,  # SAM is usually small (radians), might need boosting
+        grad_weight: float = 10.0,
+        grad_loss_type: str = "logcosh",
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -150,6 +156,16 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         if self.hparams.use_spade:
             self.fixed_conditioning = None
+            
+        # --- Spectral Loss Setup ---
+        if self.hparams.use_spectral_consistency:
+            self.spectral_loss_fn = SpectralConsistencyLoss(
+                sam_weight=self.hparams.sam_weight,
+                grad_weight=self.hparams.grad_weight,
+                grad_loss_type=self.hparams.grad_loss_type,
+            )
+        else:
+            self.spectral_loss_fn = None
 
         # --- Barlow Twins Setup ---
         if self.hparams.use_barlow_twins:
@@ -235,10 +251,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
     def compute_barlow_twins_loss(self, features1, features2):
         """
         Compute Barlow Twins loss between two sets of features
-        
-        Args:
-            features1: Features from first augmented view
-            features2: Features from second augmented view
         """
         # Project features
         features1 = F.adaptive_avg_pool2d(features1, 1).view(features1.size(0), -1)
@@ -270,6 +282,10 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         else:
             run_name = "fastgan_"
             tags.append("fastgan")
+        
+        if hparams.use_spectral_consistency:
+            tags.append("spec_loss")
+            run_name += "spec_"
 
         # Core configuration flags
         tags.append(f"imsize_{hparams.im_size}")
@@ -325,16 +341,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         self.freeze_d(self.hparams.freeze_d)
 
     def freeze_d(self, n_layers: int) -> None:
-        """
-        Freeze the first `n_layers` hierarchical components in the Discriminator.
-        Layer order is defined as:
-          [down_from_big, down_4, se_2_16, down_8, se_4_32, down_16,
-           down_32, se_8_64, down_64]
-
-        Args:
-            n_layers (int): Number of discriminator submodules to freeze, in order.
-        """
-        # Define ordered list of submodules in forward order
         layer_order = [
             ("down_from_big", self.netD.down_from_big),
             ("down_4", self.netD.down_4),
@@ -357,7 +363,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                     p.requires_grad = False
                 frozen_layers.append(name)
             else:
-                # Ensure later layers are still trainable
                 for p in layer.parameters():
                     p.requires_grad = True
 
@@ -366,7 +371,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         else:
             print(f"[FastGAN] Frozen discriminator layers: {frozen_layers}")
 
-    # Add this as a new method inside the FastGANModule class
     def get_current_noise_std(self) -> float:
         """Compute linearly decayed noise_std based on training progress."""
         start = getattr(self.hparams, "noise_std_start", 0.0)
@@ -379,12 +383,9 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         if start == end or decay_steps <= 0:
             return start
 
-        # Compute proportion of training completed
-        # Use global_step // 2 to get the number of training iterations
         step = float(self.global_step // 2)
         progress = min(step / decay_steps, 1.0)
 
-        # Linear decay schedule: interpolate between start and end
         return start + (end - start) * progress
 
     def get_current_topk_fraction(self) -> float:
@@ -399,19 +400,13 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         if decay_steps <= 0:
             return end
 
-        # proportion of training progress (using global_step // 2 like noise std)
         step = float(self.global_step // 2)
         progress = min(step / decay_steps, 1.0)
 
-        # linear interpolation
         return start + (end - start) * progress
 
     def extract_discriminator_features(self, images, seg=None):
         """Extract intermediate features from discriminator for Barlow Twins"""
-        # We'll extract features from the discriminator forward pass
-        # For this, we need to modify the discriminator call slightly
-        
-        # Process original size image through discriminator layers
         feat_2 = self.netD.down_from_big(images)
         feat_4 = self.netD.down_4(feat_2)
         feat_8 = self.netD.down_8(feat_4)
@@ -487,7 +482,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 raise ValueError(f"Invalid spade_conditioning: {self.hparams.spade_conditioning}")
         return seg
 
-    # Update the training_step method to include adversarial loss:
     def training_step(self, batch, batch_idx):
         real_image = self.get_real_image(batch)
         seg = self.get_conditioning(batch)
@@ -499,6 +493,12 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         fake_images = self(noise, seg)
         fake_images = [fi.float() for fi in fake_images]
+        
+        # Important: keep a reference to clean images for Spectral Loss calculation
+        # DiffAugment (Color jitter) corrupts spectral integrity
+        clean_real = real_image.clone()
+        clean_fake = fake_images[0].clone() # Usually the highest resolution output
+
         real_image = DiffAugment(real_image, policy=policy)
         fake_images_aug = [DiffAugment(fake, policy=policy) for fake in fake_images]
 
@@ -528,15 +528,12 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
         # Barlow Twins loss on real data
         barlow_loss = torch.tensor(0.0, device=self.device)
         if self.hparams.use_barlow_twins:
-            # Create two augmented views of the real image
             real_view1 = self.apply_augmentation(real_image)
             real_view2 = self.apply_augmentation(real_image)
             
-            # Extract features from both views
             features1 = self.extract_discriminator_features(real_view1, seg_aug)
             features2 = self.extract_discriminator_features(real_view2, seg_aug)
             
-            # Compute Barlow Twins loss
             barlow_loss = self.compute_barlow_twins_loss(features1, features2)
             barlow_loss = barlow_loss * self.hparams.barlow_twins_weight
         
@@ -570,6 +567,15 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
             self.log("train/topk_k", float(k), on_step=True, on_epoch=False)
         else:
             err_g = -pred_g.mean()
+
+        # --- NEW: Spectral Consistency Loss ---
+        if self.hparams.use_spectral_consistency and self.spectral_loss_fn is not None:
+            # Calculated on CLEAN images (pre-augmentation)
+            # Note: In SPADE, we assume paired structure via mask. 
+            # In standard GAN, this acts as a batch-statistic matching regularizer.
+            spec_loss = self.spectral_loss_fn(clean_fake, clean_real)
+            err_g = err_g + spec_loss
+            self.log("train/spec_loss", spec_loss, on_step=True, on_epoch=False)
 
         # Adversarial Classifier Loss
         if self.classifier is not None:
@@ -623,7 +629,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
             # Generate with fixed conditioning
             fixed_seg = self.fixed_conditioning if self.hparams.use_spade else None
-            # limit self.fixed_noise to match fixed_seg size
             fixed_noise = self.fixed_noise[: min(8, fixed_seg.size(0))] if self.hparams.use_spade else self.fixed_noise
             sample = self(fixed_noise, fixed_seg)[0].add(1).mul(0.5)
 
@@ -632,23 +637,16 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 sample = sample.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
             sample = sample.clamp(0, 1)
 
-            # --- NEW: also visualize the conditioning input ---
             if fixed_seg is not None:
-                # Denormalize SPADE conditioning (assumed same [-1,1] normalization)
                 cond_vis = fixed_seg.add(1).mul(0.5).clamp(0, 1)
-
-                # If conditioning is grayscale (e.g., mask), expand to RGB for better viewing
                 if cond_vis.size(1) == 1:
                     cond_vis = cond_vis.repeat(1, 3, 1, 1)
                 cond_vis = cond_vis.clamp(0, 1)
-
-                # Concatenate conditioning + generated horizontally
                 vis_combined = torch.cat([cond_vis, sample], dim=0)
             else:
                 vis_combined = sample
 
-            sample_grid = torchvision.utils.make_grid(vis_combined, nrow=4
-                                                      ).detach().cpu()
+            sample_grid = torchvision.utils.make_grid(vis_combined, nrow=4).detach().cpu()
 
             if hasattr(self.logger, "experiment") and self.logger.experiment is not None:
                 self.logger.experiment.log({"generated_samples": wandb.Image(sample_grid)})
@@ -697,13 +695,15 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
                 fake_images = self(noise, seg)
                 fake = fake_images[0].float()
 
+                # FID uses InceptionV3, which expects images in [-1, 1]
+                self.fid.update(fake, real=False)
+                self.fid.update(real_image, real=True)
+
                 fake_norm = (fake + 1) / 2
                 real_norm = (real_image + 1) / 2
                 fake_norm = fake_norm.clamp(0, 1)
                 real_norm = real_norm.clamp(0, 1)
 
-                self.fid.update(fake, real=False)
-                self.fid.update(real_image, real=True)
 
                 eps = 1e-8
                 fake_norm_clamped = fake_norm.clamp(eps, 1.0)
@@ -797,27 +797,6 @@ class FastGANModule(BasePredictorMixin, pl.LightningModule):
 
         load_params(self.netG, backup_para)
         self.netG.train()
-
-    # def configure_optimizers(self):
-    #     # Generator parameters
-    #     opt_g = optim.Adam(
-    #         self.netG.parameters(), 
-    #         lr=self.hparams.nlr_G, 
-    #         betas=(self.hparams.nbeta1, self.hparams.nbeta2)
-    #     )
-        
-    #     # Discriminator parameters (include Barlow projector if enabled)
-    #     d_params = list(self.netD.parameters())
-    #     if self.hparams.use_barlow_twins:
-    #         d_params += list(self.barlow_projector.parameters())
-        
-    #     opt_d = optim.Adam(
-    #         d_params,
-    #         lr=self.hparams.nlr_D, 
-    #         betas=(self.hparams.nbeta1, self.hparams.nbeta2)
-    #     )
-        
-    #     return [opt_g, opt_d]
     
     def configure_optimizers(self):
         # Generator parameters
@@ -864,4 +843,4 @@ if __name__ == "__main__":
         use_spade=True,
         spade_conditioning="rgb_image",
     )
-    model.load_from_checkpoint
+    # model.load_from_checkpoint

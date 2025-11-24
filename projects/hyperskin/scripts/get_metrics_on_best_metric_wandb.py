@@ -180,7 +180,7 @@ def main():
 
         discovered_metrics.update(val_metrics.keys())
 
-        row = {"run_id": run_id, "best_step": step}
+        row = {"run_id": run_id, "best_step": step, "run_name": run.name}
         row.update(val_metrics)
         results.append(row)
 
@@ -206,7 +206,7 @@ def main():
             df[key] = float("nan")
 
     if args.include_meta:
-        ordered_columns = ["run_id", "best_step"] + final_columns
+        ordered_columns = ["run_id", "run_name", "best_step"] + final_columns
     else:
         ordered_columns = final_columns
 
