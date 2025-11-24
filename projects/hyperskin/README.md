@@ -230,7 +230,7 @@ Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input co
 
 ### Is synthetic data truly necessary to improve classification performance, or can conventional data augmentation methods achieve similar gains?
 
-The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
+The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Experiments were performed in total using the **DenseNet201** architecture trained from scratch and synthetic images were obtained through FastGAN architecture. These experiments compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
 
 The baseline model performed well, achieving 0.8852 F1 and 0.6429 specificity, and it remained the best result among all experiments that used only real data.
 Real-data augmentations and balancing strategies did not outperform the baseline. Batch Regularization and Focal Loss reduced either F1-score or specificity, and their combination produced the weakest results. Even extensive augmentations such as rotation, equalization, normalization, and flipping reached only 0.8667 F1, slightly below the baseline.
@@ -251,6 +251,8 @@ The best performance came from using synthetic images. Training with synthetic h
 
 
 The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques.
+
+However, these results are not fully generalizable. When evaluated on the test dataset, all models showed lower F1-scores. Although the synthetic-data model (Test F1 = 0.75) performed better than the baseline without augmentation (Test F1 = 0.73), it was still surpassed by the focal loss model (Test F1 = 0.78). These differences highlight a substantial mismatch between the validation and test distributions, indicating that additional testing is needed to assess if using synthetic data outperforms traditional data-agumentation in real-world conditions. 
 
 ### Does the inclusion of synthetic samples enhance the performance of a classifier trained from scratch when only a small amount of real data is available?
 
