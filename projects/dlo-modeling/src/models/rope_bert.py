@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from .positional_encoding import PositionalEncoding # FIXED: Relative import
-from .base_model import BaseRopeModel # FIXED: Relative import
+from .positional_encoding import PositionalEncoding
+from .base_model import BaseRopeModel 
 
 
 class RopeBERT(BaseRopeModel):

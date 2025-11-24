@@ -1,16 +1,16 @@
 import numpy as np
 import torch
 import os
-from torch.utils.data import TensorDataset
+import sys
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 from IPython.display import HTML
 import random
-# This import needs to point to where base_model.py is.
-# Assuming it is in 'models/' directory.
 from models.base_model import BaseRopeModel
-
+from models.dreamer_model import DreamerRopeModel
+from src.data.rope_dataset import RopeSequenceDataset
 def center_data(*tensors):
     """
     Subtracts the center of mass (mean over seq_len) from each sample.
@@ -56,27 +56,49 @@ def normalize_data(src_train, tgt_train, src_val, tgt_val, src_test, tgt_test):
         train_mean, train_std
     )
 
-def load_data_from_npz(seed=42):
+
+def load_and_split_data(
+    data_path,
+    seed=42, 
+    create_demo_set=False, 
+    demo_size=100,
+    train_ratio=0.8,
+    val_ratio=0.1,
+):
     """
-    Loads and splits data from an NPZ file into raw numpy arrays.
-    Normalization is no longer done here.
-    The test set is NOT shuffled, to allow for rollouts.
+    Loads data from NPZ, detects dimensions, and splits into Train/Val/Test.
+    Conditionally creates and returns a sequential Demo set.
+
+    Args:
+        seed (int): Random seed for reproducibility.
+        create_demo_set (bool): If True, reserves the last N items for a demo set and returns it.
+        demo_size (int): Number of items to reserve for the demo set.
+        train_ratio (float): Proportion of non-demo data used for training.
+        val_ratio (float): Proportion of non-demo data used for validation.
+
+    Returns:
+        If create_demo_set is True:
+            (train_set, val_set, test_set, demo_set, USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
+        
+        If create_demo_set is False:
+            (train_set, val_set, test_set, USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
+            
+        *Each set is a tuple: (src_data, act_data, tgt_data)
     """
     print("Loading data from NPZ...")
     
-    # === Path as requested ===
-    data_path = 'src/data/rope_state_action_next_state_mil.npz'
+    # === Path Definition ===
     
     if not os.path.exists(data_path):
         print(f"Error: Data file not found at {data_path}")
-        print("Please check that the file exists in the 'src/data' folder.")
+        print(f"Please check that the file exists in the '{''.join(data_path.split('/')[:-1])}' folder.")
         sys.exit(1)
         
-    data = np.load(data_path)
+    data = np.load(data_path, allow_pickle=True)
     
-    # Keys as per your description
-    states_key = 'states'         
-    actions_key = 'actions'       
+    # === Key Extraction ===
+    states_key = 'states'          
+    actions_key = 'actions'        
     next_states_key = 'next_states' 
 
     try:
@@ -88,7 +110,6 @@ def load_data_from_npz(seed=42):
         print(f"Available keys are: {list(data.keys())}")
         sys.exit(1)
 
-    # --- Auto-detect data properties ---
     if act_data.ndim == 3:
         print("Detected 3D sparse action data (N, L, D)")
         USE_DENSE_ACTION = False
@@ -100,41 +121,257 @@ def load_data_from_npz(seed=42):
     
     SEQ_LEN = src_data.shape[1] # (N, L, 3) -> L
     
-    # --- Split Data (Numpy) ---
     print("Splitting data...")
-    total_size = len(src_data)
     
-    # We split indices sequentially first
+    total_size = len(src_data)
     all_indices = np.arange(total_size)
     
-    train_size = int(total_size * 0.8)
-    val_size = int(total_size * 0.1)
-    
-    # Split indices sequentially
-    train_val_indices = all_indices[:train_size + val_size]
-    test_indices = all_indices[train_size + val_size:] # Kept in order
-    
-    # Shuffle only the train/val indices
-    np.random.seed(seed)
-    np.random.shuffle(train_val_indices)
-    
-    # Get final train and val indices
-    train_indices = train_val_indices[:train_size]
-    val_indices = train_val_indices[train_size:]
-    
-    # Split numpy arrays
-    src_train, act_train, tgt_train = src_data[train_indices], act_data[train_indices], tgt_data[train_indices]
-    src_val,   act_val,   tgt_val   = src_data[val_indices],   act_data[val_indices],   tgt_data[val_indices]
-    src_test,  act_test,  tgt_test  = src_data[test_indices],  act_data[test_indices],  tgt_data[test_indices]
+    # 1. Handle Demo Set (Sequential from the end)
+    if create_demo_set:
+        # Ensure we don't take more than we have
+        if demo_size >= total_size:
+             raise ValueError("Demo size cannot be larger than total dataset.")
+             
+        pool_indices = all_indices[:-demo_size]
+        demo_indices = all_indices[-demo_size:]
+        print(f"Reserving last {demo_size} samples for Sequential Demo set.")
+    else:
+        pool_indices = all_indices
+        # demo_indices is unused if create_demo_set is False
+        print("No Demo set reserved.")
 
-    print(f"Data split: {len(src_train)} train, {len(src_val)} val, {len(src_test)} test (Test set is sequential)")
+    np.random.seed(seed)
+    np.random.shuffle(pool_indices)
     
-    return (
-        src_train, act_train, tgt_train,
-        src_val,   act_val,   tgt_val,
-        src_test,  act_test,  tgt_test,
-        USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
-    )
+    pool_size = len(pool_indices)
+    n_train = int(pool_size * train_ratio)
+    n_val = int(pool_size * val_ratio)
+    
+    train_indices = pool_indices[:n_train]
+    val_indices = pool_indices[n_train : n_train + n_val]
+    test_indices = pool_indices[n_train + n_val:]
+    
+    def extract_set(indices):
+        return src_data[indices], act_data[indices], tgt_data[indices]
+
+    src_train, act_train, tgt_train = extract_set(train_indices)
+    src_val,   act_val,   tgt_val   = extract_set(val_indices)
+    src_test,  act_test,  tgt_test  = extract_set(test_indices)
+
+    print(f"Data split complete:")
+    print(f"  Train: {len(src_train)}")
+    print(f"  Val:   {len(src_val)}")
+    print(f"  Test:  {len(src_test)} (Randomly selected)")
+
+    if create_demo_set:
+        src_demo, act_demo, tgt_demo = extract_set(demo_indices)
+        print(f"  Demo:  {len(src_demo)} (Sequential)")
+        
+        return (
+            src_train, act_train, tgt_train,
+            src_val,   act_val,   tgt_val,
+            src_test,  act_test,  tgt_test,
+            src_demo,  act_demo,  tgt_demo,
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
+    else:
+        return (
+            src_train, act_train, tgt_train,
+            src_val,   act_val,   tgt_val,
+            src_test,  act_test,  tgt_test,
+            # Demo tuple omitted
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
+def load_and_split_data_interleaved(
+    data_path,
+    rollout_size=1000,   # Size of a full simulation episode
+    sequence_length=50,  # Size of atomic chunk to shuffle
+    seed=42, 
+    create_demo_set=False, 
+    demo_size=100,
+    train_ratio=0.8,
+    val_ratio=0.1
+):
+    """
+    Loads data from NPZ, creates a sequential Demo set (optional), and splits the 
+    remaining data by shuffling CHUNKS within rollouts.
+    
+    This ensures that even small datasets have representation in Train/Val/Test
+    across different phases of the simulation, while maintaining local temporal 
+    structure within the 'sequence_length'.
+
+    Args:
+        data_path (str): Path to the .npz file.
+        rollout_size (int): Total steps in one simulation rollout (e.g., 1000 or 10000).
+        sequence_length (int): The size of the chunk (T) used for shuffling.
+        seed (int): Random seed.
+        create_demo_set (bool): If True, reserves the last N items for a demo set.
+        demo_size (int): Number of items to reserve for the demo set.
+        train_ratio (float): Ratio of chunks for training.
+        val_ratio (float): Ratio of chunks for validation.
+
+    Returns:
+        (train_set, val_set, test_set, [demo_set], USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
+    """
+    print(f"Loading data from NPZ (Interleaved Split)...")
+    
+    # === 1. Path & Load ===
+    if not os.path.exists(data_path):
+        print(f"Error: Data file not found at {data_path}")
+        try:
+             parent = os.path.dirname(data_path)
+             print(f"Please check that the file exists in the '{parent}' folder.")
+        except:
+             pass
+        sys.exit(1)
+        
+    data = np.load(data_path, allow_pickle=True)
+    
+    # === 2. Key Extraction ===
+    states_key = 'states'          
+    actions_key = 'actions'        
+    next_states_key = 'next_states' 
+
+    try:
+        src_data = data[states_key]
+        act_data = data[actions_key]
+        tgt_data = data[next_states_key]
+    except KeyError as e:
+        print(f"Error: Key {e} not found in {data_path}.")
+        print(f"Available keys are: {list(data.keys())}")
+        sys.exit(1)
+
+    # === 3. Auto-detect Properties ===
+    if act_data.ndim == 3:
+        print("Detected 3D sparse action data (N, L, D)")
+        USE_DENSE_ACTION = False
+        ACTION_DIM = act_data.shape[2]
+    elif act_data.ndim == 2:
+        print("Detected 2D dense action data (N, D)")
+        USE_DENSE_ACTION = True
+        ACTION_DIM = act_data.shape[1]
+    
+    SEQ_LEN = src_data.shape[1] # (N, L, 3) -> L
+    
+    # === 4. Handle Demo Set ===
+    # We strip the demo set BEFORE performing the interleaved logic
+    # to ensure the rollout math (divisibility) applies to the training pool.
+    
+    total_samples = len(src_data)
+    
+    if create_demo_set:
+        if demo_size >= total_samples:
+             raise ValueError("Demo size cannot be larger than total dataset.")
+        
+        # Reserve last N samples
+        src_demo = src_data[-demo_size:]
+        act_demo = act_data[-demo_size:]
+        tgt_demo = tgt_data[-demo_size:]
+        
+        # Remaining data for split
+        src_pool = src_data[:-demo_size]
+        act_pool = act_data[:-demo_size]
+        tgt_pool = tgt_data[:-demo_size]
+        
+        print(f"Reserving last {demo_size} samples for Sequential Demo set.")
+    else:
+        src_pool = src_data
+        act_pool = act_data
+        tgt_pool = tgt_data
+        print("No Demo set reserved.")
+
+    # === 5. Interleaved Splitting Logic ===
+    print("Splitting data (Interleaved Chunks)...")
+    
+    pool_len = len(src_pool)
+    num_rollouts = pool_len // rollout_size
+    
+    if num_rollouts == 0:
+        print(f"Warning: Dataset size ({pool_len}) is smaller than rollout_size ({rollout_size}).")
+        print("Adjusting rollout_size to dataset size to prevent crash, but interleaving may be ineffective.")
+        rollout_size = pool_len
+        num_rollouts = 1
+
+    chunks_per_rollout = rollout_size // sequence_length
+    
+    # Calculate exact cutoff to ensure perfect reshaping
+    clean_cutoff = num_rollouts * chunks_per_rollout * sequence_length
+    
+    # Slice raw data to fit divisible dimensions
+    s_clean = src_pool[:clean_cutoff]
+    a_clean = act_pool[:clean_cutoff]
+    t_clean = tgt_pool[:clean_cutoff]
+
+    # --- Reshape into (Rollouts, Chunks, Time, Features) ---
+    # We use *shape[1:] to automatically handle remaining dimensions (e.g. L, 3) or (D,)
+    s_reshaped = s_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *s_clean.shape[1:])
+    a_reshaped = a_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *a_clean.shape[1:])
+    t_reshaped = t_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *t_clean.shape[1:])
+
+    # --- Generate Shuffle Indices ---
+    np.random.seed(seed)
+    chunk_idxs = np.arange(chunks_per_rollout)
+    np.random.shuffle(chunk_idxs)
+
+    # --- Split Indices ---
+    n_train = int(train_ratio * chunks_per_rollout)
+    n_val = int(val_ratio * chunks_per_rollout)
+    # Test gets the rest
+
+    train_idxs = chunk_idxs[:n_train]
+    val_idxs = chunk_idxs[n_train : n_train + n_val]
+    test_idxs = chunk_idxs[n_train + n_val:]
+
+    # --- Extract & Flatten ---
+    # Helper to select chunks and flatten back to (N, ...)
+    def get_split(indices, original_shape_suffix):
+        if len(indices) == 0:
+            return np.empty((0, *original_shape_suffix))
+        # Select: (Rollouts, Selected_Chunks, Time, ...)
+        subset = s_reshaped[:, indices] # Example usage, need to apply to s, a, t generically
+        # We need to flatten the first 3 dims: Rollouts * Selected_Chunks * Time
+        return subset.reshape(-1, *original_shape_suffix)
+
+    # We do this manually for s, a, t to avoid closure scope issues with variables
+    
+    # Train
+    src_train = s_reshaped[:, train_idxs].reshape(-1, *s_clean.shape[1:])
+    act_train = a_reshaped[:, train_idxs].reshape(-1, *a_clean.shape[1:])
+    tgt_train = t_reshaped[:, train_idxs].reshape(-1, *t_clean.shape[1:])
+    
+    # Val
+    src_val = s_reshaped[:, val_idxs].reshape(-1, *s_clean.shape[1:])
+    act_val = a_reshaped[:, val_idxs].reshape(-1, *a_clean.shape[1:])
+    tgt_val = t_reshaped[:, val_idxs].reshape(-1, *t_clean.shape[1:])
+    
+    # Test
+    src_test = s_reshaped[:, test_idxs].reshape(-1, *s_clean.shape[1:])
+    act_test = a_reshaped[:, test_idxs].reshape(-1, *a_clean.shape[1:])
+    tgt_test = t_reshaped[:, test_idxs].reshape(-1, *t_clean.shape[1:])
+
+    print(f"Interleaved Split Stats:")
+    print(f"  Rollouts used: {num_rollouts}")
+    print(f"  Chunks/Rollout: {chunks_per_rollout} (Seq Len: {sequence_length})")
+    print(f"  Train: {len(src_train)}")
+    print(f"  Val:   {len(src_val)}")
+    print(f"  Test:  {len(src_test)}")
+
+    if create_demo_set:
+        print(f"  Demo:  {len(src_demo)} (Sequential)")
+        return (
+            (src_train, act_train, tgt_train),
+            (src_val,   act_val,   tgt_val),
+            (src_test,  act_test,  tgt_test),
+            (src_demo,  act_demo,  tgt_demo),
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
+    else:
+        return (
+            (src_train, act_train, tgt_train),
+            (src_val,   act_val,   tgt_val),
+            (src_test,  act_test,  tgt_test),
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        )
 
 def plot_model_comparison(
     models_dict: dict[str, BaseRopeModel],
@@ -263,9 +500,245 @@ def plot_model_comparison(
             print(f"Error saving plot: {e}")
     plt.close(fig) # Close to save memory
 
-def split_data(rope_states, actions, train_ratio=0.8, val_ratio=0.1, shuffle = True ,seed=42):
-    # Unused legacy function
-    pass
+def plot_dreamer_prediction(
+    model: DreamerRopeModel,
+    dataset: RopeSequenceDataset,
+    device=None,
+    seq_index: int = 0,
+    time_step: int = 10,
+    denormalize: bool = True,
+):
+    """
+    Plot a single one-step-ahead 'dreamed' prediction vs. ground truth in 3D.
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model.eval()
+    model.to(device)
+
+    try:
+        states_seq, actions_seq = dataset[seq_index]
+    except Exception as e:
+        print(f"Error getting data from dataset at index {seq_index}: {e}")
+        return
+
+    if time_step >= len(states_seq) - 1:
+        print(f"Error: time_step {time_step} is out of bounds for sequence of length {len(states_seq)}. Clamping to max valid.")
+        time_step = len(states_seq) - 2
+    if time_step < 0:
+        time_step = 0
+
+    src = states_seq[time_step]         # S_t
+    tgt_next = states_seq[time_step + 1] # S_{t+1} (Ground Truth)
+    action = actions_seq[time_step]     # A_t (Action to take at step t)
+
+    # We need A_{t-1} for the observe step
+    action_minus_1 = actions_seq[time_step - 1] if time_step > 0 else torch.zeros_like(action)
+    with torch.no_grad():
+        # Get initial state (B=1)
+        h_0, c_0, z_0 = model.get_initial_hidden_state(1, device=device)
+
+        # ---
+        # --- FIX IS HERE: ---
+        # ---
+        # Squeeze the batched (1, D) initial states to unbatched (D,)
+        # to match the unbatched S_t and A_t_minus_1.
+        # The observe method will correctly re-batch all of them.
+        h_0 = h_0.squeeze(0)
+        c_0 = c_0.squeeze(0)
+        z_0 = z_0.squeeze(0)
+
+        # 5. Get the model's internal state by "observing" S_t
+        h_t, c_t, z_t, _, _ = model.observe(
+            src.to(device), action_minus_1.to(device), h_0, c_0, z_0
+        )
+
+        # 6. "Dream" one step forward from (h_t, z_t) using A_t
+        pred_next_b, _, _, _ = model.dream(h_t, c_t, z_t, action.to(device))
+
+    pred_next = pred_next_b.cpu().squeeze(0)
+    src = src.cpu()
+    tgt_next = tgt_next.cpu()
+
+    if denormalize:
+        if hasattr(dataset, 'mean') and hasattr(dataset, 'std'):
+            mean = dataset.mean.cpu().squeeze()
+            std = dataset.std.cpu().squeeze()
+            pred_next = pred_next * std + mean
+            tgt_next = tgt_next * std + mean
+            src = src * std + mean
+        else:
+            print("Warning: Could not denormalize. Dataset has no 'mean' or 'std' attribute.")
+
+    plt.close('all')
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.plot(src[:, 0], src[:, 1], src[:, 2], 'o-', color='green', label='Initial State (t)')
+    ax.plot(tgt_next[:, 0], tgt_next[:, 1], tgt_next[:, 2], 'o-', color='blue', label='Real State (t+1)')
+    ax.plot(pred_next[:, 0], pred_next[:, 1], pred_next[:, 2], 'x--', color='red', label='Predicted State (t+1)')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.legend()
+    ax.set_title(f"Dreamer One-Step Prediction (Seq {seq_index}, t={time_step})")
+    plt.tight_layout()
+    plt.show()
+
+# --- UPDATED: Animation Utility Function ---
+
+def animate_dreamer_rollout(
+    model: "DreamerRopeModel",
+    demo_dataset: "RopeSequenceDataset",
+    start_idx: int = 0,
+    steps: int = 48,
+    interval: int = 100,
+    teacher_forcing: bool = False,
+    train_mean: torch.Tensor = None,
+    train_std: torch.Tensor = None
+) -> HTML:
+    """
+    Generates an HTML animation of a Dreamer model rollout in 3D,
+    comparing predictions to ground truth.
+
+    Args:
+        model: The trained DreamerRopeModel.
+        demo_dataset: RopeSequenceDataset to pull data from.
+        start_idx: Which sequence in the dataset to use.
+        steps: How many steps to animate.
+        ...
+    """
+    model.eval()
+    device = next(model.parameters()).device
+
+    # Get the sequence data
+    # The dataset __getitem__ returns the sequence
+    states_seq, actions_seq = demo_dataset[start_idx]
+    states_seq = states_seq.to(device)
+    actions_seq = actions_seq.to(device)
+
+    # --- Data Generation ---
+    num_frames = min(steps + 1, len(states_seq))
+
+    with torch.no_grad():
+        if teacher_forcing:
+            # "Observe" every step and reconstruct.
+            # This shows how well the model can autoencode.
+            # We must ensure we only feed in the number of frames we will animate
+            recon_states, _, _ = model(
+                states_seq[:num_frames].unsqueeze(0),
+                actions_seq[:num_frames].unsqueeze(0)
+            )
+            predictions = recon_states.squeeze(0).cpu().numpy()
+
+        else:
+            # Autoregressive "Dream" rollout
+            predictions_list = []
+
+            # 1. Observe S_0 to get initial latent state
+            S_0 = states_seq[0]
+            A_minus_1 = torch.zeros(4, device=device)
+
+            # Get the initial (B=1) hidden states
+            h_0, c_0, z_0 = model.get_initial_hidden_state(1, device)
+
+            # Squeeze to 1D (D,) to match the flawed unbatching logic
+            # in the model's observe/dream methods.
+            h_t = h_0.squeeze(0)
+            c_t = c_0.squeeze(0)
+            z_t = z_0.squeeze(0)
+
+            # The observe method will internally re-batch these to (1, D)
+            # because S_0 is unbatched.
+            h_t, c_t, z_t, _, _ = model.observe(
+                S_0, A_minus_1, h_t, c_t, z_t
+            )
+
+            predictions_list.append(S_0.cpu().numpy()) # Add the ground truth start
+
+
+            # 2. Loop and dream
+            for i in range(num_frames - 1): # -1 because S_0 is already added
+                A_t = actions_seq[i]
+
+                # Dream one step
+                S_hat_tp1, h_tp1, c_tp1, z_tp1 = model.dream(h_t, c_t, z_t, A_t)
+
+                predictions_list.append(S_hat_tp1.cpu().numpy())
+
+                # Update latent state for next dream
+                h_t, c_t, z_t = h_tp1, c_tp1, z_tp1
+
+            predictions = np.array(predictions_list)
+
+    # Get ground truth for comparison
+    ground_truth = states_seq.cpu().numpy()
+
+    # --- Denormalization ---
+    # Use mean/std from the dataset object
+    if train_mean is None and train_std is None:
+        if hasattr(demo_dataset, 'mean') and hasattr(demo_dataset, 'std'):
+            mean_np = demo_dataset.mean.cpu().numpy().squeeze()
+            std_np = demo_dataset.std.cpu().numpy().squeeze()
+            predictions = predictions * std_np + mean_np
+            ground_truth = ground_truth * std_np + mean_np
+
+    # --- Animation ---
+    plt.close('all') # Close previous plots
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Find global bounds for all data to set axis limits
+    all_data = np.concatenate([predictions[:num_frames], ground_truth[:num_frames]], axis=0)
+    center = all_data.mean(axis=(0, 1))
+    # Handle potential NaNs if data is bad
+    if np.isnan(all_data).any():
+        print("Warning: NaN detected in animation data. Skipping.")
+        return HTML("Error: NaN in animation data.")
+    max_range = (np.nanmax(all_data, axis=(0, 1)) - np.nanmin(all_data, axis=(0, 1))).max() / 2.0 + 0.5
+    if max_range == 0 or np.isnan(max_range):
+        max_range = 1.0 # Default range if data is flat
+
+    ax.set_xlim(center[0] - max_range, center[0] + max_range)
+    ax.set_ylim(center[1] - max_range, center[1] + max_range)
+    ax.set_zlim(center[2] - max_range, center[2] + max_range)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    # Initialize lines
+    line_gt, = ax.plot([], [], [], 'o-', lw=2, label='Ground Truth')
+    line_pred, = ax.plot([], [], [], 'x-', lw=2, label='Prediction')
+    ax.legend()
+    title = ax.set_title(f'Frame 0 / {num_frames - 1}')
+
+    def update(frame):
+        # Ground Truth
+        data_gt = ground_truth[frame]
+        line_gt.set_data(data_gt[:, 0], data_gt[:, 1])
+        line_gt.set_3d_properties(data_gt[:, 2])
+
+        # Prediction
+        data_pred = predictions[frame]
+        line_pred.set_data(data_pred[:, 0], data_pred[:, 1])
+        line_pred.set_3d_properties(data_pred[:, 2])
+
+        title.set_text(f'Frame {frame} / {num_frames - 1} ({"Dreaming" if not teacher_forcing else "Reconstructing"})')
+        return line_gt, line_pred, title
+
+    ani = FuncAnimation(
+        fig,
+        update,
+        frames=num_frames,
+        interval=interval,
+        blit=False # Blit must be False for 3D plots
+    )
+
+    plt.close(fig) # Prevent static plot from showing
+    return HTML(ani.to_jshtml())
 
 def set_seed(seed: int = 42):
     random.seed(seed)
@@ -273,63 +746,3 @@ def set_seed(seed: int = 42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-def rope_loss(pred, tgt, src):
-    # Standard MSE on position + delta
-    mse_pos = torch.nn.functional.mse_loss(pred, tgt)
-    mse_delta = torch.nn.functional.mse_loss(pred - src, tgt - src)
-    return mse_pos + mse_delta
-
-# --- vvvv NEW WEIGHTED LOSS FUNCTION vvvv ---
-def weighted_rope_loss(pred, tgt, src, action):
-    """
-    Loss function that applies higher penalty to the link that was acted upon,
-    and decaying penalty for neighboring links.
-    
-    Args:
-        pred: (B, L, 3) Predicted state
-        tgt:  (B, L, 3) Target state
-        src:  (B, L, 3) Source state (used for delta loss)
-        action: (B, 4) or (B, L, 4)
-    """
-    B, L, _ = pred.shape
-    device = pred.device
-    
-    # 1. Identify the index of the acted link for each batch item
-    if action.dim() == 2: # Dense (B, 4) -> [dx, dy, dz, link_id]
-        link_indices = action[:, 3].long().clamp(0, L - 1)
-    else: # Sparse (B, L, 4)
-        link_indices = torch.argmax(action[:, :, 3], dim=1)
-        
-    # 2. Create a spatial weight mask (B, L)
-    # Create a range [0, 1, ..., L-1]
-    seq_indices = torch.arange(L, device=device).unsqueeze(0).expand(B, L) # (B, L)
-    link_indices_exp = link_indices.unsqueeze(1).expand(B, L) # (B, L)
-    
-    # Calculate distance from the acted link |i - center|
-    dist = torch.abs(seq_indices - link_indices_exp).float()
-    
-    # Create Gaussian-like weights
-    # Center (dist=0) gets weight 1.0, dist=5 gets e^-1 (~0.36), etc.
-    sigma = 5.0 
-    gaussian_weights = torch.exp(- (dist**2) / (2 * sigma**2))
-    
-    # Apply Base Weight + Gaussian Boost
-    # Base weight = 1.0 (standard physics)
-    # Boost = up to 5.0 extra weight at the center
-    # Total weight at center = 6.0, Total weight far away = 1.0
-    final_weights = 1.0 + (5.0 * gaussian_weights) # (B, L)
-    
-    # Expand weights to (B, L, 1) for broadcasting against (x,y,z)
-    final_weights = final_weights.unsqueeze(-1)
-    
-    # 3. Calculate Squared Errors
-    pos_error = (pred - tgt) ** 2
-    delta_error = ((pred - src) - (tgt - src)) ** 2
-    
-    # 4. Apply Weights
-    weighted_pos_error = pos_error * final_weights
-    weighted_delta_error = delta_error * final_weights
-    
-    # 5. Mean reduction
-    return weighted_pos_error.mean() + weighted_delta_error.mean()
