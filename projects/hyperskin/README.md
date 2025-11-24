@@ -230,24 +230,30 @@ Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input co
 
 ### Is synthetic data truly necessary to improve classification performance, or can conventional data augmentation methods achieve similar gains?
 
-The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes.Experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, four representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
+The first series of classification experiments aimed to determine whether traditional data balancing strategies could effectively improve melanoma classification, or if a synthetic hyperspectral dataset would be necessary to achieve better performance—especially for underrepresented classes. Experiments were performed in total using the **DenseNet201** architecture trained from scratch. Among them, representative runs are detailed below. These tests compared different balancing strategies—Focal Loss, Batch Regularization, and their combination—against a baseline trained with no balancing method.
 
-1. Baseline model trained without any balancing method. Despite being prone to overfitting, it achieved the **highest F1-score (0.8852)**, along with an **accuracy of 0.8372** and **specificity at sensitivity (Spec@Sens)** of **0.31**, showing that the model performed best when trained without balancing.
-2. Applied **Batch Regularization**, reaching an F1-score of **0.8571**, **accuracy of 0.70**, and **Spec@Sens of 0.26**. Although this slightly stabilized training, it did not improve the class balance.
-3. Used **Focal Loss** to handle class imbalance. The F1-score dropped to **0.8571**, with an **accuracy of xxx** and **Spec@Sens of xxx**, indicating that reweighting did not generalize well to minority melanoma cases.
-4. Combined **Focal Loss** and **Batch Regularization**, resulting in an F1-score of **0.7451**, **accuracy of 0.675**, and **Spec@Sens of 0.227**. The combined method recovered some performance but still lagged behind the baseline.
-5. Used **synthetic data** without any other data augmentation strategies, resulting in the highest F1-score of 0,900
+The baseline model performed well, achieving 0.8852 F1 and 0.6429 specificity, and it remained the best result among all experiments that used only real data.
+Real-data augmentations and balancing strategies did not outperform the baseline. Batch Regularization and Focal Loss reduced either F1-score or specificity, and their combination produced the weakest results. Even extensive augmentations such as rotation, equalization, normalization, and flipping reached only 0.8667 F1, slightly below the baseline.
 
-| Experiment ID | Architecture | Balancing Method | F1-Score | Accuracy | Spec@Sens | Observation |
-|:--|:--:|:--:|:--:|:--:|:--:|:--|
-| 1 | DenseNet201 | None | **0.8136** | **0.725** | 0.2532 | Baseline; best overall F1 and performance |
-| 2 | DenseNet201 | Focal Loss | 0.7796 | 0.675 | 0.2431 | Reweighting reduced sensitivity balance |
-| 3 | DenseNet201 | Batch Regularization | 0.8125 | 0.70 | 0.26 | Stable but lower overall F1 |
-| 4 | DenseNet201 | Focal Loss + Batch Reg. | 0.7451 | 0.675 | 0.227 | Slight recovery, still below baseline |
+The best performance came from using synthetic images. Training with synthetic hyperspectral data alone produced the highest F1-score (0.9000) and the highest specificity (0.7143). When synthetic samples were combined with traditional augmentations, results remained strong and continued to outperform the real-only augmented model.
 
-The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques. These findings indicate that synthetic data generation is a more promising path forward. The next experimental stage investigates whether GAN- or VAE-based synthetic hyperspectral images can enrich the training set and outperform conventional balancing strategies, particularly for minority melanoma detection.
+# Experiment Table
+
+| ID | Augmentation                       | Synthetic data | Val F1  | Specificity | 
+|:--:|:-----------------------------------|:--------------:|:-------:|:-----------:|
+| 1  | NONE                               | No             | 0.8852  | 0.6429      |
+| 2  | Batch Reg                          | No             | 0.8571  | 0.5000      |
+| 3  | Focal Loss                         | No             | 0.8889  | 0.5714      |
+| 4  | Batch Reg + Focal Loss             | No             | 0.8750  | 0.5000      |
+| 5  | NONE                               | Yes            | 0.9000  | 0.7143      |
+| 6  | Rotate90 + Equalize + Norm + Flip  | No             | 0.8667  | 0.6429      |
+| 7  | Rotate90 + Equalize + Norm + Flip  | Yes            | 0.8814  | 0.7143      |
+
+
+The experiments showed that traditional data balancing methods did not enhance the model’s performance. The highest F1-score and balanced sensitivity-specificity tradeoff were obtained when no balancing strategy was used. DenseNet201 performed best with the natural data distribution, suggesting that the limited dataset size and class imbalance hindered the effectiveness of focal loss and regularization techniques.
 
 ### Does the inclusion of synthetic samples enhance the performance of a classifier trained from scratch when only a small amount of real data is available?
+
 The objective of this experiment was to verify whether training a hyperspectral dermoscopy skin lesion classifier with additional synthetic melanoma data, generated using the FastGAN architecture, could improve performance in distinguishing melanoma from dysplastic nevi. The classifier was trained on the cropped hyperspectral images, the only difference between the two experiments being that the second training included synthetic melanoma samples to balance the dataset, ensuring that the number of melanoma and dysplastic nevi instances was equal.  
 
 | Metric (On Validation Set) | Without Synthetic Data | With Synthetic Data |
