@@ -86,8 +86,24 @@ conda install mamba -n base -c conda-forge
 # Install dependencies
 pip install -r requirements.txt
 ```
+## Weights & Biases (W&B) Experiment Tracking
 
+This project uses **Weights & Biases (W&B)** to track training runs, store checkpoints, visualize metrics, and ensure full reproducibility. W&B collects information automatically during training, including model losses, evaluation metrics, hyperparameters, and generated synthetic samples.
 
+W&B allows you to monitor the entire training process in real time. You can view curves for generator, discriminator and classifier losses, as well as validation metrics such as SAM, PSNR, SSIM and FID. It also stores the exact `.yaml` configuration used for each run, which makes it easy to reproduce your experiment or compare different models and hyperparameters. Depending on the module being trained, W&B also displays synthetic images, spectral bands and other visual outputs generated during training.
+
+To use W&B, first create a free account at https://wandb.ai and install it using `pip install wandb`. Then log in by running `wandb login`. Training will automatically start logging to your W&B account as long as your entity and project are correctly defined in the configuration file.
+
+To configure W&B for this repository, open the model configuration file:
+
+```bash
+cd projects/hyperskin/configs/model/<model>.yaml
+```
+Inside the file, locate the W&B fields:
+```bash
+entity: k298976-unicamp
+project: hypersynth
+```
 ### Run
 
 **Fit**
@@ -115,9 +131,28 @@ python src/main.py fit \
 ```
 There are some files inside each config folders that were part of experiments for optimizing each trainment, so we tested different configurations of normalization and conditioning techniques that modified the configuration .yaml. But feel free to try them out and just check which model it is importing on the class_path
 
+During training the logs are saved on the wandb environment. To setup this environment access the following path:
+```bash
+cd projects/hyperskin/configs/model/<model>.yaml
+```
+Access the line
+      entity: k298976-unicamp
+      project: hypersynth
+Ans modify according to the entity and project set in your account.
+Once you access wandb, you can visualize logs related to the lossess of the classifier, generator, discriminator. Evaluation metrics along each step such as SAM, PSNR, FID and SSIM, the configuration you used in this training in .yaml and depending on the module you can acess the generated synthetic data and the spectral band as well.
+
+
+
+Replace these with the entity and project names associated with your W&B account. After this setup, every executed training run will appear in your W&B workspace, showing all relevant logs, metrics, configurations, and generated samples.
+
+Below are examples of the visualizations you will find on the W&B dashboard:
+
+<p align="center"> <img src="images/wandb_plot_visualization.png" width="30%" /> <img src="images/wandb_train_curve.png" width="30%" /> <img src="images/wandb_val_curve.png" width="30%" /> </p>
+
 2. Training Classification Model
 
 The classification models classifies between melanoma and dysplastic nevi. We can test this with or without the synthetic data obtained from our generation model in "1". To test the usability of our synthetic data, you can experiment different configurations of trainings
+
 - Full train: Use synthetic data exclusively for training.
 - Mixed train: Use synthetic data to complement real training data.
 - Full validation: Use synthetic data exclusively for validation.
