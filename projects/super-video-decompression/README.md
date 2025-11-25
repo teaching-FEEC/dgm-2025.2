@@ -179,7 +179,7 @@ Create a chain, with a rule to accept video from 0 to 1080p, from 0 to 30 fps an
 
 ## Benchmarks
 
-We achieved Real Time performance for most of our combinations, up to 1440p outputs, this was the worst machine we could test on:
+We achieved Real Time performance with all of our models combinations, up to 1440p outputs, this was the worst machine we could test on:
 
 ![RTX 2060 Benchmark](docs/Metrics/RTX2060Benchmark.png)
 
