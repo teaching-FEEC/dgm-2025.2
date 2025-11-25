@@ -220,6 +220,20 @@ The spectral analysis supported these visual findings. The plotted mean spectra 
 
 Overall, the experiment demonstrates that FastGAN is a viable architecture for hyperspectral skin lesion synthesis. The generated images capture the main structural and spectral traits of melanoma lesions, providing a realistic extension of the training data space. While further optimization is needed to improve texture detail, reduce intensity discrepancies and increase sample diversity, these results show promising potential for using generative adversarial methods to augment hyperspectral datasets and support skin cancer research.
 
+#### Conditioned FastGAN
+Conditional FastGAN extends the original FastGAN by introducing explicit conditioning information that guides image generation. Instead of using only a noise vector as input, it concatenates this noise with an external conditioning mask, allowing the generator to model the conditional distribution p(x∣m) rather than the unconditional 
+p(x). This same conditioning vector is also fed to the discriminator, enabling it to judge not just whether an image looks real, but whether it matches the provided condition. 
+
+#### SPADE FastGAN
+SPADE-FastGAN introduces spatially adaptive normalization (SPADE) to replace the standard BatchNorm layers inside the upsampling and downsampling blocks. Unlike Conditional FastGAN, which uses masks only as an input vector, SPADE provides pixel-level conditioning, which is a semantic or structural map is fed into every normalization layer, producing gamma and beta parameters that modulate activations at each spatial location. This means the generator is guided by the conditioning map throughout the entire hierarchy, ensuring that spatial structure such as shapes, boundaries, textures, is preserved with high fidelity. SPADE-FastGAN also extends this conditioning mechanism to the discriminator.
+
+<p align="center">
+  <img src="images/spade_normalization.png" width="300">
+</p>
+
+#### Cycle GAN
+CycleGAN is a training approach that learns image translation between two unpaired domains, which in our context is RGB and HSI images. Unlike supervised models that require aligned RGB–HSI pairs, CycleGAN uses a set of complementary losses that make training possible with independent datasets. The key idea is the cycle-consistency constraint, which is that if we translate an RGB image into an HSI image and then pass it back through the inverse generator, we should recover the original RGB image. This constraint forces both generators to learn transformations that are meaningful avoiding degenerate solutions, allowing CycleGAN to synthesize high quality hyperspectral outputs from RGB inputs.
+
 #### VAE Autoencoder 
 
 Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 64. Loss function was set to have a term with a KL-divergence regularizer weighted by kld_weight = 1×10⁻², encouraging smooth, semantically meaningful latents while preserving spectral fidelity. Overall the results look like melanoma images but lack the details present in a realistic hyperspectral image. Spectral similarity was also achieved. 
@@ -346,7 +360,23 @@ Interestingly, FID shows a weak negative correlation with specificity (-0.18) an
 These results suggest that traditional generative quality metrics such as FID and SAM may not fully capture the aspects of synthetic hyperspectral image quality that impact downstream classification. It’s possible that these metrics emphasize spectral or statistical similarity, whereas classification performance depends more on class-relevant features and the diversity of the generated samples. Consequently, future work might explore domain-specific evaluation methods or task-aware generative metrics to better assess whether synthetic hyperspectral data contribute meaningfully to classifier improvement.
 
 ![Gen vs Class](images/correlation_gen_cls.png)
+# Limitations
+Our approach is limited by the small size and narrow diversity of the available hyperspectral melanoma dataset. Because the training set contains relatively few examples,  with limited variation in lesion shape, texture, and spectral patterns, the generative models end up learning a restricted and more specific distribution. As a result, the synthetic images tend to replicate the biases present in the training set rather than representing the broader variability of real-world skin lesions true distribution of our class.
 
+When these synthetic images are added to the classifier’s training set, they reinforce the same dataset biases, improving performance on the validation subset, which comes from the same distribution as the training data. However, the classifier’s performance drops on the independent test set, showing that the synthetic data does not improve generalization. Lastly, another limitation is that all experiments were performed on a single hyperspectral dataset, so the findings are not yet validated across different acquisition systems and populations.
+# Future Work
+
+Future improvements to this project can focus on enhancing spectral realism experimenting different loss functions, improving classifier robustness, and validating the generality of the results:
+
+- Use SAM as a loss function: Since the classifiers that performed best were trained with synthetic data showing the lowest SAM values, Spectral Angle Mapper can be integrated directly into the generator loss to penalize spectral distortion and improve spectral fidelity.
+
+- Explore additional hyperspectral losses: To better preserve the shape and structure of hyperspectral signatures, other spectral-aware losses can be incorporated into model training, such as:  
+  - SID (Spectral Information Divergence): measures divergence between spectra and captures nonlinear distortions.  
+  - Hybrid Loss: Combines Spectral loss such as SAD, and spatial loss such as MSE, to improve both information regarding HSI images
+
+- Evaluate generalization across datasets: The entire pipeline of generation, augmentation, and classification should be tested on additional hyperspectral skin-lesion datasets to assess whether synthetic data improves generalization.
+
+- Apply explainability methods to hyperspectral classifiers: Using techniques such as Grad-CAM, Integrated Gradients, or spectral relevance maps can reveal which wavelengths are most important for melanoma classification. This may show whether hyperspectral imaging provides diagnostic information not captured by RGB and whether synthetic images preserve these important spectral cues.
 
 # Conclusion
 Our results show that classifiers trained with synthetic hyperspectral data perform better than those relying only on standard data augmentation or regularization. Adding GAN-generated melanoma images helped the models generalize better and improved sensitivity, especially for underrepresented classes. We also found that architectures built for high-resolution image generation, like FastGAN, work better than those designed specifically for hyperspectral synthesis—likely because our dataset has higher spatial resolution (256×256) and fewer spectral channels than typical HSI data. Overall, GANs outperformed VAEs on small, high-resolution datasets, producing sharper and more realistic lesion details.
@@ -374,3 +404,4 @@ Next, we plan to test classification models trained purely on synthetic data aga
 12. Park, T., Liu, M.-Y., Wang, T.-C., & Zhu, J.-Y. (2019). Semantic Image Synthesis with Spatially-Adaptive Normalization. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR).
 
 13. Zhu, J.-Y., Park, T., Isola, P., & Efros, A. A. (2020). Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks. arXiv preprint arXiv:1703.10593.
+
