@@ -193,6 +193,9 @@ def load_and_split_data_interleaved(
     train_ratio=0.8,
     val_ratio=0.1
 ):
+    """
+    Loads data and splits it using Global Chunk Interleaving.
+    """
     print(f"Loading data from NPZ (Interleaved Split)...")
     
     # === 1. Path & Load ===
@@ -219,7 +222,7 @@ def load_and_split_data_interleaved(
         USE_DENSE_ACTION = True
         ACTION_DIM = act_data.shape[1]
     
-    SEQ_LEN = sequence_length # Update to the actual chunk size we are creating
+    SEQ_LEN = sequence_length 
     
     # === 4. Handle Demo Set ===
     total_samples = len(src_data)
@@ -243,33 +246,35 @@ def load_and_split_data_interleaved(
         tgt_pool = tgt_data
         src_demo, act_demo, tgt_demo = [], [], []
 
-    # === 5. Interleaved Splitting Logic (FIXED) ===
+    # =========================================================
+    # === 5. Global Interleaved Splitting Logic (The Fix) ===
+    # =========================================================
     print("Splitting data (Global Interleaved Chunks)...")
     
     pool_len = len(src_pool)
     num_rollouts = pool_len // rollout_size
     
     if num_rollouts == 0:
-        # Fallback if dataset is tiny
         rollout_size = pool_len
         num_rollouts = 1
 
+    # How many chunks fit in one rollout?
     chunks_per_rollout = rollout_size // sequence_length
     
+    # Total chunks in the entire dataset
+    total_chunks = num_rollouts * chunks_per_rollout
+
     # Calculate exact cutoff to ensure perfect reshaping
-    clean_cutoff = num_rollouts * chunks_per_rollout * sequence_length
+    clean_cutoff = total_chunks * sequence_length
     
     # Slice raw data to fit divisible dimensions
     s_clean = src_pool[:clean_cutoff]
     a_clean = act_pool[:clean_cutoff]
     t_clean = tgt_pool[:clean_cutoff]
 
-    # --- Reshape and Flatten to (Total_Chunks, Time, Features) ---
-    # We merge (Rollouts * Chunks) into the first dimension immediately.
-    # This creates a massive pool of chunks from all time periods and all rollouts.
-    
-    total_chunks = num_rollouts * chunks_per_rollout
-    
+    # --- Reshape to (Total_Chunks, Time, Features) ---
+    # We use *shape[1:] to automatically handle remaining dimensions 
+    # (e.g. L, 3 for states or D for actions)
     s_flat = s_clean.reshape(total_chunks, sequence_length, *s_clean.shape[1:])
     a_flat = a_clean.reshape(total_chunks, sequence_length, *a_clean.shape[1:])
     t_flat = t_clean.reshape(total_chunks, sequence_length, *t_clean.shape[1:])
@@ -280,7 +285,6 @@ def load_and_split_data_interleaved(
     np.random.shuffle(chunk_idxs)
 
     # --- Split Indices (Global) ---
-    # Now we calculate ratios based on TOTAL chunks, not per-rollout chunks
     n_train = int(train_ratio * total_chunks)
     n_val = int(val_ratio * total_chunks)
     # Test gets the remainder
@@ -289,47 +293,41 @@ def load_and_split_data_interleaved(
     val_idxs = chunk_idxs[n_train : n_train + n_val]
     test_idxs = chunk_idxs[n_train + n_val:]
 
-    # --- Assign Data ---
-    # We can index directly because we already flattened to (Total_Chunks, ...)
-    src_train = s_flat[train_idxs]
-    act_train = a_flat[train_idxs]
-    tgt_train = t_flat[train_idxs]
+    # --- Assign Data (Chunks) ---
+    src_train_chunks = s_flat[train_idxs]
+    act_train_chunks = a_flat[train_idxs]
+    tgt_train_chunks = t_flat[train_idxs]
     
-    src_val = s_flat[val_idxs]
-    act_val = a_flat[val_idxs]
-    tgt_val = t_flat[val_idxs]
+    src_val_chunks = s_flat[val_idxs]
+    act_val_chunks = a_flat[val_idxs]
+    tgt_val_chunks = t_flat[val_idxs]
     
-    src_test = s_flat[test_idxs]
-    act_test = a_flat[test_idxs]
-    tgt_test = t_flat[test_idxs]
+    src_test_chunks = s_flat[test_idxs]
+    act_test_chunks = a_flat[test_idxs]
+    tgt_test_chunks = t_flat[test_idxs]
 
-    # --- Final Flatten to (N_samples, ...) ---
-    # The models usually expect (N_samples, Features) or (N, L, F) depending on architecture.
-    # If your models expect a flat stream of steps (not chunks), un-comment the reshape below.
-    # However, your original code returned chunks of (N, Sequence_Length, ...).
-    # Based on "RopeDataset", usually you want to keep the sequence dimension separate 
-    # OR flatten it back to pure steps. 
+    # --- Flatten back to (N_samples, Features) ---
+    # This maintains the return format consistency with your previous code
+    # merging the Chunk and Time dimensions.
     
-    # The previous code returned: subset.reshape(-1, *original_shape_suffix)
-    # which implies it FLATTENED the sequence length dimension back into the batch.
-    # If you want strict (Batch * Time, Features):
-    src_train = src_train.reshape(-1, *s_clean.shape[1:])
-    act_train = act_train.reshape(-1, *a_clean.shape[1:])
-    tgt_train = tgt_train.reshape(-1, *t_clean.shape[1:])
+    src_train = src_train_chunks.reshape(-1, *src_pool.shape[1:])
+    act_train = act_train_chunks.reshape(-1, *act_pool.shape[1:])
+    tgt_train = tgt_train_chunks.reshape(-1, *tgt_pool.shape[1:])
     
-    src_val = src_val.reshape(-1, *s_clean.shape[1:])
-    act_val = act_val.reshape(-1, *a_clean.shape[1:])
-    tgt_val = tgt_val.reshape(-1, *t_clean.shape[1:])
+    src_val = src_val_chunks.reshape(-1, *src_pool.shape[1:])
+    act_val = act_val_chunks.reshape(-1, *act_pool.shape[1:])
+    tgt_val = tgt_val_chunks.reshape(-1, *tgt_pool.shape[1:])
     
-    src_test = src_test.reshape(-1, *s_clean.shape[1:])
-    act_test = act_test.reshape(-1, *a_clean.shape[1:])
-    tgt_test = tgt_test.reshape(-1, *t_clean.shape[1:])
+    src_test = src_test_chunks.reshape(-1, *src_pool.shape[1:])
+    act_test = act_test_chunks.reshape(-1, *act_pool.shape[1:])
+    tgt_test = tgt_test_chunks.reshape(-1, *tgt_pool.shape[1:])
 
-    print(f"Interleaved Split Stats (Fixed):")
-    print(f"  Total Chunks: {total_chunks} (Seq Len: {sequence_length})")
-    print(f"  Train Samples: {len(src_train)}")
-    print(f"  Val Samples:   {len(src_val)}")
-    print(f"  Test Samples:  {len(src_test)}")
+    print(f"--- Split Statistics (Interleaved) ---")
+    print(f"Total Rollouts: {num_rollouts}")
+    print(f"Chunks per Rollout: {chunks_per_rollout} (Size {sequence_length})")
+    print(f"Train: {len(src_train)} steps")
+    print(f"Val:   {len(src_val)} steps")
+    print(f"Test:  {len(src_test)} steps")
 
     return (
         src_train, act_train, tgt_train,
