@@ -47,7 +47,10 @@ https://docs.google.com/presentation/d/16PthBsxWUrnjjb5saw3rDCTorvTyX7CcnbJKjngE
 #### SHS GAN [5]
 The model receives as input a standard RGB image and its task is to generate a synthetic hyperspectral cube. The objective of the Generator is to learn a mapping from the RGB domain to the HS domain, so that the distribution of the synthetic HS cubes becomes similar to the distribution of real HS cubes. The RGB image is used as input to the Generator so that the synthetic HS cube preserves the spatial details and textures of the input image and also keeps the color properties coherent with what appears in the RGB. The Critic is trained to evaluate whether the generated HS cubes are realistic. It does so by analyzing spatial patterns and also the smoothness and shape of spectral curves, which are emphasized by looking at the data in both the image and Fourier-transformed spectral domains. In addition, the synthetic HS cube can be converted back into RGB using a deterministic transformation. This reconstructed RGB image is compared to the original input RGB, and differences are penalized during training. This step enforces consistency between the generated HS cube and the original RGB image. It is used a WGAN training pipeline
 
-![SHS Architecture Diagram](images/SHS-GAN.png)
+
+<p align="center">
+  <img src="images/SHS-GAN.png" width="300">
+</p>
 
 #### FastGAN
 - **Minimalist Architecture:** The model uses a lightweight GAN structure with a single convolution layer per resolution and very few channels (e.g., three) at high resolutions ($\ge 512^2$) to ensure low computational cost and fast training.
@@ -232,9 +235,18 @@ SPADE-FastGAN introduces spatially adaptive normalization (SPADE) to replace the
 <p align="center">
   <img src="images/spade_normalization.png" width="300">
 </p>
+<p align="center">
+  <img src="images/spade_fastgan_hsi_grid.png" width="300">
+</p>
 
 #### Cycle GAN
 CycleGAN is a training approach that learns image translation between two unpaired domains, which in our context is RGB and HSI images. Unlike supervised models that require aligned RGB–HSI pairs, CycleGAN uses a set of complementary losses that make training possible with independent datasets. The key idea is the cycle-consistency constraint, which is that if we translate an RGB image into an HSI image and then pass it back through the inverse generator, we should recover the original RGB image. This constraint forces both generators to learn transformations that are meaningful avoiding degenerate solutions, allowing CycleGAN to synthesize high quality hyperspectral outputs from RGB inputs.
+
+
+<p align="center">
+  <img src="images/cyclegan_hsi_grid.png" width="300">
+</p>
+
 
 #### VAE Autoencoder 
 
@@ -385,9 +397,23 @@ Future improvements to this project can focus on enhancing spectral realism expe
 
 - Apply explainability methods to hyperspectral classifiers: Using techniques such as Grad-CAM, Integrated Gradients, or spectral relevance maps can reveal which wavelengths are most important for melanoma classification. This may show whether hyperspectral imaging provides diagnostic information not captured by RGB and whether synthetic images preserve these important spectral cues.
 
-# Conclusion
+<!-- # Conclusion
 Our results show that classifiers trained with synthetic hyperspectral data perform better than those relying only on standard data augmentation or regularization. Adding GAN-generated melanoma images helped the models generalize better and improved sensitivity, especially for underrepresented classes. We also found that architectures built for high-resolution image generation, like FastGAN, work better than those designed specifically for hyperspectral synthesis—likely because our dataset has higher spatial resolution (256×256) and fewer spectral channels than typical HSI data. Overall, GANs outperformed VAEs on small, high-resolution datasets, producing sharper and more realistic lesion details.
-Next, we plan to test classification models trained purely on synthetic data against real samples, use large RGB skin lesion datasets to generate more diverse images, and explore CycleGAN and pretraining strategies to improve realism. Conditioning FastGAN on RGB images or binary masks may also help control lesion structure and further boost the quality of generated hyperspectral data.
+Next, we plan to test classification models trained purely on synthetic data against real samples, use large RGB skin lesion datasets to generate more diverse images, and explore CycleGAN and pretraining strategies to improve realism. Conditioning FastGAN on RGB images or binary masks may also help control lesion structure and further boost the quality of generated hyperspectral data. -->
+
+
+# Conclusion
+
+Our experiments demonstrate that synthetic hyperspectral data does help improve melanoma classification, especially when the available real dataset is small. Across multiple architectures and training setups, adding synthetic melanoma images consistently improved validation F1-score, recall, and balanced accuracy compared to training with real data alone. This confirms our main hypothesis, which is classifiers benefit from a combination of real and synthetic hyperspectral samples.
+
+Regarding RGB information, our results show that conditioning the generative models on RGB images did not yield better classifiers than unconditioned hyperspectral generation. SPADE FastGAN and CycleGAN, guided by RGB performed similarly or worse than the unconditioned FastGAN. This suggests that RGB images do not provide additional useful cues for hyperspectral synthesis in this specific task.
+
+Similarly, using a classifier pretrained on large-scale RGB datasets (ImageNet) or on RGB melanoma images (ISIC) did not lead to substantial improvements over training from scratch. Although pretrained models converged faster, they did not surpass the DenseNet201 trained directly on hyperspectral data augmented with synthetic samples. This indicates that RGB-based pretraining does not transfer effectively to hyperspectral melanoma classification, likely due to modality mismatch.
+
+Among all generative models tested, FastGAN produced the best synthetic hyperspectral data, while the best real-data baseline model was DenseNet201 trained without any synthetic augmentation. Importantly, we observed that classification performance was strongly linked to the SAM metric: the best classifiers were trained with synthetic datasets that achieved the lowest SAM, meaning the highest spectral fidelity. This suggests that spectral quality is the most relevant factor for improving downstream melanoma detection. The relationship between SAM and classifier performance also supports the idea that HSI contains meaningful information that RGB images cannot capture, and that preserving spectral structure is crucial for producing useful synthetic data.
+
+Finally, our results show that it is possible to improve a melanoma classifier even with very limited real hyperspectral data, reinforcing the promise of generative models as a strategy for data augmentation in hyperspectral medical imaging. However, despite achieving better validation performance, the classifier trained with synthetic data did not outperform the baseline on the independent test set, yielding the need for larger datasets to ensure that better generalization on unseen data
+
 
 
 ## Bibliographic References
