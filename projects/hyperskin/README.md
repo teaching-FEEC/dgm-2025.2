@@ -206,10 +206,11 @@ We expect the quality of synthetic hyperspectral images to improve with future g
 Our next step is to use RGB images as inputs to the generator instead of random noise and include a reconstruction loss between the generated and real RGB representations.  
 This approach encourages the generator to learn meaningful spatial and color relationships, using them to reconstruct high-quality hyperspectral data.
 
-![Exp1](images/2d-conv-plot.png)  
-![Exp2](images/3d-convolution-plot.png)  
-![Exp3](images/3d-conv-sn.png)  
-![Exp4](images/3D-conv-sn-fft.png)
+| 2D Conv | 3D Conv | 3D conv + SN| 3D conv + SN + FFT|
+|-------|-------|-------|-------|
+| ![Exp1](images/2d-conv-plot.png) | ![Exp2](images/3d-convolution-plot.png) | ![Exp3](images/3d-conv-sn.png) | ![Exp4](images/3D-conv-sn-fft.png) |
+
+
 #### FastGAN
 The FastGAN experiment was conducted to generate synthetic hyperspectral images of melanoma lesions using a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 256, following the original FastGAN training procedure that includes manual optimization, exponential moving average updates, and perceptual consistency losses. The goal was to evaluate how well the generator could reproduce realistic skin lesion patterns and retain spectral properties similar to real melanoma samples.  
 
@@ -256,8 +257,16 @@ CycleGAN is a training approach that learns image translation between two unpair
 #### VAE Autoencoder 
 
 Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 64. Loss function was set to have a term with a KL-divergence regularizer weighted by kld_weight = 1×10⁻², encouraging smooth, semantically meaningful latents while preserving spectral fidelity. Overall the results look like melanoma images but lack the details present in a realistic hyperspectral image. Spectral similarity was also achieved. 
-![vaeimages](images/vae-results.png)
-![vae_spectra](images/vae_spectra.png)
+<!-- ![vaeimages](images/vae-results.png) -->
+<!-- ![vae_spectra](images/vae_spectra.png) -->
+
+<p align="center">
+  <img src="images/vae-results.png" width="300">
+</p>
+
+<p align="center">
+  <img src="images/vae_spectra.png" width="300">
+</p>
 
 ## Classifier Training with Synthetic Data 
 
