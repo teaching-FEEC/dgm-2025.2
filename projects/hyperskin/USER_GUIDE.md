@@ -1,6 +1,6 @@
 <div align="center">
 
-# Reproductability of Hyperskin project
+# Reproducibility of Hyperskin project
 </div>
 
 ## Introduction
