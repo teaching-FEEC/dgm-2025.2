@@ -11,7 +11,7 @@ This project originated in the context of the graduate course *IA376N - Generati
 ### Deliverables
 - The presentation for the E1 delivery can be found here [Presentation Image Super-Resolution with Generative Models](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
 - The presentation for the E2 delivery can be found here [Presentation E2 Google Slides](https://docs.google.com/presentation/d/1zLd4ip43czBegF7HHgJYoS5qRbJ5Y2kQ/edit?slide=id.p1)
-- The presentation for the E3 delivery can be found here 
+- The presentation for the E3 delivery can be found here [Presentation E3 Google Slides](https://docs.google.com/presentation/d/1Fs8ZEbfoHMGtiiKB4u0T6H9FeGYvkwkk/edit?slide=id.p1#slide=id.p1)
 
 |Name  | RA | Specialization|
 |--|--|--|
@@ -89,6 +89,9 @@ For this first stage, the proposed methodology is as follows:
   - **Visual Inspection**: Side-by-side comparison with ground truth
   - **User Studies**: Perceptual quality evaluation
   - **Ablation Studies**: Component-wise contribution analysis
+
+#### Workflow
+![WhatsApp Image 2025-11-24 at 16 56 15_3ab7d84d](https://github.com/user-attachments/assets/283f969e-bbb1-45f4-ad3f-b25f7a2171cf)
 
 
 ## E2 - PARTIAL SUBMISSION 
