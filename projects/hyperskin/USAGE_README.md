@@ -1,7 +1,6 @@
 <div align="center">
 
 # Reproductability of Hyperskin project
-bla
 </div>
 
 ## Introduction
@@ -195,18 +194,22 @@ python src/main.py fit \
     --trainer.logger.id exp1_id
 ```
 
-### checkpoints
-Colocar Link do drive?
-Here are the checkpoints for the best outcomes for each model:
+### Checkpoints Download
 
-Generation model:
-* CycleGAN:
-* FastGAN:
-* VAE:
-* SHSGAN
+Here are the checkpoints for the best outcomes for generative and classification models:
 
-Classification model: 
-* No synthetic data:
-* Full train:
-* Full validation:
-* Mixed train: 
+* Generation:
+1. Auxilary Conditioned Melanoma Cycle GAN (AC-CycleGAN): [Checkpoints- Google Drive](https://drive.google.com/drive/folders/10NpP6RYzdon9n757iGszPVemZVMTLz-u?usp=drive_link)
+2. Cycle GAN to generate melanoma: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1wUvne5ERN7_edehDOTzrRdhdoMVdebBT?usp=drive_link)
+3. Fast GAN  to generate melanoma class: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1p8Uy1o7bkhv-hqut-tnL8GiNOaP2T69k?usp=drive_link)
+4. Fast GAN to generate nevi class: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1jLnQjC0BMR5cyFNNzqaEQjy_cYSj010l?usp=drive_link)
+
+* Classification:
+1. Baseline (no synthetic data): [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1coBazkR-tDqxt5eg1NPK0pQ32bDQ6qIl?usp=drive_link)
+1. Pre-trained Baseline (no synthetic data): [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1IiG0fkHCI3aAmVjpZtM0aLIwLbLc-uXC?usp=drive_link)
+2. Synthetic AC-CycleGAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1kzXozVLRpokERdczqo4_mELa6MpxhNvw?usp=drive_link)
+3. Synthetic Pre-trained Cycle-GAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1ogExdpIucSxwIGld0SYyhxMNfM0WDg5B?usp=drive_link)
+4. Synthetic Cycle-GAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/10NpP6RYzdon9n757iGszPVemZVMTLz-u?usp=drive_link)
+5. Synthetic FastGAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1BWaynzX3hcwrmhAmV4drDOq5I32Bvoel?usp=drive_link)
+6. Synthetic Pre-trained FastGAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1znTJX7DEehlJGVefTIAaJq_QpdrfE-sJ?usp=drive_link)
+7. Synthetic Pre-trained SPADE FastGAN: [Checkpoints- Google Drive](https://drive.google.com/drive/folders/1rS5ZPut49Qk2umA-Mv-RtpyQIZBLnqWj?usp=drive_link)
