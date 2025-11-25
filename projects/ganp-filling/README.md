@@ -48,3 +48,5 @@ Desai, A., Freeman, C., Beaver, I. and Wang, Z. (2021) TimeVAE: a variational au
 Gonzalez-Calabuig, M., Fernández-Torres, M.Á., & Camps-Valls, G. (2025). Generative networks for spatio-temporal gap filling of Sentinel-2 reflectances. ISPRS Journal of Photogrammetry and Remote Sensing, 220, 637-648.
 
 Toth, T. L., Kaldellis, J. K., and Mavrakis, A. (2020). ”Predicting Photovoltaic Soiling from Air Quality Measurements.” Renewable Energy, 145, 2627–2638.
+
+Orozco López, Enrique; Kaplan, David; Linhoss, Anna. Interpretable transformer neural network prediction of diverse environmental time series using weather forecasts. Water Resources Research, v. 60, n. 10, p. e2023WR036337, 2024.
