@@ -389,7 +389,7 @@ These results suggest that traditional generative quality metrics such as FID an
 
 ### Can synthetic data substitute this dataset for melanoma classification?
 
-In order to test this hypothesis we did 2 sets of experiments. The first we trained only on synthetic data and validated only on real data. The second one we trained only on real data and validated on synthetic data. In each set of experiments, we made so that the proportion of melanoma (MM) and dysplasic nevi (DN). For each set, we did one experiment with an equal proportion of MM and DN and one mimicking the real proportion, one MM for every 2 DN. 
+To determine whether synthetic hyperspectral images could replace real lesions during classifier training, we conducted two complementary tests. In the first, the model was trained entirely on synthetic melanoma (MM) and dysplastic nevi (DN) samples and evaluated on real images. In the second, the model was trained only on real data and validated on synthetic lesions. For both directions, we controlled the class proportions, testing a balanced MM/DN split and a realistic ratio with twice as many DN samples. By doing so, we assessed both the representational quality of synthetic lesions and their ability to mimic the natural imbalance seen in our real dataset.
 
 | ID | Train On  | Val On    | Synth MM | Synth DN | F1     | Specificity  |
 |----|-----------|-----------|----------|----------|--------|--------------|
@@ -397,6 +397,11 @@ In order to test this hypothesis we did 2 sets of experiments. The first we trai
 | 2  | Synthetic | Real      | 50       | 100      | 0.8235 | 0.2142       |
 | 3  | Real      | Synthetic | 100      | 100      | 0.7980 | 0.81         |
 | 4  | Real      | Synthetic | 100      | 100      | 0.8722 | 0.5          |
+
+Training exclusively on synthetic data resulted in F1-scores just above 0.82, with balanced synthetic datasets yielding much stronger specificity than the imbalanced ones. The synthetic-imitation of real imbalance produced severe losses in specificity, suggesting that synthetic DN samples do not yet approximate the complexity of real dysplastic nevi.
+The reverse experiment, training on real images and validating on synthetic ones, showed good performance, with F1 values up to 0.8722, confirming that synthetic images encode recognizable melanoma and DN patterns. However, variation in specificity suggests that synthetic lesions simplify some aspects of real spectral signatures, and thus cannot reflect the full range of biological diversity.
+
+Therefore, the combined evidence shows that synthetic data is useful and informative, but cannot fully substitute real hyperspectral dermoscopy images for melanoma classification. Synthetic lesions support generalization and capture key spectral structures, but their reduced variability and class-dependent inconsistencies limit their ability to replace real datasets. They function best as a complement, not as a replacement.
 
 # Limitations
 Our approach is limited by the small size and narrow diversity of the available hyperspectral melanoma dataset. Because the training set contains relatively few examples,  with limited variation in lesion shape, texture, and spectral patterns, the generative models end up learning a restricted and more specific distribution. As a result, the synthetic images tend to replicate the biases present in the training set rather than representing the broader variability of real-world skin lesions true distribution of our class.
