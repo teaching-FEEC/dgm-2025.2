@@ -164,6 +164,18 @@ face aware dataset filtering(only images with faces left) ~3k images:
 
 # Experiments, Results, and Discussion of Results
 
+## Demo
+
+To demo the models created during this research, the following MPV Video Player is necessary:
+https://github.com/the-database/mpv-upscale-2x_animejanai
+It seems this player requires NVIDIA GPUs (we have not tested with other kinds of GPUs)
+
+The player implements a filter which can apply to current image frames ONNX runtime models. 
+
+To use our models, download and unzip a release of the mpv player, copy our models from /models/onnx to the player's folder /animejanai/onnx, then open /mpvnet.exe and press CTRL+E to configure model chains, our models will appear in the list of available models.
+Create a chain, with a rule to accept video from 0 to 1080p, from 0 to 30 fps and add 3 of our models for 4X, and two for 2X, the first model must always be the 1X model.
+
+
 ## Perceptual Results Samples
 
 ### Blender Foundation Animations
@@ -183,7 +195,7 @@ face aware dataset filtering(only images with faces left) ~3k images:
 
 ### Blender Animation Comparison Video
 
-[Watch the demo video](docs/Result%20Samples/VideoDecompressionSample.mp4)
+[Watch the demo video](https://drive.google.com/file/d/1VCFAQu0JV5CmJOmwS1R2iETGfuDiO-0P/view?usp=sharing)
 
 ## Quantitative Results
 
