@@ -139,7 +139,7 @@ Our training started from pretrained models for Super Resolution, that were trai
 |Dataset | Web Address | Descriptive Summary|
 |----- | ----- | -----|
 |Blender Foundation Open Movies Compression Decompression | https://huggingface.co/datasets/Fransferdy/blender_foundation_open_movies_compression_decompression | Contains 10 animations videos, 78 minutes, some 3d some 2d|
-|DF2K | https://huggingface.co/datasets/Fransferdy/blender_foundation_open_movies_compression_decompression | Contains 3.5k High Definition Photographs, used by the Pretrain Models|
+|DF2K | https://www.kaggle.com/datasets/anvu1204/df2kdata | Contains 3.5k High Definition Photographs, used by the Pretrain Models|
 
 
 
