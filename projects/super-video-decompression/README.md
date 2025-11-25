@@ -82,6 +82,8 @@ For production deployment, typical improvement pipeline would have the following
 
 ## Training Regimen and Loss Functions
 
+The bulk of our modifications were implemented directly into the NeoSR framework, so most of our code lies in the /src/third_party folder, our NeoSR version is a heavily modified one, with the features discussed in this readme.
+
 Starting from a pretrain, at first model training was not improving the validation metrics. Compressed images are mathematically very similar to the Original ones, so we needed a way to create a Loss that was more sensitive to the issues created by compression. 
 
 Models were trained for around 150k Iterations, the best models according to PSNR, DISTS and SSIM metrics were chosen from the 150 models generated during training. Most best models were within 90k to 150k range of training. Some were finetuned for more 150k iterations.
