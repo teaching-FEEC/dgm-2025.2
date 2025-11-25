@@ -100,6 +100,9 @@ All subsequent experiments — including training, validation, and performance e
 
 At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
 
+## E3 - PARTIAL SUBMISSION
+
+
 
 ## Schedule  
 
