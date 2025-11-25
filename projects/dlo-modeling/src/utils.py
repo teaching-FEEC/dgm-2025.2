@@ -193,78 +193,42 @@ def load_and_split_data_interleaved(
     train_ratio=0.8,
     val_ratio=0.1
 ):
-    """
-    Loads data from NPZ, creates a sequential Demo set (optional), and splits the 
-    remaining data by shuffling CHUNKS within rollouts.
-    
-    This ensures that even small datasets have representation in Train/Val/Test
-    across different phases of the simulation, while maintaining local temporal 
-    structure within the 'sequence_length'.
-
-    Args:
-        data_path (str): Path to the .npz file.
-        rollout_size (int): Total steps in one simulation rollout (e.g., 1000 or 10000).
-        sequence_length (int): The size of the chunk (T) used for shuffling.
-        seed (int): Random seed.
-        create_demo_set (bool): If True, reserves the last N items for a demo set.
-        demo_size (int): Number of items to reserve for the demo set.
-        train_ratio (float): Ratio of chunks for training.
-        val_ratio (float): Ratio of chunks for validation.
-
-    Returns:
-        (train_set, val_set, test_set, [demo_set], USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN)
-    """
     print(f"Loading data from NPZ (Interleaved Split)...")
     
     # === 1. Path & Load ===
     if not os.path.exists(data_path):
         print(f"Error: Data file not found at {data_path}")
-        try:
-             parent = os.path.dirname(data_path)
-             print(f"Please check that the file exists in the '{parent}' folder.")
-        except:
-             pass
         sys.exit(1)
         
     data = np.load(data_path, allow_pickle=True)
     
     # === 2. Key Extraction ===
-    states_key = 'states'          
-    actions_key = 'actions'        
-    next_states_key = 'next_states' 
-
     try:
-        src_data = data[states_key]
-        act_data = data[actions_key]
-        tgt_data = data[next_states_key]
+        src_data = data['states']
+        act_data = data['actions']
+        tgt_data = data['next_states']
     except KeyError as e:
-        print(f"Error: Key {e} not found in {data_path}.")
-        print(f"Available keys are: {list(data.keys())}")
+        print(f"Error: Key {e} not found.")
         sys.exit(1)
 
     # === 3. Auto-detect Properties ===
     if act_data.ndim == 3:
-        print("Detected 3D sparse action data (N, L, D)")
         USE_DENSE_ACTION = False
         ACTION_DIM = act_data.shape[2]
     elif act_data.ndim == 2:
-        print("Detected 2D dense action data (N, D)")
         USE_DENSE_ACTION = True
         ACTION_DIM = act_data.shape[1]
     
-    SEQ_LEN = src_data.shape[1] # (N, L, 3) -> L
+    SEQ_LEN = sequence_length # Update to the actual chunk size we are creating
     
     # === 4. Handle Demo Set ===
-    # We strip the demo set BEFORE performing the interleaved logic
-    # to ensure the rollout math (divisibility) applies to the training pool.
-    
     total_samples = len(src_data)
     
     if create_demo_set:
         if demo_size >= total_samples:
-             raise ValueError("Demo size cannot be larger than total dataset.")
+            raise ValueError("Demo size cannot be larger than total dataset.")
         
-        # Reserve last N samples
+        # Reserve last N samples for pure sequential demo
         src_demo = src_data[-demo_size:]
         act_demo = act_data[-demo_size:]
         tgt_demo = tgt_data[-demo_size:]
@@ -273,23 +237,20 @@ def load_and_split_data_interleaved(
         src_pool = src_data[:-demo_size]
         act_pool = act_data[:-demo_size]
         tgt_pool = tgt_data[:-demo_size]
-        
-        print(f"Reserving last {demo_size} samples for Sequential Demo set.")
     else:
         src_pool = src_data
         act_pool = act_data
         tgt_pool = tgt_data
-        print("No Demo set reserved.")
+        src_demo, act_demo, tgt_demo = [], [], []
 
-    # === 5. Interleaved Splitting Logic ===
-    print("Splitting data (Interleaved Chunks)...")
+    # === 5. Interleaved Splitting Logic (FIXED) ===
+    print("Splitting data (Global Interleaved Chunks)...")
     
     pool_len = len(src_pool)
     num_rollouts = pool_len // rollout_size
     
     if num_rollouts == 0:
-        print(f"Warning: Dataset size ({pool_len}) is smaller than rollout_size ({rollout_size}).")
-        print("Adjusting rollout_size to dataset size to prevent crash, but interleaving may be ineffective.")
+        # Fallback if dataset is tiny
         rollout_size = pool_len
         num_rollouts = 1
 
@@ -303,76 +264,80 @@ def load_and_split_data_interleaved(
     a_clean = act_pool[:clean_cutoff]
     t_clean = tgt_pool[:clean_cutoff]
 
-    # --- Reshape into (Rollouts, Chunks, Time, Features) ---
-    # We use *shape[1:] to automatically handle remaining dimensions (e.g. L, 3) or (D,)
-    s_reshaped = s_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *s_clean.shape[1:])
-    a_reshaped = a_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *a_clean.shape[1:])
-    t_reshaped = t_clean.reshape(num_rollouts, chunks_per_rollout, sequence_length, *t_clean.shape[1:])
+    # --- Reshape and Flatten to (Total_Chunks, Time, Features) ---
+    # We merge (Rollouts * Chunks) into the first dimension immediately.
+    # This creates a massive pool of chunks from all time periods and all rollouts.
+    
+    total_chunks = num_rollouts * chunks_per_rollout
+    
+    s_flat = s_clean.reshape(total_chunks, sequence_length, *s_clean.shape[1:])
+    a_flat = a_clean.reshape(total_chunks, sequence_length, *a_clean.shape[1:])
+    t_flat = t_clean.reshape(total_chunks, sequence_length, *t_clean.shape[1:])
 
-    # --- Generate Shuffle Indices ---
+    # --- Generate Global Shuffle Indices ---
     np.random.seed(seed)
-    chunk_idxs = np.arange(chunks_per_rollout)
+    chunk_idxs = np.arange(total_chunks)
     np.random.shuffle(chunk_idxs)
 
-    # --- Split Indices ---
-    n_train = int(train_ratio * chunks_per_rollout)
-    n_val = int(val_ratio * chunks_per_rollout)
-    # Test gets the rest
-
+    # --- Split Indices (Global) ---
+    # Now we calculate ratios based on TOTAL chunks, not per-rollout chunks
+    n_train = int(train_ratio * total_chunks)
+    n_val = int(val_ratio * total_chunks)
+    # Test gets the remainder
+    
     train_idxs = chunk_idxs[:n_train]
     val_idxs = chunk_idxs[n_train : n_train + n_val]
     test_idxs = chunk_idxs[n_train + n_val:]
 
-    # --- Extract & Flatten ---
-    # Helper to select chunks and flatten back to (N, ...)
-    def get_split(indices, original_shape_suffix):
-        if len(indices) == 0:
-            return np.empty((0, *original_shape_suffix))
-        # Select: (Rollouts, Selected_Chunks, Time, ...)
-        subset = s_reshaped[:, indices] # Example usage, need to apply to s, a, t generically
-        # We need to flatten the first 3 dims: Rollouts * Selected_Chunks * Time
-        return subset.reshape(-1, *original_shape_suffix)
-
-    # We do this manually for s, a, t to avoid closure scope issues with variables
+    # --- Assign Data ---
+    # We can index directly because we already flattened to (Total_Chunks, ...)
+    src_train = s_flat[train_idxs]
+    act_train = a_flat[train_idxs]
+    tgt_train = t_flat[train_idxs]
     
-    # Train
-    src_train = s_reshaped[:, train_idxs].reshape(-1, *s_clean.shape[1:])
-    act_train = a_reshaped[:, train_idxs].reshape(-1, *a_clean.shape[1:])
-    tgt_train = t_reshaped[:, train_idxs].reshape(-1, *t_clean.shape[1:])
+    src_val = s_flat[val_idxs]
+    act_val = a_flat[val_idxs]
+    tgt_val = t_flat[val_idxs]
     
-    # Val
-    src_val = s_reshaped[:, val_idxs].reshape(-1, *s_clean.shape[1:])
-    act_val = a_reshaped[:, val_idxs].reshape(-1, *a_clean.shape[1:])
-    tgt_val = t_reshaped[:, val_idxs].reshape(-1, *t_clean.shape[1:])
+    src_test = s_flat[test_idxs]
+    act_test = a_flat[test_idxs]
+    tgt_test = t_flat[test_idxs]
+
+    # --- Final Flatten to (N_samples, ...) ---
+    # The models usually expect (N_samples, Features) or (N, L, F) depending on architecture.
+    # If your models expect a flat stream of steps (not chunks), un-comment the reshape below.
+    # However, your original code returned chunks of (N, Sequence_Length, ...).
+    # Based on "RopeDataset", usually you want to keep the sequence dimension separate 
+    # OR flatten it back to pure steps. 
     
-    # Test
-    src_test = s_reshaped[:, test_idxs].reshape(-1, *s_clean.shape[1:])
-    act_test = a_reshaped[:, test_idxs].reshape(-1, *a_clean.shape[1:])
-    tgt_test = t_reshaped[:, test_idxs].reshape(-1, *t_clean.shape[1:])
+    # The previous code returned: subset.reshape(-1, *original_shape_suffix)
+    # which implies it FLATTENED the sequence length dimension back into the batch.
+    # If you want strict (Batch * Time, Features):
+    src_train = src_train.reshape(-1, *s_clean.shape[1:])
+    act_train = act_train.reshape(-1, *a_clean.shape[1:])
+    tgt_train = tgt_train.reshape(-1, *t_clean.shape[1:])
+    
+    src_val = src_val.reshape(-1, *s_clean.shape[1:])
+    act_val = act_val.reshape(-1, *a_clean.shape[1:])
+    tgt_val = tgt_val.reshape(-1, *t_clean.shape[1:])
+    
+    src_test = src_test.reshape(-1, *s_clean.shape[1:])
+    act_test = act_test.reshape(-1, *a_clean.shape[1:])
+    tgt_test = tgt_test.reshape(-1, *t_clean.shape[1:])
 
-    print(f"Interleaved Split Stats:")
-    print(f"  Rollouts used: {num_rollouts}")
-    print(f"  Chunks/Rollout: {chunks_per_rollout} (Seq Len: {sequence_length})")
-    print(f"  Train: {len(src_train)}")
-    print(f"  Val:   {len(src_val)}")
-    print(f"  Test:  {len(src_test)}")
+    print(f"Interleaved Split Stats (Fixed):")
+    print(f"  Total Chunks: {total_chunks} (Seq Len: {sequence_length})")
+    print(f"  Train Samples: {len(src_train)}")
+    print(f"  Val Samples:   {len(src_val)}")
+    print(f"  Test Samples:  {len(src_test)}")
 
-    if create_demo_set:
-        print(f"  Demo:  {len(src_demo)} (Sequential)")
-        return (
-            (src_train, act_train, tgt_train),
-            (src_val,   act_val,   tgt_val),
-            (src_test,  act_test,  tgt_test),
-            (src_demo,  act_demo,  tgt_demo),
-            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
-        )
-    else:
-        return (
-            (src_train, act_train, tgt_train),
-            (src_val,   act_val,   tgt_val),
-            (src_test,  act_test,  tgt_test),
-            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
-        )
+    return (
+        src_train, act_train, tgt_train,
+        src_val,   act_val,   tgt_val,
+        src_test,  act_test,  tgt_test,
+        src_demo,  act_demo,  tgt_demo,
+        USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+    )
 
 def plot_model_comparison(
     models_dict: dict[str, BaseRopeModel],
