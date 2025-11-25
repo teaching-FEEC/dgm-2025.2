@@ -11,7 +11,7 @@ This project originated in the context of the graduate course *IA376N - Generati
 ### Deliverables
 - The presentation for the E1 delivery can be found here [Presentation Image Super-Resolution with Generative Models](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
 - The presentation for the E2 delivery can be found here [Presentation E2 Google Slides](https://docs.google.com/presentation/d/1zLd4ip43czBegF7HHgJYoS5qRbJ5Y2kQ/edit?slide=id.p1)
-
+- The presentation for the E3 delivery can be found here 
 
 |Name  | RA | Specialization|
 |--|--|--|
