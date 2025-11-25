@@ -414,18 +414,18 @@ The reverse experiment, training on real images and validating on synthetic ones
 Therefore, the combined evidence shows that synthetic data is useful and informative, but cannot fully substitute real hyperspectral dermoscopy images for melanoma classification. Synthetic lesions support generalization and capture key spectral structures, but their reduced variability and class-dependent inconsistencies limit their ability to replace real datasets. They function best as a complement, not as a replacement.
 
 # Limitations
-Our approach is limited by the small size and narrow diversity of the available hyperspectral melanoma dataset. Because the training set contains relatively few examples,  with limited variation in lesion shape, texture, and spectral patterns, the generative models end up learning a restricted and more specific distribution. As a result, the synthetic images tend to replicate the biases present in the training set rather than representing the broader variability of real-world skin lesions true distribution of our class.
+Our approach is constrained by the small size and limited diversity of the available hyperspectral melanoma dataset. With fewer than 100 samples and the generative models learn only a narrow distribution. This results in a variability between data subsets in the classification model, and inconscistent metrics between validation and test. 
 
-When these synthetic images are added to the classifier’s training set, they reinforce the same dataset biases, improving performance on the validation subset, which comes from the same distribution as the training data. However, the classifier’s performance drops on the independent test set, showing that the synthetic data does not improve generalization. Lastly, another limitation is that all experiments were performed on a single hyperspectral dataset, so the findings are not yet validated across different acquisition systems and populations.
+Another limitation concerns the evaluation metrics used to assess spectral and perceptual fidelity. Metrics such as FID are commonly applied to large datasets, where statistical estimates are stable. When applied to very small datasets, their reliability decreases, raising questions about how trustworthy or comparable these results are. This issue is particularly relevant for FID: because hyperspectral images contain more than three channels, adapting InceptionV3 to accept a higher number of bands alters the pretrained weights, making the resulting FID values incomparable with those reported in the literature for standard RGB-based generative models. Finally, all experiments were conducted using a single hyperspectral dataset, limited to one acquisition device and one patient population. As a result, the findings are dataset-specific and may not generalize to other sensors, clinical settings, or demographic groups. 
 # Future Work
 
-Future improvements to this project can focus on enhancing spectral realism experimenting different loss functions, improving classifier robustness, and validating the generality of the results:
+Future improvements to this project can focus on enhancing spectral realism experimenting different loss functions, improving classifier robustness, and validating the generality and explainability of the results.
 
 - Use SAM as a loss function: Since the classifiers that performed best were trained with synthetic data showing the lowest SAM values, Spectral Angle Mapper can be integrated directly into the generator loss to penalize spectral distortion and improve spectral fidelity.
 
-- Explore additional hyperspectral losses: To better preserve the shape and structure of hyperspectral signatures, other spectral-aware losses can be incorporated into model training, such as:  
-  - SID (Spectral Information Divergence): measures divergence between spectra and captures nonlinear distortions.  
-  - Hybrid Loss: Combines Spectral loss such as SAD, and spatial loss such as MSE, to improve both information regarding HSI images
+- Explore additional hyperspectral losses: To better preserve the shape and structure of hyperspectral signatures, other spectral-aware losses can be incorporated into model training.
+
+- Integrate the generator with the classifier, in order to use the loss of the classifier as feedback to the generator loss. This yields to a generative model that produces useful images instead of high-fidelity images.
 
 - Evaluate generalization across datasets: The entire pipeline of generation, augmentation, and classification should be tested on additional hyperspectral skin-lesion datasets to assess whether synthetic data improves generalization.
 
@@ -442,11 +442,12 @@ Our experiments demonstrate that synthetic hyperspectral data does help improve 
 
 Regarding RGB information, our results show that conditioning the generative models on RGB images did not yield better classifiers than unconditioned hyperspectral generation. SPADE FastGAN and CycleGAN, guided by RGB performed similarly or worse than the unconditioned FastGAN. This suggests that RGB images do not provide additional useful cues for hyperspectral synthesis in this specific task.
 
-Similarly, using a classifier pretrained on large-scale RGB datasets (ImageNet) or on RGB melanoma images (ISIC) did not lead to substantial improvements over training from scratch. Although pretrained models converged faster, they did not surpass the DenseNet201 trained directly on hyperspectral data augmented with synthetic samples. This indicates that RGB-based pretraining does not transfer effectively to hyperspectral melanoma classification, likely due to modality mismatch.
+Similarly, using a classifier pretrained on large-scale RGB datasets (ImageNet) or on RGB melanoma images (ISIC) did not lead to substantial improvements over training from scratch. Although pretrained models converged faster, they did not surpass the DenseNet201 trained directly on hyperspectral data augmented with synthetic samples. This indicates that RGB-based pretraining does not transfer effectively to hyperspectral melanoma classification.
 
-Among all generative models tested, FastGAN produced the best synthetic hyperspectral data, while the best real-data baseline model was DenseNet201 trained without any synthetic augmentation. Importantly, we observed that classification performance was strongly linked to the SAM metric: the best classifiers were trained with synthetic datasets that achieved the lowest SAM, meaning the highest spectral fidelity. This suggests that spectral quality is the most relevant factor for improving downstream melanoma detection. The relationship between SAM and classifier performance also supports the idea that HSI contains meaningful information that RGB images cannot capture, and that preserving spectral structure is crucial for producing useful synthetic data.
+Among all generative models tested, FastGAN produced the best synthetic hyperspectral data, while the best real-data baseline model was DenseNet201 trained without any synthetic augmentation. Importantly, we observed that classification performance was not correlated with any evaluation metric. In addition, the generation model producing the highest-fidelity images was not the most useful ones, meaning that it did not yield the best classifier.
 
-Finally, our results show that it is possible to improve a melanoma classifier even with very limited real hyperspectral data, reinforcing the promise of generative models as a strategy for data augmentation in hyperspectral medical imaging. However, despite achieving better validation performance, the classifier trained with synthetic data did not outperform the baseline on the independent test set, yielding the need for larger datasets to ensure that better generalization on unseen data
+
+Finally, our results show that it is possible to improve a melanoma classifier even with very limited real hyperspectral data, reinforcing the promise of generative models as a strategy for data augmentation in hyperspectral medical imaging. 
 
 
 
