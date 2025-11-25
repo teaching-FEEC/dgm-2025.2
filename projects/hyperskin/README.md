@@ -248,6 +248,11 @@ CycleGAN is a training approach that learns image translation between two unpair
 </p>
 
 
+<p align="center">
+  <img src="images/cycle_gan_validation.png" width="300">
+</p>
+
+
 #### VAE Autoencoder 
 
 Similarly as the FastGAN, VAE autoencoder was trained with a 16-channel input configuration and an image size of 256×256 pixels. The model was trained with a learning rate of 0.0002 and a latent dimension of 64. Loss function was set to have a term with a KL-divergence regularizer weighted by kld_weight = 1×10⁻², encouraging smooth, semantically meaningful latents while preserving spectral fidelity. Overall the results look like melanoma images but lack the details present in a realistic hyperspectral image. Spectral similarity was also achieved. 
