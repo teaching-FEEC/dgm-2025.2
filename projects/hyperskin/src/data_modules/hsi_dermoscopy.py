@@ -835,13 +835,17 @@ if __name__ == "__main__":
 
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/hsi_dermoscopy_croppedv2_256_imagenet",
-        splits=["train", "val", "test"],
+        output_dir="export/hsi_dermoscopy_croppedv2_256_with_masks_val_test",
+        splits=[
+            # "train",
+            "val",
+            "test"
+        ],
         crop_with_mask=True,
         bbox_scale=2,
         structure="imagenet",
         image_size=image_size,
         # allowed_labels=["melanoma", "dysplastic_nevi"],
-        global_normalization=True,
+        global_normalization=False,
         export_cropped_masks=False,
     )

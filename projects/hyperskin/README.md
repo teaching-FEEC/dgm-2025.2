@@ -387,6 +387,7 @@ Interestingly, FID shows a weak negative correlation with specificity (-0.18) an
 These results suggest that traditional generative quality metrics such as FID and SAM may not fully capture the aspects of synthetic hyperspectral image quality that impact downstream classification. It’s possible that these metrics emphasize spectral or statistical similarity, whereas classification performance depends more on class-relevant features and the diversity of the generated samples. Consequently, future work might explore domain-specific evaluation methods or task-aware generative metrics to better assess whether synthetic hyperspectral data contribute meaningfully to classifier improvement.
 ![Gen vs Class](images/correlation_gen_cls.png)
 
+![Gen vs Class](images/correlation_gen_cls.png)
 ### Can synthetic data substitute this dataset for melanoma classification?
 
 To determine whether synthetic hyperspectral images could replace real lesions during classifier training, we conducted two complementary tests. In the first, the model was trained entirely on synthetic melanoma (MM) and dysplastic nevi (DN) samples and evaluated on real images. In the second, the model was trained only on real data and validated on synthetic lesions. For both directions, we controlled the class proportions, testing a balanced MM/DN split and a realistic ratio with twice as many DN samples. By doing so, we assessed both the representational quality of synthetic lesions and their ability to mimic the natural imbalance seen in our real dataset.
