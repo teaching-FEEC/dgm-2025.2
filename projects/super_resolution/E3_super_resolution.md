@@ -23,7 +23,7 @@ The project addresses the problem of **image super-resolution**, a fundamental t
 
 ## Problem Description / Motivation
 
-
+Many real-world images inherently exhibit low resolution due to limitations in acquisition devices, environmental conditions, or historical constraints. This issue is particularly relevant in several domains where image clarity is essential for analysis and decision-making.
 
 ## Objective
 
@@ -39,41 +39,61 @@ As inspiration, this project will draw on the methodology and architecture propo
 
 ## Methodology
 
-The methodology adopted in this project was organized into two main implementation approaches, complemented by a punctual use of high-performance hardware (A100 GPU) in the final stage. The objective was to evaluate the performance of the image super-resolution model across different computational environments while ensuring reproducibility, consistency, and rigorous assessment of reconstruction quality.
+Investigated Approaches and Rationale for Invertible Neural Networks (INNs)
 
-### 1. Approach 1 — Initial Development in Google Colab
+During the preliminary phase of the project, different families of super-resolution architectures were explored to establish comparative baselines and justify the final modeling direction. Among the techniques investigated were:
 
-Google Colab was used during the initial development phase to build and validate the super-resolution pipeline. At this stage:
-- dependencies, datasets, and preprocessing functions were configured;
-- the workflow was validated to ensure correctness;
-- preliminary tests were executed to confirm model stability;
-- fast prototype runs were performed to validate the end-to-end process.
+- GAN-based models, such as ESRGAN, widely adopted for perceptual image enhancement due to their ability to produce sharp and visually appealing textures;
+- Diffusion models, considered for comparison due to their state-of-the-art performance in generative image reconstruction and high-fidelity detail synthesis.
 
-Colab was chosen because it enables quick experimentation without requiring local computational resources and provides GPU access (typically T4 or P100) suitable for early testing.
+However, traditional deep learning architectures rely on standard components — such as convolutions, pooling operations, or nonlinear activations like ReLU — that are not inherently invertible. For instance, pooling discards spatial information, preventing exact reconstruction of an input from its output.
 
-### 2. Approach 2 — Local Development and Full Training in VS Code
+To address this limitation, the project focused on Invertible Neural Networks (INNs). INNs employ specialized building blocks, including:
 
-After validation in Colab, the main development process was conducted locally in VS Code, including:
-- full organization of the codebase;
-- complete model training;
+- Coupling layers, which split and transform the input in a way that allows exact inversion;
+- Invertible 1×1 convolutions, which preserve dimensionality and enable reversible feature transformations.
+
+These properties allow the network to support both forward (low-resolution → high-resolution) and inverse (high-resolution → low-resolution) mappings, making INNs particularly suitable for super-resolution tasks where information preservation is critical.
+
+### Integration Into the Methodology
+
+The methodology adopted in this project was structured around two core implementation approaches and a supplementary high-performance execution phase using the A100 GPU. These methodological steps were designed to evaluate model performance in different environments while ensuring reproducibility and rigorous quality assessment.
+
+### Approach 1 — Initial Development in Google Colab
+
+Google Colab was used for early prototyping and validation of the super-resolution pipeline. In this stage:
+- dependencies, datasets, and preprocessing routines were configured;
+- the pipeline was validated end-to-end;
+- preliminary experiments were conducted to ensure model stability;
+- lightweight tests were run to refine workflow consistency.
+
+Colab was especially suitable for rapid iteration due to its integrated GPU availability (T4/P100) and ease of setup.
+
+### Approach 2 — Local Development and Full Training in VS Code
+
+Once validated, the full development and training process was carried out locally in VS Code, including:
+- full organization and structuring of the codebase;
+- complete model training using INNs and baseline architectures;
 - hyperparameter tuning;
 - reproducibility experiments;
-- metric computation and analysis;
-- documentation of the results.
+- computation and analysis of metrics (PSNR, SSIM, LPIPS);
+- documentation and integration with GitHub.
 
-The local environment allowed precise control over versions, dependencies, repository structure, and integration with GitHub.
+The local environment provided fine-grained control over versions, dependencies, and source-code management.
 
-### 3. Punctual Use of the A100 GPU in the Final Stages
+### Approach 3 - Punctual Use of the A100 GPU in the Final Stages
 
-The NVIDIA A100 GPU was used only in the final phase of the project with the purpose of:
-- accelerating the training of heavier models such as deep architectures and VAEs;
-- validating model performance under high-end computational hardware;
-- comparing training time against the local environment;
-- generating more robust and consistent final results.
+The NVIDIA A100 GPU was used only in the concluding stage, with the goals of:
+- accelerating the training of deeper or more computationally demanding architectures (e.g., VAE-based or diffusion-based baselines);
+- validating the model under high-performance conditions;
+- comparing execution times with local hardware;
+- producing robust final results.
 
-The A100 was not part of the primary pipeline; instead, it was employed exclusively for final optimization and verification of the training procedure.
+The A100 was not part of the main pipeline; its use was strictly targeted for optimization and final verification.
 
-### Datasets and Evolution
+
+
+## Datasets and Evolution
 List the datasets used in the project.  
 
 | Dataset | Type | Description | Usage | LINK |
