@@ -711,9 +711,6 @@ def plot_dreamer_prediction(
         # Get initial state (B=1)
         h_0, c_0, z_0 = model.get_initial_hidden_state(1, device=device)
 
-        # ---
-        # --- FIX IS HERE: ---
-        # ---
         # Squeeze the batched (1, D) initial states to unbatched (D,)
         # to match the unbatched S_t and A_t_minus_1.
         # The observe method will correctly re-batch all of them.
@@ -767,6 +764,8 @@ def animate_dreamer_rollout(
     start_idx: int = 0,
     steps: int = 48,
     interval: int = 100,
+    save: bool = False,
+    save_path = 'rope_animation.mp4',
     teacher_forcing: bool = False,
     train_mean: torch.Tensor = None,
     train_std: torch.Tensor = None
@@ -908,6 +907,10 @@ def animate_dreamer_rollout(
         interval=interval,
         blit=False # Blit must be False for 3D plots
     )
+    
+    if save:
+        ani.save(save_path, writer="ffmpeg", fps=6)
+        print(f"Saved animation as {save_path}")
 
     plt.close(fig) # Prevent static plot from showing
     return HTML(ani.to_jshtml())
