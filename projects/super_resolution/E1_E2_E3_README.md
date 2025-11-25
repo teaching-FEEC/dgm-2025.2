@@ -93,7 +93,6 @@ For this first stage, the proposed methodology is as follows:
 #### Workflow
 ![WhatsApp Image 2025-11-24 at 16 56 15_3ab7d84d](https://github.com/user-attachments/assets/283f969e-bbb1-45f4-ad3f-b25f7a2171cf)
 
-
 ## E2 - PARTIAL SUBMISSION 
 In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
 
