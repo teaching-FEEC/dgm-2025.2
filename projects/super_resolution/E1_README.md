@@ -10,6 +10,8 @@ This project originated in the context of the graduate course *IA376N - Generati
 
 ### Deliverables
 The presentation for the E1 delivery can be found here [Presentation Image Super-Resolution with Generative Models](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
+The presentation for the E2 delivery can be found here [Presentation E2 Google Slides](https://docs.google.com/presentation/d/1zLd4ip43czBegF7HHgJYoS5qRbJ5Y2kQ/edit?slide=id.p1)
+
 
 |Name  | RA | Specialization|
 |--|--|--|
@@ -87,6 +89,17 @@ For this first stage, the proposed methodology is as follows:
   - **Visual Inspection**: Side-by-side comparison with ground truth
   - **User Studies**: Perceptual quality evaluation
   - **Ablation Studies**: Component-wise contribution analysis
+
+
+## E2 - PARTIAL SUBMISSION 
+In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
+
+Two approaches were initially evaluated for implementing the image super-resolution model. After comparative tests, the both environment was selected as the main platform due to its superior performance, stability, and control during model execution.
+
+All subsequent experiments — including training, validation, and performance evaluation. The validation process focused on analyzing key performance metrics, such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity), to assess the visual quality and fidelity of the generated images. These metrics and validation outputs can be viewed in detail at the following link: https://github.com/nubiasidene/dgm-2025.2-g4/tree/main/projects/super_resolution/validation
+
+At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
+
 
 ## Schedule  
 
