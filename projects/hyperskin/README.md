@@ -385,6 +385,7 @@ From the heatmap, it can be observed that none of the generative metrics show st
 Interestingly, FID shows a weak negative correlation with specificity (-0.18) and a small positive correlation with recall (0.14), meaning that lower FID (typically indicating better generative quality) might slightly correspond to higher recall but is not a reliable predictor. Similarly, SAM_mean has small positive and negative correlations with specificity (0.17) and recall (-0.08), respectively—again reflecting minimal influence.
 
 These results suggest that traditional generative quality metrics such as FID and SAM may not fully capture the aspects of synthetic hyperspectral image quality that impact downstream classification. It’s possible that these metrics emphasize spectral or statistical similarity, whereas classification performance depends more on class-relevant features and the diversity of the generated samples. Consequently, future work might explore domain-specific evaluation methods or task-aware generative metrics to better assess whether synthetic hyperspectral data contribute meaningfully to classifier improvement.
+![Gen vs Class](images/correlation_gen_cls.png)
 
 ### Can synthetic data substitute this dataset for melanoma classification?
 
@@ -397,7 +398,6 @@ In order to test this hypothesis we did 2 sets of experiments. The first we trai
 | 3  | Real      | Synthetic | 100      | 100      | 0.7980 | 0.81         |
 | 4  | Real      | Synthetic | 100      | 100      | 0.8722 | 0.5          |
 
-![Gen vs Class](images/correlation_gen_cls.png)
 # Limitations
 Our approach is limited by the small size and narrow diversity of the available hyperspectral melanoma dataset. Because the training set contains relatively few examples,  with limited variation in lesion shape, texture, and spectral patterns, the generative models end up learning a restricted and more specific distribution. As a result, the synthetic images tend to replicate the biases present in the training set rather than representing the broader variability of real-world skin lesions true distribution of our class.
 
