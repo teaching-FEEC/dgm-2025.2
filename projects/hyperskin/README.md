@@ -362,6 +362,10 @@ These results suggest that traditional generative quality metrics such as FID an
 
 ### Can synthetic data substitute this dataset for melanoma classification?
 
+In order to test this hypothesis we did 2 sets of experiments. The first we trained only on synthetic data and validated only on real data. The second one we trained only on real data and validated on synthetic data. In each set of experiments, we made so that the proportion of melanoma (MM) and dysplasic nevi (DN). For each set, we did one experiment with an equal proportion of MM and DN and one mimicking the real proportion, one MM for every 2 DN. 
+
+
+
 ![Gen vs Class](images/correlation_gen_cls.png)
 # Limitations
 Our approach is limited by the small size and narrow diversity of the available hyperspectral melanoma dataset. Because the training set contains relatively few examples,  with limited variation in lesion shape, texture, and spectral patterns, the generative models end up learning a restricted and more specific distribution. As a result, the synthetic images tend to replicate the biases present in the training set rather than representing the broader variability of real-world skin lesions true distribution of our class.
