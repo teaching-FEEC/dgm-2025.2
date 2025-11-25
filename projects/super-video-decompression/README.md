@@ -18,6 +18,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 [Link to slideshow E1](https://docs.google.com/presentation/d/1TISrxtNkQHBbZlzTeAIGRFAGPHKGeUeE0Cg3LDZzKp4/edit?usp=sharing)
 
+[Link to slideshow E3](https://docs.google.com/presentation/d/13Rs1SDoIieN8FHTwGY6wnUlrqUesZaO1Pzztp2CVSJk/edit?usp=sharing)
 
 ## Project Summary Description
 Today, nearly 80% of global internet bandwidth is consumed by video streaming. Of this total, around 90% of the content is delivered in 1080p resolution or lower, through platforms such as Twitch.tv, YouTube, Netflix, Disney+, and Hulu. To make large-scale distribution feasible, most videos are compressed using lossy algorithms like H.264/AVC. While this approach is effective in reducing file size, it inevitably leads to lower image and audio quality, with no straightforward way to fully reverse the process and recover the original material.
