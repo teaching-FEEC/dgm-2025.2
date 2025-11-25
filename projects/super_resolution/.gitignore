@@ -240,3 +240,5 @@ mlruns/
 validation_results/
 temp/
 tmp/
+temp_docs/
+temp_unused_files/
