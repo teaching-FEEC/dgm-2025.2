@@ -390,7 +390,12 @@ These results suggest that traditional generative quality metrics such as FID an
 
 In order to test this hypothesis we did 2 sets of experiments. The first we trained only on synthetic data and validated only on real data. The second one we trained only on real data and validated on synthetic data. In each set of experiments, we made so that the proportion of melanoma (MM) and dysplasic nevi (DN). For each set, we did one experiment with an equal proportion of MM and DN and one mimicking the real proportion, one MM for every 2 DN. 
 
-
+| ID | Train On  | Val On    | Synth MM | Synth DN | F1     | Specificity  |
+|----|-----------|-----------|----------|----------|--------|--------------|
+| 1  | Synthetic | Real      | 100      | 100      | 0.8215 | 0.7143       |
+| 2  | Synthetic | Real      | 50       | 100      | 0.8235 | 0.2142       |
+| 3  | Real      | Synthetic | 100      | 100      | 0.7980 | 0.81         |
+| 4  | Real      | Synthetic | 100      | 100      | 0.8722 | 0.5          |
 
 ![Gen vs Class](images/correlation_gen_cls.png)
 # Limitations
