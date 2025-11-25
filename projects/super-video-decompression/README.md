@@ -177,6 +177,24 @@ The player implements a filter which can apply to current image frames ONNX runt
 To use our models, download and unzip a release of the mpv player, copy our models from /models/onnx to the player's folder /animejanai/onnx, then open /mpvnet.exe and press CTRL+E to configure model chains, our models will appear in the list of available models.
 Create a chain, with a rule to accept video from 0 to 1080p, from 0 to 30 fps and add 3 of our models for 4X, and two for 2X, the first model must always be the 1X model.
 
+## Benchmarks
+
+We achieved Real Time performance for most of our combinations, up to 1440p outputs, this was the worst machine we could test on:
+
+![RTX 2060 Benchmark](docs/Metrics/RTX2060Benchmark.png)
+
+For more Benchmarks, with an RTX 3080 in a poor CPU notebook, with an RTX 3090 / i9 11, with an RTX 4060, check our benchmark tables: 
+
+[Benchmarks 2X](docs/Benchmarks/SVDBenchmark-All2XCombinations.csv)
+
+[Benchmarks 4X](docs/Benchmarks/SVDBenchmark-All4XCombinations.csv)
+
+### Regarding FP32 vs FP16 in Inference
+
+
+The CPU cost of converting the current frame image into FP 16 floats outweights the GPU speed improvement that FP16 gives, so we came to the conclusion that on average, it is better to use FP32 for this task.
+
+[Benchmark FP32 vs FP16](docs/Benchmarks/SVDBenchmark-FP32VSFP16.csv)
 
 ## Perceptual Results Samples
 
