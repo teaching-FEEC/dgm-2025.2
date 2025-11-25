@@ -35,7 +35,7 @@ This work also explores the general use of hyperspectral synthetic data to impro
 
 ## Presentation
 ### Slides
-https://docs.google.com/presentation/d/16PthBsxWUrnjjb5saw3rDCTorvTyX7CcnbJKjngEmF8/edit?usp=sharing
+https://docs.google.com/presentation/d/1ymxQE8vHV4Y9HFyBkXeNziKD5m46efOuLY6WJC2PsvQ/edit?usp=sharing
 
 ## Dataset
 - Github link: https://github.com/heugyy/HSIDermoscopy
