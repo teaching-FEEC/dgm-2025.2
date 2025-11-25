@@ -273,28 +273,13 @@ The objective of this experiment was to verify whether training a hyperspectral 
 |:--:|:------------:|:--------------:|:-------:|:---------------:|:-------:|:----------------:|
 | 1  | Densenet201  | No             | 0.8852  | 0.6429          | 0.73    | 0.53             |
 | 2  | Densenet201  | Yes            | 0.9000  | 0.7143          | 0.75    | 0.26             |
-| 3  | EfficientNet | No             | 0.9000  | 0.7143          |         |                  |
-| 4  | EfficientNet | Yes            | 0.9000  | 0.7143          |         |                  |
 
 
+The results show a clear improvement during validation when synthetic data is included. Validation F1 increased from 0.8852 in the real-only model to 0.9000 when synthetic melanoma samples were added. Specificity also improved substantially, from 0.6429 to 0.7143, suggesting that synthetic samples helped the model better distinguish melanoma from dysplastic nevi under controlled validation conditions.
 
-| Metric (On Validation Set) | Without Synthetic Data | With Synthetic Data |
-|:--|:--:|:--:|
-| Accuracy | 0.79 | **0.84** |
-| Best Accuracy | 0.81 | **0.86** |
-| F1-score | 0.85 | **0.89** |
-| Precision | **0.83** | 0.81 |
-| Recall | 0.86 | **1.00** |
-| Specificity (at Sensitivity 0.95) | **0.37** | 0.32 |
-| Loss | 0.53 | **0.51** |
+However, performance on the independent test set reveals a more nuanced picture. The synthetic-data model achieved a slightly higher Test F1 (0.75) than the real-only model (0.73), indicating a modest benefit in generalization. Yet, the test specificity dropped from 0.53 to 0.26, suggesting that while the model became more sensitive to melanoma, it did so at the expense of misclassifying more dysplastic nevi.
 
-The results showed that the model trained with real data only reached a validation accuracy of approximately 0.79, with a best recorded validation accuracy of 0.81. Its validation F1-score was 0.85, precision 0.83, and recall 0.86. On the other hand, when trained with synthetic data, the model achieved higher overall performance, reaching a validation accuracy of 0.84 and a best validation accuracy of 0.86. The F1-score increased to 0.89, and although validation precision slightly decreased from 0.83 to 0.81, recall improved dramatically from 0.86 to 1.00. The validation loss also decreased slightly, indicating more stable learning, while the specificity at a sensitivity of 0.95 dropped moderately from 0.37 to 0.32. These results demonstrate that the model trained with synthetic data achieved stronger classification performance, particularly in detecting melanoma cases, without overfitting or losing generalization.  
-
-The inclusion of synthetic melanoma samples effectively mitigated the class imbalance that typically biases the network toward the majority class. By generating a balanced training distribution, the model became substantially more sensitive to melanoma patterns, increasing its ability to detect malignant lesions. This improvement, however, came with a modest reduction in specificity. While this means the classifier produced more false-positive melanoma predictions, it also ensured that all melanoma cases were correctly detected. In medical imaging scenarios, particularly in melanoma screening, higher sensitivity is often prioritized since missing a malignant case is far more critical than a false alarm. Therefore, the trade-off observed here is generally acceptable from a clinical standpoint.  
-
-From a training perspective, balancing the data appeared to stabilize convergence and reduce loss variability between epochs. The model with synthetic data reached higher accuracy and lower loss after more epochs, suggesting that the GAN-generated samples helped the network generalize better across the minority class. The improved F1-score reflects a more balanced classification behavior, confirming that synthetic hyperspectral melanoma data played a beneficial role in improving both learning stability and predictive fairness.  
-
-In summary, integrating FastGAN-generated hyperspectral melanoma samples into the training set led to a measurable improvement in classification performance. The balanced model achieved perfect recall and higher overall validation accuracy compared to the model trained on real data alone. Although the slight drop in specificity indicates a small increase in false positives, the results strongly suggest that GAN-based data augmentation is an effective strategy for addressing class imbalance in hyperspectral dermoscopy classification tasks.  
+Overall, these results suggest that synthetic melanoma samples can enhance performance when real data is scarce, particularly in terms of F1-score and validation robustness. However, the drop in test specificity highlights that synthetic augmentation may shift the decision boundary, causing the classifier to overpredict melanoma in unseen data. This indicates that synthetic data is helpful but should be used carefully—ideally complemented by additional real samples or more diverse synthetic generation—to avoid degrading specificity in real-world settings.
 
 ### Does synthetic data improve the performance of a generalist classifier pretrained on large-scale datasets such as ImageNet?
 
@@ -331,7 +316,7 @@ However, not only does the EfficientNet-b6 model have a significantly higher num
 | Val Specificity      | 0.642857                 | 0.714286                    | 0.785714                        | 0.714286                         |
 | Val Recall           | 0.931035                 | 0.931035                    | 0.827586                        | 0.931035                         |
 | Val Bal. Acc.        | 0.786946                 | 0.82266                     | 0.80665                         | 0.82266                          |
-| Generative Model     | —                        | FastGAN                    | —                               | SPADE FastGAN                    |
+| Generative Model     | —                        | FastGAN                     | —                               | SPADE FastGAN                    |
 
 ### What is the optimal proportion of synthetic data to mix with real data during training?
 
