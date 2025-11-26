@@ -75,9 +75,28 @@ Three model architectures were evaluated to learn the rope dynamics:
 - It operates as a **Denoising Diffusion Probabilistic Model (DDPM)**. Instead of directly predicting the next state coordinates in a single forward pass, the model learns to iteratively reverse a diffusion process, starting from pure Gaussian noise and refining it step-by-step into the next state configuration.
 - The generation process is explicitly **conditioned** on the current rope state and the action vector via feature concatenation and time embeddings, ensuring the denoising trajectory is physically grounded.
 
-#### (e) Dreamer
+#### (e) Dreamer (World Model)
 
-We employ a "World Model" architecture to solve a supervised problem: predicting the next state of a deformable object (rope) given its current state and an applied action. Rather than optimizing on the high-dimensional 3D coordinates directly, we learn the transition dynamics in a compact latent space.
+The **Dreamer** model, a state-of-the-art **World Model** architecture, was employed to solve the supervised prediction problem. Instead of optimizing on the high-dimensional 3D coordinates, this approach learns the transition dynamics in a **compact, meaningful latent space**.
+
+This method is crucial because it allows the model to:
+1.  **Isolate Dynamics:** Focus on learning the intrinsic rope movement patterns (dynamics) rather than trivial spatial translations.
+2.  **Model Uncertainty:** Map the inherent stochasticity of DLO manipulation to a **probability distribution** over future states, directly satisfying the project's goal of quantifying risk.
+
+### 3.4 Dreamer World Model Architecture Details
+
+The Dreamer architecture is built around the **Recurrent State-Space Model (RSSM)**, which is designed to handle both deterministic motion and inherent stochasticity by splitting the internal state into two components:
+
+* **Deterministic Memory ($\mathbf{h}_{t}$ - LSTM Cell):** This component maintains the **long-term memory** of the trajectory, capturing sequential dependencies like velocity and momentum, which are vital for predicting motion over multiple time steps.
+* **Stochastic State ($\mathbf{z}_{t}$ - Normal Distribution):** This component explicitly models **prediction uncertainty**. During training, the model learns to match the predicted state (the **Prior**) with the observed state (the **Posterior**), forcing the network to generate valid probability distributions for the future DLO configuration.
+
+#### Physics-Informed Loss Function
+The model's ability to generate physically realistic predictions is enhanced by augmenting the reconstruction loss ($L_{recon}$) with terms that enforce physical realism:
+
+* **Kinematic Accuracy:** Matches both Position and Velocity.
+* **Material Constraints:** Penalizes Stretching and unnatural Bending (enforcing inextensibility and stiffness).
+* **Topological Consistency:** Includes terms to prevent Self-Intersection.
+* **KL Divergence:** A regularization term ensuring the predicted dynamics (Prior) do not diverge from the observed dynamics (Posterior).
 
 #### Training Setup
 
@@ -187,3 +206,31 @@ Future efforts will focus on three key areas to leverage these results:
 # Presentation Link
 
 [Google Slides Presentation](https://docs.google.com/presentation/d/14xAsvx7EaFsWOUKr3ieodYBcjxsf4goc3SWKETlq8cc/edit?usp=sharing)
+
+
+
+## 4. Installation and Setup
+
+To replicate the project's environment and results, follow these steps. **Note: Python version 3.10 is required.**
+
+### 4.1 Clone Repository
+```bash
+git clone [https://github.com/missalt/dlo-modeling/](https://github.com/missalt/dlo-modeling/)
+cd dlo-modeling/projects/dlo-modelling
+```
+### 4.2 Configure Virtual Environment
+It is highly recommended to use a virtual environment to manage dependencies. Ensure you are using **Python 3.10**.
+
+```bash
+# Create a virtual environment using Python 3.10
+python3.10 -m venv venv 
+
+# Activate the virtual environment
+source venv/bin/activate
+```
+### 4.3 Install Dependencies
+Install all required packages using the provided `requirements.txt` file:
+
+```bash
+pip install -r requirements.txt
+```
