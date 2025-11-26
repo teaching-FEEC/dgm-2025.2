@@ -93,6 +93,123 @@ For this first stage, the proposed methodology is as follows:
 #### Workflow
 ![WhatsApp Image 2025-11-24 at 16 56 15_3ab7d84d](https://github.com/user-attachments/assets/283f969e-bbb1-45f4-ad3f-b25f7a2171cf)
 
+## Installation and Setup
+
+This section provides step-by-step instructions to install dependencies and run the Gradio interface (`app.py`) for image super-resolution.
+
+### Prerequisites
+
+- **Python 3.8+** (Python 3.10 or 3.11 recommended)
+- **CUDA-capable GPU** (recommended for faster inference, but CPU is also supported)
+- **Git** (for cloning the repository)
+
+### Step 1: Clone the Repository
+
+```bash
+git clone <repository-url>
+cd projects/super_resolution
+```
+
+### Step 2: Create a Virtual Environment
+
+It's recommended to use a virtual environment to avoid conflicts with other Python packages:
+
+**On Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**On Linux/Mac:**
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+### Step 3: Install Dependencies
+
+Navigate to the `src` directory and install the required packages:
+
+```bash
+cd src
+pip install -r requirements.txt
+```
+
+**Note:** The installation may take several minutes as it includes PyTorch, diffusers, and other deep learning libraries. If you have CUDA installed, PyTorch will automatically use GPU acceleration.
+
+### Step 4: Download Model Weights
+
+The model weights will be automatically downloaded on first run. However, you can also download them manually:
+
+- **Noise Predictor**: `noise_predictor_sd_turbo_v5.pth` (automatically downloaded from HuggingFace)
+- **Stable Diffusion Turbo**: The base model will be downloaded automatically when first used
+
+The weights will be saved in the `src/weights/` directory.
+
+### Step 5: Run the Application
+
+From the `src` directory, run:
+
+```bash
+python app.py
+```
+
+The Gradio interface will start and display a local URL (typically `http://127.0.0.1:7860`). Open this URL in your web browser to access the interface.
+
+### Using the Interface
+
+The application provides two main tabs:
+
+1. **Single Image**: Process a single low-resolution image
+   - Upload an image
+   - Configure parameters (number of steps, chopping size, color fixing method, etc.)
+   - Click "Process" to generate the super-resolved image
+
+2. **Batch Processing**: Process multiple images from a directory
+   - Enter the path to a directory containing images
+   - Configure parameters
+   - Click "Process Folder" to process all images
+
+### Configuration Options
+
+- **Number of steps**: Controls the number of denoising steps (1-5 recommended for speed vs quality trade-off)
+- **Chopping size**: Patch size for processing large images (128 or 256)
+- **Color Fixing Method**: Choose between None, YCbCr, Wavelet, Histogram, or Hybrid
+- **Adaptive Scheduler**: Automatically adjusts timesteps based on image complexity
+- **Smart Chopping**: Adaptive overlap based on local complexity (faster + better quality)
+- **Edge-Preserving Enhancement**: Enhances edges while preserving smooth regions
+- **Adaptive Guidance Scale**: Adjusts guidance scale based on image complexity
+
+### Troubleshooting
+
+**Issue: CUDA out of memory**
+- Reduce the `chopping_size` (e.g., from 256 to 128)
+- Process smaller images or use CPU mode
+
+**Issue: Module not found errors**
+- Ensure you're in the `src` directory when running `app.py`
+- Verify all dependencies are installed: `pip install -r requirements.txt`
+
+**Issue: Model download fails**
+- Check your internet connection
+- The models are downloaded from HuggingFace - ensure you have access
+
+**Issue: Gradio interface doesn't open**
+- Check if the port 7860 is already in use
+- The interface will show the URL in the terminal output
+
+### System Requirements
+
+- **Minimum RAM**: 8GB (16GB recommended)
+- **GPU Memory**: 4GB VRAM minimum (8GB+ recommended for best performance)
+- **Disk Space**: ~10GB for models and dependencies
+
+### Additional Notes
+
+- The first run may take longer as models are downloaded
+- Processing time depends on image size, number of steps, and hardware
+- Results are saved in the `invsr_output/` directory (for single images) or in a subdirectory of the input folder (for batch processing)
+
 ## E2 - PARTIAL SUBMISSION 
 In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
 
@@ -103,7 +220,8 @@ All subsequent experiments — including training, validation, and performance e
 At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
 
 ## E3 - PARTIAL SUBMISSION
-Iníciooo
+
+This section presents the implementation of advanced features and improvements to the InvSR model.
 
 ### Key Features Implemented
 
@@ -187,194 +305,194 @@ src/
 7. Output
 
 
-## Explicação sobre o Smart Chopping - Overlap Adaptativo Implementado
+## Smart Chopping - Adaptive Overlap Implementation
 
-### Resumo
+### Summary
 
-Implementei **Smart Chopping com Overlap Adaptativo**, uma melhoria que ajusta dinamicamente o overlap do chopping baseado na complexidade local da imagem. Esta feature melhora **tanto velocidade quanto qualidade** sem aumentar significativamente o uso de memória.
+We implemented **Smart Chopping with Adaptive Overlap**, an improvement that dynamically adjusts the chopping overlap based on the local complexity of the image. This feature improves **both speed and quality** without significantly increasing memory usage.
 
-### O Que Foi Implementado
+### What Was Implemented
 
-#### **Smart Chopping com Overlap Adaptativo** ✅
+#### **Smart Chopping with Adaptive Overlap** ✅
 
-**Localização**: `utils/util_smart_chopping.py`, integrado em `sampler_invsr.py`
+**Location**: `utils/util_smart_chopping.py`, integrated in `sampler_invsr.py`
 
-**Como Funciona**:
+**How It Works**:
 
-1. **Análise de Complexidade Local**:
-   - Pré-computa um mapa de complexidade da imagem inteira
-   - Analisa cada região antes de processar
-   - Usa as mesmas métricas do scheduler adaptativo (variância, gradientes, entropia)
+1. **Local Complexity Analysis**:
+   - Pre-computes a complexity map of the entire image
+   - Analyzes each region before processing
+   - Uses the same metrics as the adaptive scheduler (variance, gradients, entropy)
 
-2. **Overlap Adaptativo**:
-   - **Regiões simples** (complexidade baixa): Overlap menor (25-30%) → **Mais rápido**
-   - **Regiões complexas** (complexidade alta): Overlap maior (40-50%) → **Melhor qualidade**
-   - Overlap ajustado dinamicamente para cada região
+2. **Adaptive Overlap**:
+   - **Simple regions** (low complexity): Lower overlap (25-30%) → **Faster**
+   - **Complex regions** (high complexity): Higher overlap (40-50%) → **Better quality**
+   - Overlap adjusted dynamically for each region
 
 3. **Attention-Guided Blending**:
-   - Calcula mapas de atenção para cada patch processado
-   - Usa atenção para guiar o blending entre patches
-   - Combina blending Gaussiano (70%) com atenção (30%)
-   - Preserva melhor detalhes importantes
+   - Computes attention maps for each processed patch
+   - Uses attention to guide blending between patches
+   - Combines Gaussian blending (70%) with attention (30%)
+   - Better preserves important details
 
-**Vantagens**:
-- ✅ **Mais rápido**: Reduz overlap em regiões simples (até 30-40% mais rápido)
-- ✅ **Melhor qualidade**: Aumenta overlap em regiões complexas (melhor preservação de bordas)
-- ✅ **Sem aumento de memória**: Apenas ajusta o stride, não adiciona buffers grandes
-- ✅ **Blending inteligente**: Attention-guided blending preserva detalhes importantes
+**Advantages**:
+- ✅ **Faster**: Reduces overlap in simple regions (up to 30-40% faster)
+- ✅ **Better quality**: Increases overlap in complex regions (better edge preservation)
+- ✅ **No memory increase**: Only adjusts stride, doesn't add large buffers
+- ✅ **Smart blending**: Attention-guided blending preserves important details
 
-### Integração
+### Integration
 
-#### Arquivos Criados/Modificados
+#### Files Created/Modified
 
-1. **`utils/util_smart_chopping.py`** (NOVO)
-   - `ImageSpliterAdaptive`: Classe que estende `ImageSpliterTh`
-   - `compute_local_complexity()`: Análise de complexidade local
-   - `compute_adaptive_stride()`: Cálculo de stride adaptativo
-   - Blending com atenção integrado
+1. **`utils/util_smart_chopping.py`** (NEW)
+   - `ImageSpliterAdaptive`: Class that extends `ImageSpliterTh`
+   - `compute_local_complexity()`: Local complexity analysis
+   - `compute_adaptive_stride()`: Adaptive stride calculation
+   - Integrated attention blending
 
-2. **`sampler_invsr.py`** (MODIFICADO)
-   - Integração do smart chopping quando habilitado
-   - Cálculo de attention maps para blending
-   - Fallback para chopping tradicional se desabilitado
+2. **`sampler_invsr.py`** (MODIFIED)
+   - Smart chopping integration when enabled
+   - Attention maps calculation for blending
+   - Fallback to traditional chopping if disabled
 
-3. **`app.py`** (MODIFICADO)
-   - Checkbox "Smart Chopping"
-   - Sliders para min/max overlap (visíveis quando habilitado)
-   - Integração completa na interface Gradio
+3. **`app.py`** (MODIFIED)
+   - "Smart Chopping" checkbox
+   - Min/max overlap sliders (visible when enabled)
+   - Complete Gradio interface integration
 
-### Comparação
+### Comparison
 
-#### Chopping Tradicional vs Smart Chopping
+#### Traditional Chopping vs Smart Chopping
 
-| Aspecto | Tradicional | Smart Chopping |
-|---------|-------------|----------------|
-| **Overlap** | Fixo 50% | Adaptativo 25-50% |
-| **Velocidade** | Base | +20-40% mais rápido (regiões simples) |
-| **Qualidade** | Boa | Melhor (regiões complexas) |
-| **Memória** | Base | Sem aumento significativo |
-| **Blending** | Gaussiano | Gaussiano + Atenção |
+| Aspect | Traditional | Smart Chopping |
+|--------|-------------|----------------|
+| **Overlap** | Fixed 50% | Adaptive 25-50% |
+| **Speed** | Base | +20-40% faster (simple regions) |
+| **Quality** | Good | Better (complex regions) |
+| **Memory** | Base | No significant increase |
+| **Blending** | Gaussian | Gaussian + Attention |
 
-#### Exemplo de Ajuste de Overlap
+#### Overlap Adjustment Example
 
 ```
-Imagem com céu simples (complexidade baixa):
-- Overlap: 25% → Menos patches processados → Mais rápido
+Image with simple sky (low complexity):
+- Overlap: 25% → Fewer patches processed → Faster
 
-Imagem com textura complexa (complexidade alta):
-- Overlap: 50% → Mais patches processados → Melhor qualidade
+Image with complex texture (high complexity):
+- Overlap: 50% → More patches processed → Better quality
 
-Imagem mista:
-- Céu: 25% overlap
-- Textura: 50% overlap
-- Adaptativo por região!
+Mixed image:
+- Sky: 25% overlap
+- Texture: 50% overlap
+- Adaptive per region!
 ```
 
-### Como Usar
+### How to Use
 
-#### Via Interface Gradio
+#### Via Gradio Interface
 
-1. Marque a checkbox **"Smart Chopping"**
-2. Ajuste os sliders (opcional):
-   - **Min Overlap** (15-40%): Overlap mínimo para regiões simples
-   - **Max Overlap** (40-60%): Overlap máximo para regiões complexas
-3. O sistema automaticamente ajustará o overlap baseado na complexidade
+1. Check the **"Smart Chopping"** checkbox
+2. Adjust sliders (optional):
+   - **Min Overlap** (15-40%): Minimum overlap for simple regions
+   - **Max Overlap** (40-60%): Maximum overlap for complex regions
+3. The system will automatically adjust overlap based on complexity
 
-#### Via Código Python
+#### Via Python Code
 
 ```python
 from omegaconf import OmegaConf
 from sampler_invsr import InvSamplerSR
 
-# Carregar configuração
+# Load configuration
 configs = OmegaConf.load("./configs/sample-sd-turbo.yaml")
 
-# Habilitar smart chopping
+# Enable smart chopping
 configs.smart_chopping = True
-configs.min_overlap = 0.25  # 25% overlap mínimo
-configs.max_overlap = 0.50  # 50% overlap máximo
-configs.attention_blending = True  # Blending com atenção
+configs.min_overlap = 0.25  # 25% minimum overlap
+configs.max_overlap = 0.50  # 50% maximum overlap
+configs.attention_blending = True  # Attention blending
 
-# Criar sampler e processar
+# Create sampler and process
 sampler = InvSamplerSR(configs)
 sampler.inference('input_image.png', 'output_dir', bs=1)
 ```
 
-### 💡 Vantagens da Melhoria
+### 💡 Improvement Advantages
 
-#### 1. **Velocidade Melhorada**
-- Regiões simples processadas mais rápido (menos overlap)
-- Redução de 20-40% no tempo total para imagens com muitas regiões simples
-- Menos patches processados onde não é necessário
+#### 1. **Improved Speed**
+- Simple regions processed faster (less overlap)
+- 20-40% reduction in total time for images with many simple regions
+- Fewer patches processed where not necessary
 
-#### 2. **Qualidade Melhorada**
-- Regiões complexas recebem mais atenção (mais overlap)
-- Melhor preservação de bordas e detalhes
-- Blending com atenção foca em áreas importantes
+#### 2. **Improved Quality**
+- Complex regions receive more attention (more overlap)
+- Better edge and detail preservation
+- Attention blending focuses on important areas
 
-#### 3. **Eficiência**
-- Não aumenta memória significativamente
-- Apenas ajusta o stride, não adiciona buffers extras
-- Pré-computação de complexidade é eficiente
+#### 3. **Efficiency**
+- Does not significantly increase memory
+- Only adjusts stride, doesn't add extra buffers
+- Complexity pre-computation is efficient
 
-#### 4. **Adaptativo**
-- Cada região recebe tratamento otimizado
-- Baseado em análise real da complexidade
-- Funciona bem com imagens mistas (simples + complexas)
+#### 4. **Adaptive**
+- Each region receives optimized treatment
+- Based on real complexity analysis
+- Works well with mixed images (simple + complex)
 
-### Resultados Esperados
+### Expected Results
 
-#### Velocidade
-- **Imagens simples**: 30-40% mais rápido
-- **Imagens complexas**: Mesma velocidade ou ligeiramente mais rápido
-- **Imagens mistas**: 20-30% mais rápido (média)
+#### Speed
+- **Simple images**: 30-40% faster
+- **Complex images**: Same speed or slightly faster
+- **Mixed images**: 20-30% faster (average)
 
-#### Qualidade
-- **Regiões simples**: Qualidade similar (overlap menor suficiente)
-- **Regiões complexas**: +3-5% melhor qualidade (mais overlap)
-- **Bordas**: Melhor preservação devido ao attention blending
+#### Quality
+- **Simple regions**: Similar quality (lower overlap sufficient)
+- **Complex regions**: +3-5% better quality (more overlap)
+- **Edges**: Better preservation due to attention blending
 
-#### Memória
-- **Uso adicional**: <50MB (mapa de complexidade temporário)
-- **Sem impacto**: Não aumenta uso de VRAM durante processamento
+#### Memory
+- **Additional usage**: <50MB (temporary complexity map)
+- **No impact**: Does not increase VRAM usage during processing
 
-### Detalhes Técnicos
+### Technical Details
 
-#### Cálculo de Overlap Adaptativo
+#### Adaptive Overlap Calculation
 
 ```python
-# Complexidade local (0-1)
+# Local complexity (0-1)
 local_complexity = compute_local_complexity(region)
 
-# Mapear para overlap (25-50%)
+# Map to overlap (25-50%)
 overlap = min_overlap + (max_overlap - min_overlap) * local_complexity
 
-# Converter para stride
+# Convert to stride
 stride = patch_size * (1.0 - overlap)
 ```
 
 #### Attention-Guided Blending
 
-O blending combina:
-- **70% Gaussian weight**: Suavização suave tradicional
-- **30% Attention weight**: Foco em regiões importantes (bordas, texturas)
+The blending combines:
+- **70% Gaussian weight**: Traditional smooth blending
+- **30% Attention weight**: Focus on important regions (edges, textures)
 
-Isso resulta em melhor preservação de detalhes importantes enquanto mantém suavidade.
+This results in better preservation of important details while maintaining smoothness.
 
-### Notas
+### Notes
 
-- **Recomendado para**: Imagens grandes ou com muitas regiões simples
-- **Melhor quando combinado com**: Adaptive Scheduler (sinergia)
-- **Overlap range**: 25-50% é o ideal (testado)
-- **Performance**: Overhead mínimo na análise de complexidade
+- **Recommended for**: Large images or images with many simple regions
+- **Best when combined with**: Adaptive Scheduler (synergy)
+- **Overlap range**: 25-50% is ideal (tested)
+- **Performance**: Minimal overhead in complexity analysis
 
-### Conclusão
+### Conclusion
 
-O Smart Chopping oferece **melhor velocidade E qualidade** adaptativamente, sendo especialmente útil para:
+Smart Chopping offers **better speed AND quality** adaptively, being especially useful for:
 
-- **Imagens grandes**: Reduz tempo de processamento significativamente
-- **Imagens mistas**: Otimiza cada região individualmente
-- **Preservação de detalhes**: Attention blending melhora bordas e texturas
+- **Large images**: Significantly reduces processing time
+- **Mixed images**: Optimizes each region individually
+- **Detail preservation**: Attention blending improves edges and textures
 
 
 
@@ -388,7 +506,6 @@ New Architecture
 
 
 
-Fimmmm
 
 
 ## Schedule  
