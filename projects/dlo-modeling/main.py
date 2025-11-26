@@ -34,14 +34,14 @@ SEED = 42
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Model parameters
-D_MODEL = 384
-NHEAD = 8
-NUM_LAYERS = 6      
-DIM_FF = D_MODEL * 4 
+D_MODEL = 64
+NHEAD = 4
+NUM_LAYERS = 4
+DIM_FF = D_MODEL * 2
 
 # Training parameters
-BATCH_SIZE = 32     
-EPOCHS = 50 
+BATCH_SIZE = 256    
+EPOCHS = 10 
 LR = 1e-3           
 
 def get_model_class_and_params(model_name, seq_len, use_dense, act_dim):
@@ -81,7 +81,7 @@ def main():
     all_test_losses_rollout = {} 
     
     # Updated default path
-    data_path = '<INSERT_YOU_DATA_PATH_HERE>'
+    data_path = 'src/data/rope_state_action_next_state_mil.npz'
     
     # 1. Load Data (Raw)
     try:
@@ -109,7 +109,7 @@ def main():
     tgt_test_raw = torch.tensor(tgt_test_raw_np, dtype=torch.float32)
     
     # --- Define Experiments ---
-    experiment_types = ['standard', 'com_plus_standard']
+    experiment_types = ['com_plus_standard']
     standard_model_names = ["BiLSTM", "BERT", "Transformer"]
 
     for norm_type in experiment_types:
