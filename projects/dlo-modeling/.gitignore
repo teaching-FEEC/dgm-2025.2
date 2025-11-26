@@ -1,0 +1,7 @@
+projects/dlo-modeling/src/data/rope_state_action_next_state_mil.npz
+*.npz
+*.npz
+projects/dlo-modeling/simulation/rope_state_action_next_state.npz
+__pycache__/
+
+*.pth
