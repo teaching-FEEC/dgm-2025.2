@@ -25,13 +25,8 @@ Initial tests are being conducted on data using generative adversarial networks 
 
 This project will be developed in Python, using TensorFlow with the Keras API for model construction and training, Pandas and NumPy for data manipulation, Scikit-learn for preprocessing (scaling), and Matplotlib/Seaborn for visualizations, all within a Google Colab (for access to GPUs and to facilitate collaboration) or local VS Code/Jupyter environment.
 
-## Schedule
-| Stage | Duration	| Description
-|:---:|:---:|:---:|
-| Literature review and data processing | 1-2 weeks (starting on September 17) | Theoretical deep dive into GANs for time series, consolidation, and final processing of datasets for feature creation.|
-| Training of models | 3-4 weeks (starting on September 30) | Construction and training of generative models (generator and discriminator), testing with data samples, verification of metrics and output data quality. |
-| Analysis and validation of final results, conclusions, and suggestions for improvement | 2-3 weeks (starting October 22) | Execution of evaluation tests (qualitative and quantitative) and comparison between trained models. |
-| Writing of the final article/report | 1-2 weeks (starting November 14) | Organization of data in the final document on GitHub. |
+## Geração dos dados sintéticos
+Como formar de gerar os dados sintéticos foram escolhidos 3 modelos: XGBoost (Extreme Gradient Boosting), LSTM (Long Short-Term Memory) e TNN (Transformer Neural Network).
 
 ## Link to the presentation slides
 Link: https://docs.google.com/presentation/d/1kFf_0EhQC6g1P-hkWeMTLLw7tgoicSCRWhuINDGripE/edit?usp=sharing
