@@ -210,16 +210,9 @@ The application provides two main tabs:
 - Processing time depends on image size, number of steps, and hardware
 - Results are saved in the `invsr_output/` directory (for single images) or in a subdirectory of the input folder (for batch processing)
 
-## E2 - PARTIAL SUBMISSION 
-In this partial submission (E2), this section presents the exploratory phase of the project, in which different implementation environments were tested and preliminary results were analyzed.
 
-Two approaches were initially evaluated for implementing the image super-resolution model. After comparative tests, the both environment was selected as the main platform due to its superior performance, stability, and control during model execution.
 
-All subsequent experiments — including training, validation, and performance evaluation. The validation process focused on analyzing key performance metrics, such as PSNR (Peak Signal-to-Noise Ratio), SSIM (Structural Similarity Index), and LPIPS (Learned Perceptual Image Patch Similarity), to assess the visual quality and fidelity of the generated images. These metrics and validation outputs can be viewed in detail at the following link: https://github.com/nubiasidene/dgm-2025.2-g4/tree/main/projects/super_resolution/validation
-
-At this stage, the obtained results represent partial progress, focused on validating the methodological choices and ensuring the consistency of the implementation pipeline. The next steps will include refining the model’s architecture, performing additional experiments, and broadening the evaluation metrics to better capture perceptual and quantitative aspects of super-resolution performance.
-
-## E3 - PARTIAL SUBMISSION
+## Modified InvSR
 
 This section presents the implementation of advanced features and improvements to the InvSR model.
 
@@ -361,18 +354,6 @@ We implemented **Smart Chopping with Adaptive Overlap**, an improvement that dyn
    - Min/max overlap sliders (visible when enabled)
    - Complete Gradio interface integration
 
-### Comparison
-
-#### Traditional Chopping vs Smart Chopping
-
-| Aspect | Traditional | Smart Chopping |
-|--------|-------------|----------------|
-| **Overlap** | Fixed 50% | Adaptive 25-50% |
-| **Speed** | Base | +20-40% faster (simple regions) |
-| **Quality** | Good | Better (complex regions) |
-| **Memory** | Base | No significant increase |
-| **Blending** | Gaussian | Gaussian + Attention |
-
 #### Overlap Adjustment Example
 
 ```
@@ -418,43 +399,6 @@ sampler = InvSamplerSR(configs)
 sampler.inference('input_image.png', 'output_dir', bs=1)
 ```
 
-### 💡 Improvement Advantages
-
-#### 1. **Improved Speed**
-- Simple regions processed faster (less overlap)
-- 20-40% reduction in total time for images with many simple regions
-- Fewer patches processed where not necessary
-
-#### 2. **Improved Quality**
-- Complex regions receive more attention (more overlap)
-- Better edge and detail preservation
-- Attention blending focuses on important areas
-
-#### 3. **Efficiency**
-- Does not significantly increase memory
-- Only adjusts stride, doesn't add extra buffers
-- Complexity pre-computation is efficient
-
-#### 4. **Adaptive**
-- Each region receives optimized treatment
-- Based on real complexity analysis
-- Works well with mixed images (simple + complex)
-
-### Expected Results
-
-#### Speed
-- **Simple images**: 30-40% faster
-- **Complex images**: Same speed or slightly faster
-- **Mixed images**: 20-30% faster (average)
-
-#### Quality
-- **Simple regions**: Similar quality (lower overlap sufficient)
-- **Complex regions**: +3-5% better quality (more overlap)
-- **Edges**: Better preservation due to attention blending
-
-#### Memory
-- **Additional usage**: <50MB (temporary complexity map)
-- **No impact**: Does not increase VRAM usage during processing
 
 ### Technical Details
 
@@ -471,38 +415,17 @@ overlap = min_overlap + (max_overlap - min_overlap) * local_complexity
 stride = patch_size * (1.0 - overlap)
 ```
 
-#### Attention-Guided Blending
-
-The blending combines:
-- **70% Gaussian weight**: Traditional smooth blending
-- **30% Attention weight**: Focus on important regions (edges, textures)
-
-This results in better preservation of important details while maintaining smoothness.
-
-### Notes
-
-- **Recommended for**: Large images or images with many simple regions
-- **Best when combined with**: Adaptive Scheduler (synergy)
-- **Overlap range**: 25-50% is ideal (tested)
-- **Performance**: Minimal overhead in complexity analysis
-
-### Conclusion
-
-Smart Chopping offers **better speed AND quality** adaptively, being especially useful for:
-
-- **Large images**: Significantly reduces processing time
-- **Mixed images**: Optimizes each region individually
-- **Detail preservation**: Attention blending improves edges and textures
-
 
 
 
 ### CHANGES ON MODEL ARCHITECTURE
-Original Architecture
-<img width="490" height="1648" alt="arquitetura0" src="https://github.com/user-attachments/assets/d8452d3a-3204-44f5-9de8-4318bec8ca90" />
+Original Architecture:
 
-New Architecture
+<img width="744" height="245" alt="image" src="https://github.com/user-attachments/assets/4a6cc222-ea0b-479f-8dd2-66c510cd5f25" />
 
+New Architecture:
+
+<img width="739" height="415" alt="image" src="https://github.com/user-attachments/assets/ef7f46cc-4b0f-4c3e-823f-62e99498fb31" />
 
 
 
