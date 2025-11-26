@@ -29,12 +29,12 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Training parameters
 BATCH_SIZE = 256    
-EPOCHS = 20         
+EPOCHS = 50         
 LR = 1e-4           
 
 # Diffusion parameters
 DIFFUSION_STEPS = 100  # Increased to 100 for better stability
-BASE_DIM = 64         
+BASE_DIM = 200         
 
 def main():
     set_seed(SEED)

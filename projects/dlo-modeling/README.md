@@ -34,7 +34,7 @@ Develop a **dynamics model** capable of predicting the future state and **quanti
 
 The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow for our most successful model, the **Dreamer**, is described in the following picture. Workflows for other models can be found in the attached presentation. 
 
-![Dreamer-Architecture](path/to/image.jpg)
+![Dreamer-Architecture](dreamer.jpeg)
 
 ### 3.2 Dataset Generation
 
@@ -70,6 +70,10 @@ Three model architectures were evaluated to learn the rope dynamics:
 - The structure allows for the optional inclusion of a BiLSTM layer after the decoder to further capture temporal dependencies before predicting the final state delta.
 
 #### (d) Diffusion
+
+- The **Rope Diffusion** model utilizes a **Conditional 1D U-Net** architecture, specifically adapted to treat the rope's links as a spatial sequence.
+- It operates as a **Denoising Diffusion Probabilistic Model (DDPM)**. Instead of directly predicting the next state coordinates in a single forward pass, the model learns to iteratively reverse a diffusion process, starting from pure Gaussian noise and refining it step-by-step into the next state configuration.
+- The generation process is explicitly **conditioned** on the current rope state and the action vector via feature concatenation and time embeddings, ensuring the denoising trajectory is physically grounded.
 
 #### (e) Dreamer
 
@@ -123,7 +127,7 @@ The tested model families and the corresponding results were the following:
 | BiLSTM  | 1.12M |  1.43 |
 | BERT  | 1.9M |  1.43 |
 | Transformer  | 407K |  1.45 |
-| Diffusion  | 4 |  3 |
+| Diffusion  | 700K |  1.69 |
 | Dreamer  | 11M |  1.16 |
 
 
@@ -144,7 +148,6 @@ The clustering of MSE results for the BiLSTM, BERT, and Transformer models (all 
 #### Rollout Validation
 The ability of the Dreamer model to perform effective "rollouts" (simulating long-horizon behaviors without the MuJoCo engine) validates the World Model approach as a promising foundation for a **model-based reinforcement learning (MBRL)** agent focused on risk-aware DLO control.
 
-The experiments highlight that...
 
 ## 6. Conclusion
 
@@ -153,7 +156,8 @@ This final submission presents the progress towards building a **probabilistic m
 Five neural architectures—**BiLSTM, BERT, Transformer, Diffusion Models, and Dreamer**—were evaluated. Our core findings confirm that:
 
 1.  **Temporal Dynamics are Essential:** Models that incorporated temporal dynamics across multiple manipulation steps, most notably **Dreamer**, yielded **substantial improvements** in next-state predictions, particularly in **long-horizon autoregressive scenarios**.
-2.  **World Models are Promising:** The **Dreamer** model emerged as the most successful approach, validating **World Models** for physical dynamics. Its superiority stems from its ability to:
+2.  **Capacity Constraints in Diffusion:** While **Diffusion Models** offer a theoretical advantage in generating sharp, non-blurry states by modeling the data distribution, the experimental **~700k parameter** model proved insufficient. The results indicate that diffusion architectures are highly sensitive to **model capacity**; to effectively capture the fine-grained physical constraints of the rope without underfitting, these models require significantly **larger networks** compared to the more efficient regression-based baselines.
+3.  **World Models are Promising:** The **Dreamer** model emerged as the most successful approach, validating **World Models** for physical dynamics. Its superiority stems from its ability to:
     * Capture complex features within a **dense, meaningful latent space**.
     * Explicitly **manage uncertainty** by mapping stochastic states to **probability distributions**, directly addressing the project's goal of quantifying action risk.
 
