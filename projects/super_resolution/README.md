@@ -20,7 +20,7 @@ This project originated in the context of the graduate course *IA376N - Generati
 | Núbia Sidene Almeida das Virgens  | 299001  | Computing Engineering |  
 
 ## Project Summary Description  
-
+Our project does the sam
 The project addresses the problem of **image super-resolution**, a fundamental task in computer vision that aims to reconstruct high-quality images from their low-resolution counterparts. This problem has strong practical relevance in areas such as:
 - **Low-budget devices**: Get one poor picture and enhance it
 - **Medical Imaging**: Enhancing diagnostic image quality
@@ -212,47 +212,48 @@ The application provides two main tabs:
 
 
 
-## Modified InvSR
+## InvSR vs Our Model
+<img width="742" height="706" alt="architecture" src="https://github.com/user-attachments/assets/19a24cf6-33b6-4c03-b383-8b6689b45f1e" />
 
-This section presents the implementation of advanced features and improvements to the InvSR model.
 
-### Key Features Implemented
 
-#### 1. Adaptive Scheduler
+## Key features implemented on the model
+
+### 1. Adaptive Scheduler
 - Automatically adjusts timesteps based on image complexity
 - Location: `utils/util_adaptive.py`
 - Usage: Enable "Adaptive Scheduler" checkbox in app.py
 
-#### 2. Attention-Guided Fusion
+### 2. Attention-Guided Fusion
 - Combines multiple results using attention maps
 - Methods: 'weighted' (smooth) or 'max' (aggressive)
 - Location: `utils/util_adaptive.py`
 - Usage: Enable "Attention-Guided Fusion" checkbox
 
-#### 3. Smart Chopping
+### 3. Smart Chopping
 - Adaptive overlap based on local complexity
 - Overlap range: 25-75% (configurable)
 - Location: `utils/util_smart_chopping.py`
 - Usage: Enable "Smart Chopping" checkbox
 
-#### 4. Hybrid Color Fixing
+### 4. Hybrid Color Fixing
 - Combines YCbCr, Wavelet, and Histogram Matching
 - Modes: 'adaptive' (weighted) or 'best' (selection)
 - Location: `utils/util_color_fix.py`
 - Default: 'hybrid' method
 
-#### 5. Edge-Preserving Enhancement
+### 5. Edge-Preserving Enhancement
 - Enhances edges while preserving smooth regions
 - Uses Sobel operators for edge detection
 - Location: `utils/util_enhancement.py`
 - Usage: Enable "Edge-Preserving Enhancement" checkbox
 
-#### 6. Adaptive Guidance Scale
+### 6. Adaptive Guidance Scale
 - Adjusts cfg_scale based on image complexity
 - Location: `utils/util_enhancement.py`
 - Usage: Enable "Adaptive Guidance Scale" checkbox
 
-### File Structure
+## File Structure
 
 ```
 src/
@@ -274,6 +275,14 @@ src/
     ├── vgg16_sdturbo_lpips.pth
     └── models--stabilityai--sd-turbo/
 ```
+
+## Results by Our Model
+Observe how the aliasing (or 'jagged edges') present on the stairs in the following image is reduced.
+<br>
+<img width="499" height="331" alt="sample1" src="https://github.com/user-attachments/assets/7faa3285-c23d-4259-a11c-b1c19d0bb212" />
+<br>
+<br>
+<img width="504" height="202" alt="sample2" src="https://github.com/user-attachments/assets/51351252-cfda-49c3-81dd-6c28cdf28452" />
 
 ### Important Notes
 
@@ -297,135 +306,6 @@ src/
 6. Edge-preserving enhancement (if enabled)
 7. Output
 
-
-## Smart Chopping - Adaptive Overlap Implementation
-
-### Summary
-
-We implemented **Smart Chopping with Adaptive Overlap**, an improvement that dynamically adjusts the chopping overlap based on the local complexity of the image. This feature improves **both speed and quality** without significantly increasing memory usage.
-
-### What Was Implemented
-
-#### **Smart Chopping with Adaptive Overlap** 
-
-**Location**: `utils/util_smart_chopping.py`, integrated in `sampler_invsr.py`
-
-**How It Works**:
-
-1. **Local Complexity Analysis**:
-   - Pre-computes a complexity map of the entire image
-   - Analyzes each region before processing
-   - Uses the same metrics as the adaptive scheduler (variance, gradients, entropy)
-
-2. **Adaptive Overlap**:
-   - **Simple regions** (low complexity): Lower overlap (25-30%) → **Faster**
-   - **Complex regions** (high complexity): Higher overlap (40-50%) → **Better quality**
-   - Overlap adjusted dynamically for each region
-
-3. **Attention-Guided Blending**:
-   - Computes attention maps for each processed patch
-   - Uses attention to guide blending between patches
-   - Combines Gaussian blending (70%) with attention (30%)
-   - Better preserves important details
-
-**Advantages**:
--  **Faster**: Reduces overlap in simple regions (up to 30-40% faster)
--  **Better quality**: Increases overlap in complex regions (better edge preservation)
--  **No memory increase**: Only adjusts stride, doesn't add large buffers
--  **Smart blending**: Attention-guided blending preserves important details
-
-### Integration
-
-#### Files Created/Modified
-
-1. **`utils/util_smart_chopping.py`** (NEW)
-   - `ImageSpliterAdaptive`: Class that extends `ImageSpliterTh`
-   - `compute_local_complexity()`: Local complexity analysis
-   - `compute_adaptive_stride()`: Adaptive stride calculation
-   - Integrated attention blending
-
-2. **`sampler_invsr.py`** (MODIFIED)
-   - Smart chopping integration when enabled
-   - Attention maps calculation for blending
-   - Fallback to traditional chopping if disabled
-
-3. **`app.py`** (MODIFIED)
-   - "Smart Chopping" checkbox
-   - Min/max overlap sliders (visible when enabled)
-   - Complete Gradio interface integration
-
-#### Overlap Adjustment Example
-
-```
-Image with simple sky (low complexity):
-- Overlap: 25% → Fewer patches processed → Faster
-
-Image with complex texture (high complexity):
-- Overlap: 50% → More patches processed → Better quality
-
-Mixed image:
-- Sky: 25% overlap
-- Texture: 50% overlap
-- Adaptive per region!
-```
-
-### How to Use
-
-#### Via Gradio Interface
-
-1. Check the **"Smart Chopping"** checkbox
-2. Adjust sliders (optional):
-   - **Min Overlap** (15-40%): Minimum overlap for simple regions
-   - **Max Overlap** (40-60%): Maximum overlap for complex regions
-3. The system will automatically adjust overlap based on complexity
-
-#### Via Python Code
-
-```python
-from omegaconf import OmegaConf
-from sampler_invsr import InvSamplerSR
-
-# Load configuration
-configs = OmegaConf.load("./configs/sample-sd-turbo.yaml")
-
-# Enable smart chopping
-configs.smart_chopping = True
-configs.min_overlap = 0.25  # 25% minimum overlap
-configs.max_overlap = 0.50  # 50% maximum overlap
-configs.attention_blending = True  # Attention blending
-
-# Create sampler and process
-sampler = InvSamplerSR(configs)
-sampler.inference('input_image.png', 'output_dir', bs=1)
-```
-
-
-### Technical Details
-
-#### Adaptive Overlap Calculation
-
-```python
-# Local complexity (0-1)
-local_complexity = compute_local_complexity(region)
-
-# Map to overlap (25-50%)
-overlap = min_overlap + (max_overlap - min_overlap) * local_complexity
-
-# Convert to stride
-stride = patch_size * (1.0 - overlap)
-```
-
-
-
-
-### CHANGES ON MODEL ARCHITECTURE
-Original Architecture:
-
-<img width="744" height="245" alt="image" src="https://github.com/user-attachments/assets/4a6cc222-ea0b-479f-8dd2-66c510cd5f25" />
-
-New Architecture:
-
-<img width="739" height="415" alt="image" src="https://github.com/user-attachments/assets/ef7f46cc-4b0f-4c3e-823f-62e99498fb31" />
 
 
 
