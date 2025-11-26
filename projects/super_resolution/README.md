@@ -284,6 +284,10 @@ Observe how the aliasing (or 'jagged edges') present on the stairs in the follow
 <br>
 <img width="504" height="202" alt="sample2" src="https://github.com/user-attachments/assets/51351252-cfda-49c3-81dd-6c28cdf28452" />
 
+## Evaluation Metrics
+<img width="2196" height="2753" alt="metrics" src="https://github.com/user-attachments/assets/c5d1b903-8511-4dd1-ac8d-59a28f053540" />
+
+
 ### Important Notes
 
 #### Differences Between Methods
