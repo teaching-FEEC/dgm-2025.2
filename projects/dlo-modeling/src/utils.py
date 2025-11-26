@@ -769,84 +769,118 @@ def animate_dreamer_rollout(
     train_std: torch.Tensor = None
 ) -> HTML:
     """
-    Generates an HTML animation of a Dreamer model rollout in 3D,
-    comparing predictions to ground truth.
-
-    Args:
-        model: The trained DreamerRopeModel.
-        demo_dataset: RopeSequenceDataset to pull data from.
-        start_idx: Which sequence in the dataset to use.
-        steps: How many steps to animate.
-        ...
+    Generates an HTML animation of a Dreamer model rollout in 3D.
+    - Stitches dataset chunks to allow long-horizon evaluation.
+    - Supports both Dreaming (Autoregressive) and Reconstruction (Teacher Forcing).
     """
     model.eval()
     device = next(model.parameters()).device
 
-    # Get the sequence data
-    # The dataset __getitem__ returns the sequence
-    states_seq, actions_seq = demo_dataset[start_idx]
-    states_seq = states_seq.to(device)
-    actions_seq = actions_seq.to(device)
+    # ==========================================
+    # PHASE 1: Data Stitching
+    # ==========================================
+    # We first collect enough ground truth data to cover the requested 'steps'.
+    
+    collected_states = []
+    collected_actions = []
+    current_len = 0
+    current_idx = start_idx
 
-    # --- Data Generation ---
-    num_frames = min(steps + 1, len(states_seq))
+    print(f"Stitching data starting from index {start_idx}...")
+    
+    while current_len <= steps:
+        if current_idx >= len(demo_dataset):
+            print("Warning: Reached end of dataset before fulfilling step count.")
+            break
+            
+        s, a = demo_dataset[current_idx]
+        collected_states.append(s.to(device))
+        collected_actions.append(a.to(device))
+        
+        current_len += len(s)
+        current_idx += 1
+
+    # Concatenate into one long sequence (Time, Nodes, Dim)
+    states_long = torch.cat(collected_states, dim=0)
+    actions_long = torch.cat(collected_actions, dim=0)
+
+    # Trim to exactly the requested length + 1 (for safety)
+    # We need at least 'steps + 1' to show start -> end
+    max_frames = min(steps + 1, len(states_long))
+    states_long = states_long[:max_frames]
+    actions_long = actions_long[:max_frames]
+
+    print(f"Stitched Sequence Length: {len(states_long)} frames")
+
+    # ==========================================
+    # PHASE 2: Model Inference
+    # ==========================================
+    predictions_list = []
 
     with torch.no_grad():
         if teacher_forcing:
-            # "Observe" every step and reconstruct.
-            # This shows how well the model can autoencode.
-            # We must ensure we only feed in the number of frames we will animate
-            recon_states, _, _ = model(
-                states_seq[:num_frames].unsqueeze(0),
-                actions_seq[:num_frames].unsqueeze(0)
-            )
+            # --- PATH A: Teacher Forcing (Reconstruction) ---
+            # The model sees the Ground Truth State at every step.
+            # We usually process this in batch mode.
+            
+            print("Mode: Teacher Forcing (Reconstruction)")
+            
+            # Add batch dimension (1, T, Nodes, Dim)
+            states_in = states_long.unsqueeze(0)
+            actions_in = actions_long.unsqueeze(0)
+            
+            # The model's forward pass typically returns reconstructions
+            # Ensure your model handles long sequences (T=100) without crashing memory
+            recon_states, _, _ = model(states_in, actions_in)
+            
+            # Remove batch dim
             predictions = recon_states.squeeze(0).cpu().numpy()
 
         else:
-            # Autoregressive "Dream" rollout
-            predictions_list = []
+            # --- PATH B: Dreaming (Autoregressive) ---
+            # The model only sees S_0. Afterwards, it uses its own predictions.
+            
+            print("Mode: Dreaming (Autoregressive)")
 
-            # 1. Observe S_0 to get initial latent state
-            S_0 = states_seq[0]
-            A_minus_1 = torch.zeros(4, device=device)
-
-            # Get the initial (B=1) hidden states
+            # 1. Initialization (Observe S_0)
+            S_0 = states_long[0]
+            # Zero action for the very first observation (dummy)
+            A_minus_1 = torch.zeros_like(actions_long[0]) 
+            
             h_0, c_0, z_0 = model.get_initial_hidden_state(1, device)
+            h_t, c_t, z_t = h_0.squeeze(0), c_0.squeeze(0), z_0.squeeze(0)
 
-            # Squeeze to 1D (D,) to match the flawed unbatching logic
-            # in the model's observe/dream methods.
-            h_t = h_0.squeeze(0)
-            c_t = c_0.squeeze(0)
-            z_t = z_0.squeeze(0)
+            # Observe the start state
+            h_t, c_t, z_t, _, _ = model.observe(S_0, A_minus_1, h_t, c_t, z_t)
+            
+            predictions_list.append(S_0.cpu().numpy())
 
-            # The observe method will internally re-batch these to (1, D)
-            # because S_0 is unbatched.
-            h_t, c_t, z_t, _, _ = model.observe(
-                S_0, A_minus_1, h_t, c_t, z_t
-            )
-
-            predictions_list.append(S_0.cpu().numpy()) # Add the ground truth start
-
-
-            # 2. Loop and dream
-            for i in range(num_frames - 1): # -1 because S_0 is already added
-                A_t = actions_seq[i]
-
+            # 2. Dream Loop
+            # Iterate through the STITCHED actions
+            for i in range(len(states_long) - 1):
+                A_t = actions_long[i]
+                
                 # Dream one step
                 S_hat_tp1, h_tp1, c_tp1, z_tp1 = model.dream(h_t, c_t, z_t, A_t)
-
+                
                 predictions_list.append(S_hat_tp1.cpu().numpy())
-
-                # Update latent state for next dream
+                
+                # Update latents
                 h_t, c_t, z_t = h_tp1, c_tp1, z_tp1
 
             predictions = np.array(predictions_list)
 
-    # Get ground truth for comparison
-    ground_truth = states_seq.cpu().numpy()
+    # ==========================================
+    # PHASE 3: Animation
+    # ==========================================
+    ground_truth = states_long.cpu().numpy()
+    
+    # Safety Clip: Ensure Pred and GT are exactly same size
+    num_frames = min(len(predictions), len(ground_truth))
+    predictions = predictions[:num_frames]
+    ground_truth = ground_truth[:num_frames]
 
     # --- Denormalization ---
-    # Use mean/std from the dataset object
     if train_mean is None and train_std is None:
         if hasattr(demo_dataset, 'mean') and hasattr(demo_dataset, 'std'):
             mean_np = demo_dataset.mean.cpu().numpy().squeeze()
@@ -854,63 +888,50 @@ def animate_dreamer_rollout(
             predictions = predictions * std_np + mean_np
             ground_truth = ground_truth * std_np + mean_np
 
-    # --- Animation ---
-    plt.close('all') # Close previous plots
+    # --- Plotting Setup ---
+    plt.close('all')
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # Find global bounds for all data to set axis limits
-    all_data = np.concatenate([predictions[:num_frames], ground_truth[:num_frames]], axis=0)
-    center = all_data.mean(axis=(0, 1))
-    # Handle potential NaNs if data is bad
+    all_data = np.concatenate([predictions, ground_truth], axis=0)
     if np.isnan(all_data).any():
-        print("Warning: NaN detected in animation data. Skipping.")
-        return HTML("Error: NaN in animation data.")
+        return HTML("Error: NaN in data")
+        
+    center = all_data.mean(axis=(0, 1))
     max_range = (np.nanmax(all_data, axis=(0, 1)) - np.nanmin(all_data, axis=(0, 1))).max() / 2.0 + 0.5
-    if max_range == 0 or np.isnan(max_range):
-        max_range = 1.0 # Default range if data is flat
+    if max_range == 0 or np.isnan(max_range): max_range = 1.0
 
     ax.set_xlim(center[0] - max_range, center[0] + max_range)
     ax.set_ylim(center[1] - max_range, center[1] + max_range)
     ax.set_zlim(center[2] - max_range, center[2] + max_range)
+    ax.set_xlabel("X"); ax.set_ylabel("Y"); ax.set_zlabel("Z")
 
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-
-    # Initialize lines
-    line_gt, = ax.plot([], [], [], 'o-', lw=2, label='Ground Truth')
-    line_pred, = ax.plot([], [], [], 'x-', lw=2, label='Prediction')
+    line_gt, = ax.plot([], [], [], 'o-', lw=2, label='Ground Truth', color='blue', alpha=0.5)
+    line_pred, = ax.plot([], [], [], 'x-', lw=2, label=f'{"Reconstruction" if teacher_forcing else "Dream"}', color='red')
     ax.legend()
-    title = ax.set_title(f'Frame 0 / {num_frames - 1}')
+    title = ax.set_title(f'Frame 0')
 
     def update(frame):
-        # Ground Truth
+        # GT
         data_gt = ground_truth[frame]
         line_gt.set_data(data_gt[:, 0], data_gt[:, 1])
         line_gt.set_3d_properties(data_gt[:, 2])
 
-        # Prediction
+        # Pred
         data_pred = predictions[frame]
         line_pred.set_data(data_pred[:, 0], data_pred[:, 1])
         line_pred.set_3d_properties(data_pred[:, 2])
 
-        title.set_text(f'Frame {frame} / {num_frames - 1} ({"Dreaming" if not teacher_forcing else "Reconstructing"})')
+        title.set_text(f'Frame {frame} / {num_frames - 1}')
         return line_gt, line_pred, title
 
-    ani = FuncAnimation(
-        fig,
-        update,
-        frames=num_frames,
-        interval=interval,
-        blit=False # Blit must be False for 3D plots
-    )
+    ani = FuncAnimation(fig, update, frames=num_frames, interval=interval, blit=False)
     
     if save:
-        ani.save(save_path, writer="ffmpeg", fps=6)
-        print(f"Saved animation as {save_path}")
+        ani.save(save_path, writer="ffmpeg", fps=10)
+        print(f"Saved to {save_path}")
 
-    plt.close(fig) # Prevent static plot from showing
+    plt.close(fig)
     return HTML(ani.to_jshtml())
 
 def set_seed(seed: int = 42):
