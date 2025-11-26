@@ -36,8 +36,41 @@ The predicted PM2.5 and PM10 data will subsequently be utilized as crucial input
 Three models were chosen to generate the synthetic data: XGBoost (Extreme Gradient Boosting), LSTM (Long Short-Term Memory), and TNN (Transformer Neural Network).
 
 #### XGBoost (Extreme Gradient Boosting)
+XGBoost is a machine learning algorithm based on decision trees that uses the Gradient Boosting technique, a method that trains several weak trees in sequence, where each new tree attempts to correct the errors of the previous one. Because it is a simpler and faster training model, it was used as a baseline to replace the ARIMA model, which during testing failed to capture the trend of longer and noisier time series. 
+
+For the prediction of PM2.5 and PM10 in Dracena-SP and Brasília-DF, the following hyperparameters were used:
+- N estimators: 300;
+- Learning Rate: 0.05;
+- Max Depth: 5;
+- Subsample: 0.8;
+- Cosample by tree: 2
+
+The MAE (Mean Absolute Error) was used as a loss function for comparative analysis with the other models.
 
 #### LSTM (Long Short-Term Memory)
+LSTM is a special type of RNN (Recurrent Neural Network) used to handle sequences, as it can memorize information for long periods through internal control gates.
+It is widely used in temporal and sequential problems, as its gate mechanism avoids the vanishing gradient problem, allowing the learning of long time series, with considerable use in prediction models applied to environmental parameters of photovoltaic systems. Due to its robustness, it was used in this study as a strong comparator to the transformer.
+
+For the prediction of PM2.5 and PM10 in Dracena-SP and Brasília-DF, the following hyperparameters were used:
+- optimizer: adam;
+- Activation: relu;
+- batch_size: 16;
+- Epochs: 50;
+- loss: mse
+
+## Considerations for classical models
+The XGBoost algorithm demonstrated a good ability to follow the general trend of the time series for PM2.5 and PM10, having greater difficulty in capturing peaks and troughs resulting from infrequent events. During most of the period, the forecast curve closely follows the actual curve, especially in periods with fewer extreme events and in weekly/monthly variations. A slight lag between the series was also observed.
+
+The LSTM network also demonstrated a good ability to follow the general trend of the time series for PM2.5 and PM10, with difficulties in accurately tracking peaks and troughs, but accurately predicting monthly and weekly trends. A slight delay between the series was also observed.
+
+### Brasilia - Comparison of models for the generation of synthetic PM10 and PM2.5
+<img width="1209" height="451" alt="image" src="https://github.com/user-attachments/assets/2b18efee-89c2-445b-ab4b-8f679057f58e" />
+<img width="1209" height="451" alt="image" src="https://github.com/user-attachments/assets/1ee3482d-e0c7-4af5-b94e-dc1f4d56da43" />
+
+### Dracena - Comparison of models for the generation of synthetic PM10 and PM2.5
+<img width="1209" height="451" alt="image" src="https://github.com/user-attachments/assets/ada7c178-128a-4bea-9fd3-38d4bf175eb1" />
+<img width="1209" height="451" alt="image" src="https://github.com/user-attachments/assets/8c7a43cd-31c4-4fe0-b2fd-04c8da2f6a2c" />
+
 
 #### TNN (Transformer Neural Network)
 The work of Orozco López, Kaplan, and Linhoss (2024) proved to be a good reference to follow in the field of LLMs for the prediction of climatic data. The study explores the potential of TNNs to perform time series forecasting across multiple environmental variables using past observations and weather forecasts. The Transformer architecture used in the study is based on the standard encoder-decoder structure, efficiently adapted for the task of time series forecasting. The model employs the Informer architecture in its decoder, a fundamental methodological difference, as it allows for simultaneous forecasting of multiple future steps.
