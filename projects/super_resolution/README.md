@@ -277,16 +277,24 @@ src/
 ```
 
 ## Results by Our Model
-Observe how the aliasing (or 'jagged edges') present on the stairs in the following image is reduced.
+The results can be verified both by input images and the quantitative metrics used for model evaluation.
+
+### Outputted results by our model
+Two examples of input images and their respective outputs can be observed below. It is noted that in the first image, the aliasing (or 'jagged edges') present on the stairs was reduced.
 <br>
 <img width="499" height="331" alt="sample1" src="https://github.com/user-attachments/assets/7faa3285-c23d-4259-a11c-b1c19d0bb212" />
 <br>
 <br>
 <img width="504" height="202" alt="sample2" src="https://github.com/user-attachments/assets/51351252-cfda-49c3-81dd-6c28cdf28452" />
 
-## Evaluation Metrics
+### Evaluation Metrics
+The quantitative results obtained were made by comparing the two models, ours with the invSR. Three metrics were used: PSNR, LPIPS, and SSIM. The analysis is divided between scatter plots, which compare individual performance per image, and box plots, which summarize the statistical distribution of the metrics.
+
 <img width="2196" height="2753" alt="metrics" src="https://github.com/user-attachments/assets/c5d1b903-8511-4dd1-ac8d-59a28f053540" />
 
+In the scatter plots, the dashed red line represents equal performance between the models. For PSNR and SSIM (where higher is better), it is observed that most points are above the line of equality, indicating that, for the majority of images, our model outperformed the baseline model, resulting in better signal fidelity and greater structural similarity. For LPIPS (where lower is better), a large portion of the images shows equal or lower values in our model, which is a positive indicator of better perceptual quality.
+
+The box plots, in turn, confirm the trend observed in the scatter plots. The distribution boxes (Interquartile Range - IQR) of our model (our_invar) for PSNR and SSIM are visibly above the baseline model's boxes. This demonstrates that our model consistently achieved better average scores (medians) and distributions for these quality metrics. For LPIPS, our model's box is slightly below the baseline model's box, reinforcing the result of lower perceptual distance (better performance) on average.
 
 ### Important Notes
 
