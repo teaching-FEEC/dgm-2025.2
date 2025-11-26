@@ -20,7 +20,7 @@ This project originated in the context of the graduate course *IA376N - Generati
 | Núbia Sidene Almeida das Virgens  | 299001  | Computing Engineering |  
 
 ## Project Summary Description  
-Our project does the sam
+
 The project addresses the problem of **image super-resolution**, a fundamental task in computer vision that aims to reconstruct high-quality images from their low-resolution counterparts. This problem has strong practical relevance in areas such as:
 - **Low-budget devices**: Get one poor picture and enhance it
 - **Medical Imaging**: Enhancing diagnostic image quality
@@ -28,7 +28,7 @@ The project addresses the problem of **image super-resolution**, a fundamental t
 - **Image Restoration**: Recovering historical or degraded photographs
 - **Personal Use**: Upscaling cherished memories and favorite images 
 
-The main objective of the project is to design and evaluate a **generative model** capable of improving the resolution and perceptual quality of input images. The model will receive as input a low-resolution image and will output a high-resolution reconstruction with enhanced details and sharper definition, in general its goals can be set by:
+The main objective of the project is to design, adapt and evaluate a **generative model** that improves the resolution and perceptual quality of input images. The model will receive as input a low-resolution image and will output a high-resolution reconstruction with enhanced details and sharper definition, in general its goals can be set by:
 
 - Improving resolution and perceptual quality of input images
 - Preserving fine details and texture information
