@@ -14,7 +14,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 ## Abstract
 
-This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of 1 million transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **BERT**, **Transformer**, **Diffusion-Models** and **Dreamer** were evaluated to predict the rope's future configuration. The best performance was shown by...
+This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of 1 million transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **BERT**, **Transformer**, **Diffusion-Models** and **Dreamer** were evaluated to predict the rope's future configuration. The best performance was shown by the **Dreamer** model.
 
 ---
 
@@ -32,10 +32,9 @@ Develop a **dynamics model** capable of predicting the future state and **quanti
 
 ### 3.1 Overview
 
-The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow is roughly described in the following picture. 
+The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow for our most successful model, the **Dreamer**, is described in the following picture. Workflows for other models can be found in the attached presentation. 
 
-NEED NEW PICTURE HERE 
-
+![Dreamer-Architecture](path/to/image.jpg)
 
 ### 3.2 Dataset Generation
 
@@ -65,6 +64,8 @@ Three model architectures were evaluated to learn the rope dynamics:
 #### (d) Diffusion
 
 #### (e) Dreamer
+
+We employ a "World Model" architecture to solve a supervised problem: predicting the next state of a deformable object (rope) given its current state and an applied action. Rather than optimizing on the high-dimensional 3D coordinates directly, we learn the transition dynamics in a compact latent space.
 
 #### Training Setup
 
@@ -111,34 +112,34 @@ The tested model families and the corresponding results were the following:
 
 | Model | Params | MSE |
 |--------|-----|
-| BiLSTM  | 4 |  3 |
-| BERT  | 4 |  3 |
-| Transformer  | 4 |  3 |
+| BiLSTM  | 1.12M |  1.43 |
+| BERT  | 1.9M |  1.43 |
+| Transformer  | 407K |  1.45 |
 | Diffusion  | 4 |  3 |
-| Dreamer  | 4 |  3 |
+| Dreamer  | 11M |  1.16 |
 
 
 
-Visual inspection of predicted centerlines revealed that ...
+Visual inspection of predicted centerlines revealed that the BiLSTM, BERT and Transformer failed to predict the rope states accurately. Instead, these models produced rope states which were clustered near the rope positions. In contrast, Dreamer seemed to follow the general structure of the rope rather accurately.
 
 ### 5.3 Discussion of Results
 
-Although the differences between models are small, several tendencies emerged:
+Several tendencies emerged:
 
 - **Clustering and low regional diversity.** Some models produced predictions biased toward more clustered rope configurations.  
 - **Dreamer achieved best results.** ...  
-- **BiLSTM, BERT and Transformers perform similarly.** Those models failed to accurately predict the rope state.
+- **BiLSTM, BERT and Transformers perform way worse than Dreamer.** This suggests that models which do not consider temporal steps tend to perform worse, especially on pure autoregressive scenarios
 - **Something about Diffusion maybe** 
 
 The experiments highlight that...
 
 ## 6. Conclusion
 
-This partial submission presented the initial progress toward building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of 1 million samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
+This final submission presents the progress towards building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of 1 million samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
 
-Five neural architectures — **BiLSTM**, **BERT**, **Transformer**, **Diffusion Models** and **Dreamer** — were tested to predict the next rope configuration. The **...** achieved  better results, indicating that local sequential dependencies dominate at this stage.
+Five neural architectures — **BiLSTM**, **BERT**, **Transformer**, **Diffusion Models** and **Dreamer** — were tested to predict the next rope configuration. While the BiLSTM, BERT and the Transformer failed to accurately predict rope states, Dreamer showed promising results. We believe that Dreamer achieved better results due to it's approach of splitting the learning into a deterministic and a stochastic part.
 
-Ultimately, the goal to obtain a dynamics model which accurately predicts rope dynamics has been reached???, with room for improvement. Future work could focus on...
+Ultimately, the goal to obtain a dynamics model which accurately predicts rope dynamics has been reached, with room for improvement. Future work could focus on repeating our experiments using bigger and more optimized models, especially using Dreamer, which seemed to be the most promising of our tested models. 
 
 
 
@@ -156,4 +157,4 @@ Ultimately, the goal to obtain a dynamics model which accurately predicts rope d
 
 # Presentation Link
 
-[Google Slides Presentation](https://docs.google.com/presentation/d/1fw3_m6minAr5l9Ks6CPWKIoQIB-UsBzjtunPPyIErtY/edit?usp=sharing)
+[Google Slides Presentation](https://docs.google.com/presentation/d/14xAsvx7EaFsWOUKr3ieodYBcjxsf4goc3SWKETlq8cc/edit?usp=sharing)
