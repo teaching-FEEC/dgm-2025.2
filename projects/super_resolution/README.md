@@ -81,9 +81,9 @@ For this first stage, the proposed methodology is as follows:
 
 ### **Evaluation**:  
   #### Quantitative Metrics
-  - **📐 PSNR** (Peak Signal-to-Noise Ratio): Pixel-level reconstruction accuracy
-  - **🔍 SSIM** (Structural Similarity Index): Structural information preservation
-  - **👁️ LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
+  - **PSNR** (Peak Signal-to-Noise Ratio): Pixel-level reconstruction accuracy
+  - **SSIM** (Structural Similarity Index): Structural information preservation
+  - **LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
 
   #### Qualitative Assessment
   - **Visual Inspection**: Side-by-side comparison with ground truth
@@ -313,7 +313,7 @@ We implemented **Smart Chopping with Adaptive Overlap**, an improvement that dyn
 
 ### What Was Implemented
 
-#### **Smart Chopping with Adaptive Overlap** ✅
+#### **Smart Chopping with Adaptive Overlap** 
 
 **Location**: `utils/util_smart_chopping.py`, integrated in `sampler_invsr.py`
 
@@ -336,10 +336,10 @@ We implemented **Smart Chopping with Adaptive Overlap**, an improvement that dyn
    - Better preserves important details
 
 **Advantages**:
-- ✅ **Faster**: Reduces overlap in simple regions (up to 30-40% faster)
-- ✅ **Better quality**: Increases overlap in complex regions (better edge preservation)
-- ✅ **No memory increase**: Only adjusts stride, doesn't add large buffers
-- ✅ **Smart blending**: Attention-guided blending preserves important details
+-  **Faster**: Reduces overlap in simple regions (up to 30-40% faster)
+-  **Better quality**: Increases overlap in complex regions (better edge preservation)
+-  **No memory increase**: Only adjusts stride, doesn't add large buffers
+-  **Smart blending**: Attention-guided blending preserves important details
 
 ### Integration
 
