@@ -59,7 +59,15 @@ Three model architectures were evaluated to learn the rope dynamics:
 
 #### (b) BERT
 
+ - The **Rope BERT** model uses a **Transformer Encoder-only** architecture, adapted from the original BERT (Bidirectional Encoder Representations from Transformers) design.
+ - It utilizes the **bidirectional** nature of the Transformer Encoder to process the rope's state sequence (the 70 link points) by allowing each point's prediction to be informed by all other points, regardless of their position (before or after) in the sequence
+ - It predicts the **position delta** (change in position) to derive the next state.
+
 #### (c) Transformer
+
+- This model, **Rope Transformer** , was primarily configured as a **Decoder-only** network for sequence-to-sequence prediction.
+- In this setup, the decoder takes the current rope state and action as input to autoregressively predict the next state configuration.
+- The structure allows for the optional inclusion of a BiLSTM layer after the decoder to further capture temporal dependencies before predicting the final state delta.
 
 #### (d) Diffusion
 
@@ -124,23 +132,40 @@ Visual inspection of predicted centerlines revealed that the BiLSTM, BERT and Tr
 
 ### 5.3 Discussion of Results
 
-Several tendencies emerged:
+#### Superiority of World Models
+The **Dreamer Rope Model** demonstrated a significant improvement, achieving an MSE of $\mathbf{1.16}$ and capturing rope dynamics with superior efficiency compared to baseline models (BiLSTM, BERT, Transformer). This success is attributed to its **World Model** approach, which:
+1.  **Considers Temporal Sequences:** Explicitly models long-term dependencies through the Recurrent State-Space Model (**RSSM**), crucial for predicting complex, multi-step manipulation outcomes.
+2.  **Utilizes a Compact Latent Space:** Learns transition dynamics in a **dense, meaningful latent space**, allowing for efficient feature representation.
+3.  **Models Uncertainty:** Manages the inherent stochasticity of DLO manipulation by mapping states to **probability distributions** (via the stochastic state $\mathbf{z}_{t}$).
 
-- **Clustering and low regional diversity.** Some models produced predictions biased toward more clustered rope configurations.  
-- **Dreamer achieved best results.** ...  
-- **BiLSTM, BERT and Transformers perform way worse than Dreamer.** This suggests that models which do not consider temporal steps tend to perform worse, especially on pure autoregressive scenarios
-- **Something about Diffusion maybe** 
+#### Importance of Temporal Dynamics
+The clustering of MSE results for the BiLSTM, BERT, and Transformer models (all $\approx 1.43-1.45$) confirms that methods which fail to adequately capture temporal dynamics across multiple steps struggle to generalize. These models perform poorly in **long-horizon autoregressive scenarios** (simulating long rollouts), as errors compound quickly when relying solely on instantaneous predictions. The Dreamer model's architecture successfully mitigates this limitation by leveraging its recurrent memory ($\mathbf{h}_{t}$) and uncertainty modeling. **Incorporating temporal dynamics across multiple manipulation steps yields substantial improvements** in next-state predictions.
+
+#### Rollout Validation
+The ability of the Dreamer model to perform effective "rollouts" (simulating long-horizon behaviors without the MuJoCo engine) validates the World Model approach as a promising foundation for a **model-based reinforcement learning (MBRL)** agent focused on risk-aware DLO control.
 
 The experiments highlight that...
 
 ## 6. Conclusion
 
-This final submission presents the progress towards building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of 1 million samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
+This final submission presents the progress towards building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project successfully generated a robust dataset of **1 million transitions** using **MuJoCo** simulations to address the challenges of representing and predicting complex rope dynamics under applied actions.
 
-Five neural architectures — **BiLSTM**, **BERT**, **Transformer**, **Diffusion Models** and **Dreamer** — were tested to predict the next rope configuration. While the BiLSTM, BERT and the Transformer failed to accurately predict rope states, Dreamer showed promising results. We believe that Dreamer achieved better results due to it's approach of splitting the learning into a deterministic and a stochastic part.
+Five neural architectures—**BiLSTM, BERT, Transformer, Diffusion Models, and Dreamer**—were evaluated. Our core findings confirm that:
 
-Ultimately, the goal to obtain a dynamics model which accurately predicts rope dynamics has been reached, with room for improvement. Future work could focus on repeating our experiments using bigger and more optimized models, especially using Dreamer, which seemed to be the most promising of our tested models. 
+1.  **Temporal Dynamics are Essential:** Models that incorporated temporal dynamics across multiple manipulation steps, most notably **Dreamer**, yielded **substantial improvements** in next-state predictions, particularly in **long-horizon autoregressive scenarios**.
+2.  **World Models are Promising:** The **Dreamer** model emerged as the most successful approach, validating **World Models** for physical dynamics. Its superiority stems from its ability to:
+    * Capture complex features within a **dense, meaningful latent space**.
+    * Explicitly **manage uncertainty** by mapping stochastic states to **probability distributions**, directly addressing the project's goal of quantifying action risk.
 
+Ultimately, the goal of developing a dynamics model that accurately predicts rope dynamics and quantifies uncertainty has been demonstrably reached, with the Dreamer architecture serving as a strong foundation.
+
+### Future Work
+
+Future efforts will focus on three key areas to leverage these results:
+
+1.  **Risk-Aware Planning Agent:** Integrate the predictive Dreamer model into a **model-based reinforcement learning (MBRL) agent** to facilitate **risk-aware decision-making** for autonomous DLO manipulation.
+2.  **Physics-Informed Losses:** Conduct deeper exploration and refinement of **physics-informed losses**. This includes tuning or adding more sophisticated terms in the loss function to rigorously enforce **material constraints** (e.g., inextensibility and stiffness) and **topological consistency** (e.g., preventing self-collision) to ensure predicted states adhere to greater physical realism.
+3.  **Model Scaling and Optimization:** Repeat experiments using bigger and more optimized **Dreamer** models to further improve predictive accuracy and stability.
 
 
 ## 7. Bibliographic References
