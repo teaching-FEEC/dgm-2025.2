@@ -101,21 +101,18 @@ The objectives are considered met when:
 
 ### 5.1 Experimental Setup
 
-A dataset of approximately 3,000 samples was generated in **MuJoCo**, simulating a rope composed of 70 interconnected cylindrical segments with ball joints. Each sample consisted of a state $s_{t}$ (the 3D positions of all rope segments), an action $a_{t}$ (a force vector applied to a specific segment), and the resulting next state $s_{t+1}$.  
-The dataset was normalized and divided into training, validation, and test sets. All models were trained using the **Mean Squared Error (MSE)** loss.
+A dataset of approximately 1.000.000 samples was generated in **MuJoCo**, simulating a rope composed of 70 interconnected cylindrical segments with ball joints. Each sample consisted of a state $s_{t}$ (the 3D positions of all rope segments), an action $a_{t}$ (a force vector applied to a specific segment), and the resulting next state $s_{t+1}$.  
+The dataset was normalized using a Center-of-Mass approach and divided into training, validation, and test sets. All models were trained using the **Physics Informed Loss** (Source?) loss and evaluated using **Mean Squared Error** (MSE)
 
-Three model families were tested:
-
-- **BiLSTM** — captures bidirectional dependencies along the rope.  
-- **Transformer + BiLSTM** — combines global attention and local sequential modeling.  
-- **VAE** — tests a generative probabilistic baseline.
 
 ### 5.2 Results
+
+The tested model families and the corresponding results were the following: 
 
 | Model | Params | MSE |
 |--------|-----|
 | BiLSTM  | 4 |  3 |
-| Bert  | 4 |  3 |
+| BERT  | 4 |  3 |
 | Transformer  | 4 |  3 |
 | Diffusion  | 4 |  3 |
 | Dreamer  | 4 |  3 |
@@ -128,29 +125,22 @@ Visual inspection of predicted centerlines revealed that ...
 
 Although the differences between models are small, several tendencies emerged:
 
-- **Dataset size is the primary limitation.** With only 3,000 samples, models quickly overfit, and larger, more diverse data are needed.  
-- **Clustering and low regional diversity.** All models produced predictions biased toward more clustered rope configurations.  
-- **BiLSTM achieved best results.** For small datasets, recurrent architectures outperform more modern alternatives.  
-- **Transformer and BiLSTM hybrids** capture deformations better but are prone to concentrated predictions.  
-- **VAE predictions** show higher variability, representing uncertainty but at reduced positional accuracy.
+- **Clustering and low regional diversity.** Some models produced predictions biased toward more clustered rope configurations.  
+- **Dreamer achieved best results.** ...  
+- **BiLSTM, BERT and Transformers perform similarly.** Those models failed to accurately predict the rope state.
+- **Something about Diffusion maybe** 
 
-The experiments highlight that **performance is currently constrained by data diversity**, not architectural sophistication. Future iterations will include over one million samples with varied physical parameters (friction, stiffness, action complexity, and bimanual manipulation).  
-Additionally, **latent world models (e.g., Dreamer [4])** will be explored to capture multimodal dynamics and uncertainty.
+The experiments highlight that...
 
 ## 6. Conclusion
 
-This partial submission presented the initial progress toward building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of approximately 3,000 samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
+This partial submission presented the initial progress toward building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of 1 million samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
 
-Three neural architectures — **BiLSTM**, **Transformer + BiLSTM**, and **VAE** — were tested to predict the next rope configuration. The **BiLSTM** achieved slightly better results, indicating that local sequential dependencies dominate at this stage. The small dataset size limited generalization capacity, reinforcing the need for larger and more varied data.
+Five neural architectures — **BiLSTM**, **BERT**, **Transformer**, **Diffusion Models** and **Dreamer** — were tested to predict the next rope configuration. The **...** achieved  better results, indicating that local sequential dependencies dominate at this stage.
 
-The experiments demonstrated the feasibility of learning rope dynamics from simulation but also exposed the limitations of simple deterministic models in capturing uncertainty. This motivates the next phase, which will focus on:
+Ultimately, the goal to obtain a dynamics model which accurately predicts rope dynamics has been reached???, with room for improvement. Future work could focus on...
 
-- **Dataset Expansion:** generate over one million samples with varied physical parameters.  
-- **Action Complexity:** include multi-step and bimanual manipulations.  
-- **Model Enhancement:** explore **latent world models (e.g., Dreamer[4])** and **spatial transformers**.  
-- **Evaluation and Planning:** introduce probabilistic metrics such as **Average Displacement Error (ADE)** and **Dice Coefficient**.
 
-Ultimately, the goal is to obtain a dynamics model that not only predicts the next state of the rope accurately but also **quantifies uncertainty**, enabling **risk-aware planning** for autonomous DLO manipulation tasks.
 
 ## 7. Bibliographic References
 
