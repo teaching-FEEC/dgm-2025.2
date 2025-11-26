@@ -22,7 +22,7 @@ try:
     from src.data.rope_dataset import RopeDataset, RopeSequenceDataset 
     
     from src.utils import (
-        set_seed, plot_model_comparison, load_and_split_data, cleanup_memory
+        set_seed, plot_model_comparison, load_and_split_data, cleanup_memory, load_and_split_data_interleaved
     )
 except ImportError as e:
     print(f"Error: Could not import necessary modules.")
@@ -81,7 +81,7 @@ def main():
     all_test_losses_rollout = {} 
     
     # Updated default path
-    data_path = 'src/data/rope_state_action_next_state_mil.npz'
+    data_path = '<INSERT_PATH_HERE>'
     
     # 1. Load Data (Raw)
     try:
@@ -204,18 +204,28 @@ def main():
 
         # === 3. Dreamer Training (Isolated) ===
         print(f"\n>>> Processing Dreamer ({norm_type})...")
-        
+
+        (
+            src_train_raw, act_train_raw, tgt_train_raw,
+            src_val_raw,   act_val_raw,   tgt_val_raw,
+            src_test_raw,  act_test_raw,  tgt_test_raw,
+            _, _, _,
+            USE_DENSE_ACTION, ACTION_DIM, _,
+        ) = load_and_split_data_interleaved(data_path=data_path, seed=SEED,train_ratio=0.8,
+            val_ratio=0.1,create_demo_set=False, sequence_length = 200)
+        #Manually defining to 10% of the raw files to avoid issues with rollout changes
+        SEQ_LEN = 20
         # Prepare Dreamer Data
         dreamer_train_ds = RopeSequenceDataset(
-            src_train_raw, act_train_raw, sequence_length=SEQ_LEN, normalize=True
+            src_train_raw, act_train_raw, sequence_length=SEQ_LEN, normalize=True,  center_of_mass = use_com
         )
         dreamer_val_ds = RopeSequenceDataset(
             src_val_raw, act_val_raw, sequence_length=SEQ_LEN, normalize=False,
-            mean=dreamer_train_ds.mean, std=dreamer_train_ds.std
+            mean=dreamer_train_ds.mean, std=dreamer_train_ds.std, center_of_mass = use_com
         )
         dreamer_test_ds = RopeSequenceDataset(
             src_test_raw, act_test_raw, sequence_length=SEQ_LEN, normalize=False,
-            mean=dreamer_train_ds.mean, std=dreamer_train_ds.std
+            mean=dreamer_train_ds.mean, std=dreamer_train_ds.std, center_of_mass = use_com
         )
         
         dreamer_config = {
