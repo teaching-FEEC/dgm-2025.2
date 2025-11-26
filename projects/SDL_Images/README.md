@@ -1,7 +1,8 @@
 # Abordagem Generativa para o Conjunto de Dados _First Impressions_ via Modelo OCEAN
 # Generative Approach for _First Impressions_ Dataset by OCEAN Model
 
-## Presentation
+## Presentation 
+link: https://www.canva.com/design/DAG5yiYbwfw/iEA-CWcEBDfvbX2VxDYApw/edit
 
 This project originated in the context of the graduate course *IA376N - Generative AI: from models to multimodal applications*, 
 offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).
