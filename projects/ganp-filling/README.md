@@ -21,7 +21,7 @@ The desired output of the generative model will be a complete multivariate time 
 ## Proposed Methodology
 The modeling process is focused on predicting the PM2.5 and PM10 particulate matter concentrations in the cities of Dracena-SP and Brasília-DF. The total dataset was divided into three main subsets for model development and testing: Training and Validation, and Test. For the Training and Validation phases, 90% of the total data was reserved, with 80% of that subset used for training the model and 20% for validation. The remaining 10% of the data was set aside as the test set, corresponding to a 6-month interval of the time series, used for impartial final model evaluation. The model aims to generate forecasts for the mean daily concentrations of PM2.5 and PM10 in both Dracena-SP and Brasília-DF. 
 
-Com a previsão desses dados é 
+The predicted PM2.5 and PM10 data will subsequently be utilized as crucial input for a HSU model to forecast the soiling ratio in photovoltaic (PV) systems. This integration is vital because the concentration of airborne particulate matter, which is strongly correlated with the soiling ratio, directly impacts the efficiency and power output of solar panels. By feeding the accurate, time-series predictions from the models into the HSU system, the overall forecasting framework can provide more reliable estimates of power degradation due to accumulated dust, enabling better operational planning and maintenance scheduling for PV installations.
 
 ## Workflow
 
