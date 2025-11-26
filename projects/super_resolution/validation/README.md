@@ -93,8 +93,7 @@ For this first stage, the proposed methodology is as follows:
 #### Workflow
 ![WhatsApp Image 2025-11-24 at 16 56 15_3ab7d84d](https://github.com/user-attachments/assets/283f969e-bbb1-45f4-ad3f-b25f7a2171cf)
 
-## E3 - PARTIAL SUBMISSION
-Iníciooo
+## FINAL DELIVERY
 
 ### Key Features Implemented
 
@@ -186,9 +185,7 @@ Implementou-se o **Smart Chopping com Overlap Adaptativo**, uma melhoria que aju
 
 ### O que foi implementado
 
-#### **Smart Chopping com overlap adaptativo** ✅
-
-**Localização**: `utils/util_smart_chopping.py`, integrado em `sampler_invsr.py`
+#### **Smart Chopping com overlap adaptativo**
 
 **Como Funciona**:
 
@@ -209,10 +206,10 @@ Implementou-se o **Smart Chopping com Overlap Adaptativo**, uma melhoria que aju
    - Preserva melhor detalhes importantes
 
 **Vantagens**:
-- ✅ **Mais rápido**: Reduz overlap em regiões simples (até 30-40% mais rápido)
-- ✅ **Melhor qualidade**: Aumenta overlap em regiões complexas (melhor preservação de bordas)
-- ✅ **Sem aumento de memória**: Apenas ajusta o stride, não adiciona buffers grandes
-- ✅ **Blending inteligente**: Attention-guided blending preserva detalhes
+- **Mais rápido**: Reduz overlap em regiões simples (até 30-40% mais rápido)
+- **Melhor qualidade**: Aumenta overlap em regiões complexas (melhor preservação de bordas)
+- **Sem aumento de memória**: Apenas ajusta o stride, não adiciona buffers grandes
+- **Blending inteligente**: Attention-guided blending preserva detalhes
 
 ### Integração
 
@@ -240,8 +237,7 @@ Implementou-se o **Smart Chopping com Overlap Adaptativo**, uma melhoria que aju
 
 | Aspecto | Tradicional | Smart Chopping |
 |---------|-------------|----------------|
-| **Overlap** | Fixo 50% | Adaptativo 25-50% |
-| **Velocidade** | Base | +20-40% mais rápido (regiões simples) |
+| **Overlap** | Fixo 50% | Adaptativo 25-80% |
 | **Qualidade** | Boa | Melhor (regiões complexas) |
 | **Memória** | Base | Sem aumento significativo |
 | **Blending** | Gaussiano | Gaussiano + Atenção |
@@ -253,11 +249,11 @@ Imagem com céu simples (complexidade baixa):
 - Overlap: 25% → Menos patches processados → Mais rápido
 
 Imagem com textura complexa (complexidade alta):
-- Overlap: 50% → Mais patches processados → Melhor qualidade
+- Overlap: 80% → Mais patches processados → Melhor qualidade
 
 Imagem mista:
 - Céu: 25% overlap
-- Textura: 50% overlap
+- Textura: 80% overlap
 - Adaptativo por região!
 ```
 
@@ -268,30 +264,11 @@ Imagem mista:
 1. Marque a checkbox **"Smart Chopping"**
 2. Ajuste os sliders (opcional):
    - **Min Overlap** (15-40%): Overlap mínimo para regiões simples
-   - **Max Overlap** (40-60%): Overlap máximo para regiões complexas
+   - **Max Overlap** (40-80%): Overlap máximo para regiões complexas
 3. O sistema automaticamente ajustará o overlap baseado na complexidade
 
-#### Via Código Python
 
-```python
-from omegaconf import OmegaConf
-from sampler_invsr import InvSamplerSR
-
-# Carregar configuração
-configs = OmegaConf.load("./configs/sample-sd-turbo.yaml")
-
-# Habilitar smart chopping
-configs.smart_chopping = True
-configs.min_overlap = 0.25  # 25% overlap mínimo
-configs.max_overlap = 0.50  # 50% overlap máximo
-configs.attention_blending = True  # Blending com atenção
-
-# Criar sampler e processar
-sampler = InvSamplerSR(configs)
-sampler.inference('input_image.png', 'output_dir', bs=1)
-```
-
-### 💡 Vantagens da Melhoria
+### Vantagens da Melhoria
 
 #### 1. **Velocidade Melhorada**
 - Regiões simples processadas mais rápido (menos overlap)
@@ -348,8 +325,6 @@ O Smart Chopping oferece **melhor velocidade E qualidade** adaptativamente, send
 - **Imagens grandes**: Reduz tempo de processamento significativamente
 - **Imagens mistas**: Otimiza cada região individualmente
 - **Preservação de detalhes**: Attention blending melhora bordas e texturas
-
-
 
 
 ### CHANGES ON MODEL ARCHITECTURE
