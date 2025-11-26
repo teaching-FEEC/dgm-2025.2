@@ -1,5 +1,5 @@
-# `Modelos generativos para Preenchimento de Lacunas em Séries Temporais de Qualidade do Ar`
-# `Generative Model for Gap Filling in Air Quality Time Series Data`
+# `Modelos generativos aplicados para predição de sujidade em sistemas fotovoltaicos`
+# `Generative models applied to predicting soiling in photovoltaic systems`
 
 ## Presentation
 
@@ -19,14 +19,16 @@ The main objective of the project is to develop and evaluate the performance of 
 The desired output of the generative model will be a complete multivariate time series sequence, with previously missing values replaced by synthetic values that are numerically and temporally consistent with the actual input data.
 
 ## Proposed Methodology
-Two data monitoring platforms will be analyzed: CETESB, which evaluates data on various pollutants for different cities in the state of São Paulo, and the Rio de Janeiro State Environmental Institute (INEA-RJ). CETESB data will be used primarily because it contains information on particulate matter in regions of relevant photovoltaic interest, while INEA data will be useful for validating the natural behavior of the data, as it has fewer measurement errors and gaps. Initially, datasets from one of the monitoring stations in Campinas for the years 2019 and 2020 will be used. The data include hourly time series of particulate matter (PM2.5), humidity, temperature, and wind speed. If more context is needed for the data, new datasets with new meteorological parameters, such as rainfall, will be studied.
+The modeling process is focused on predicting the PM2.5 and PM10 particulate matter concentrations in the cities of Dracena-SP and Brasília-DF. The total dataset was divided into three main subsets for model development and testing: Training and Validation, and Test. For the Training and Validation phases, 90% of the total data was reserved, with 80% of that subset used for training the model and 20% for validation. The remaining 10% of the data was set aside as the test set, corresponding to a 6-month interval of the time series, used for impartial final model evaluation. The model aims to generate forecasts for the mean daily concentrations of PM2.5 and PM10 in both Dracena-SP and Brasília-DF. 
 
-Initial tests are being conducted on data using generative adversarial networks (GANs) specific to time series, such as TemporalGAN, an architecture for analyzing satellite time series data. The final architecture will be inspired by the GANFilling article, adapting its concepts from 2D (images) to 1D (time series). The Generator has a 1D U-Net architecture with convolutional and recurrent layers (LSTM/GRU), and the Discriminator is a temporal PatchGAN to evaluate the local realism of the generated data sequence. Architectures based on variational autoencoder (VAE-LSTM) models and statistical models will also be used to compare which technique excels in the final data generation. Articles will be studied to provide a basis for understanding the nature of environmental data, types of architectures suitable for time series, and models of soiling losses in photovoltaic systems.
+Com a previsão desses dados é 
 
-This project will be developed in Python, using TensorFlow with the Keras API for model construction and training, Pandas and NumPy for data manipulation, Scikit-learn for preprocessing (scaling), and Matplotlib/Seaborn for visualizations, all within a Google Colab (for access to GPUs and to facilitate collaboration) or local VS Code/Jupyter environment.
+## Workflow
 
-## Geração dos dados sintéticos
-Como formar de gerar os dados sintéticos foram escolhidos 3 modelos: XGBoost (Extreme Gradient Boosting), LSTM (Long Short-Term Memory) e TNN (Transformer Neural Network).
+<img width="1157" height="581" alt="Diagrama sem nome drawio (5)" src="https://github.com/user-attachments/assets/d2fa6200-e221-4a88-8e44-2c2a98e9fc66" />
+
+## Synthetic Data Generation
+Three models were chosen to generate the synthetic data: XGBoost (Extreme Gradient Boosting), LSTM (Long Short-Term Memory), and TNN (Transformer Neural Network).
 
 #### XGBoost (Extreme Gradient Boosting)
 
