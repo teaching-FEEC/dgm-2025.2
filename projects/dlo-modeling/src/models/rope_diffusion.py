@@ -1,126 +1,302 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
-from diffusers import DDPMScheduler
+import numpy as np
+from tqdm import tqdm
+from .base_model import BaseRopeModel
+import os 
 
-class RopeDiffusion(nn.Module):
-    """
-    Conditional Diffusion Model for Rope Dynamics.
-    Predicts the noise added to state t+1, conditioned on state t and action t.
-    """
-    def __init__(
-        self,
-        seq_len: int,
-        d_model: int,
-        nhead: int,
-        num_layers: int,
-        dim_feedforward: int,
-        action_dim: int,
-        dropout: float = 0.1,
-        num_train_timesteps: int = 1000
-    ):
-        super().__init__()
-        self.d_model = d_model
-        self.seq_len = seq_len
-        
-        # Scheduler (manages noise and timesteps)
-        self.scheduler = DDPMScheduler(
-            num_train_timesteps=num_train_timesteps,
-            beta_schedule="squaredcos_cap_v2"
-        )
 
-        # --- Input Projections ---
-        # Condition = Current_State (3) + Action (4 or more)
-        # Input to model = Noisy_Target (3) + Condition
-        cond_dim = 3 + action_dim
-        self.input_fc = nn.Linear(3 + cond_dim, d_model)
-
-        # --- Time Embedding ---
-        self.time_mlp = nn.Sequential(
-            SinusoidalPositionEmbeddings(d_model),
-            nn.Linear(d_model, d_model),
-            nn.SiLU(),
-            nn.Linear(d_model, d_model),
-        )
-
-        # --- Backbone (Transformer) ---
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            batch_first=True,
-            activation="gelu"
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        # --- Output Projection (Predict Noise) ---
-        self.output_fc = nn.Linear(d_model, 3) 
-
-    def forward(self, noisy_tgt, timesteps, src_state, action):
-        """
-        Forward pass for TRAINING (Noise Prediction).
-        """
-        B, L, _ = noisy_tgt.shape
-        
-        # 1. Expand dense action if needed: (B, 4) -> (B, L, 4)
-        if action.dim() == 2:
-            action = action.unsqueeze(1).expand(-1, L, -1)
-            
-        # 2. Concatenate inputs: (B, L, 3+3+4)
-        # We treat (src_state, action) as the condition
-        x = torch.cat([noisy_tgt, src_state, action], dim=-1)
-        
-        # Project to d_model
-        x = self.input_fc(x) # (B, L, d_model)
-        
-        # 3. Add Time Embedding
-        t_emb = self.time_mlp(timesteps) # (B, d_model)
-        t_emb = t_emb.unsqueeze(1)       # (B, 1, d_model)
-        x = x + t_emb                    # Broadcast add
-        
-        # 4. Run Transformer
-        x = self.encoder(x)
-        
-        # 5. Predict Noise
-        pred_noise = self.output_fc(x)
-        return pred_noise
-
-    @torch.no_grad()
-    def sample(self, src_state, action, device):
-        """
-        Full denoising loop for INFERENCE.
-        Starts with noise and iteratively removes it to find the next state.
-        """
-        B, L, _ = src_state.shape
-        model_device = next(self.parameters()).device
-        
-        # Start with pure Gaussian noise
-        curr_sample = torch.randn((B, L, 3), device=model_device)
-        
-        # Loop backwards: T -> ... -> 0
-        for t in self.scheduler.timesteps:
-            # Batch of current timestep
-            timesteps = torch.full((B,), t, device=model_device, dtype=torch.long)
-            
-            # Predict noise at this step
-            pred_noise = self(curr_sample, timesteps, src_state, action)
-            
-            # Remove a bit of noise (Scheduler Step)
-            curr_sample = self.scheduler.step(pred_noise, t, curr_sample).prev_sample
-            
-        return curr_sample
-
-class SinusoidalPositionEmbeddings(nn.Module):
+class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
 
-    def forward(self, time):
-        device = time.device
+    def forward(self, x):
+        device = x.device
         half_dim = self.dim // 2
-        embeddings = math.log(10000) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        return embeddings
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+        emb = x[:, None] * emb[None, :]
+        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
+        return emb
+
+class ResidualBlock1D(nn.Module):
+    def __init__(self, in_channels, out_channels, time_dim, dropout=0.1):
+        super().__init__()
+        self.norm1 = nn.GroupNorm(8, in_channels)
+        self.act1 = nn.Mish()
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1)
+        
+        self.time_mlp = nn.Sequential(
+            nn.Mish(),
+            nn.Linear(time_dim, out_channels),
+        )
+        
+        self.norm2 = nn.GroupNorm(8, out_channels)
+        self.act2 = nn.Mish()
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1)
+        
+        self.dropout = nn.Dropout(dropout)
+
+        if in_channels != out_channels:
+            self.residual_conv = nn.Conv1d(in_channels, out_channels, kernel_size=1)
+        else:
+            self.residual_conv = nn.Identity()
+
+    def forward(self, x, t):
+        # x: (B, C, L)
+        # t: (B, time_dim)
+        
+        h = self.conv1(self.act1(self.norm1(x)))
+        
+        # Add time embedding (broadcast over Length dimension)
+        time_emb = self.time_mlp(t) # (B, out_channels)
+        h += time_emb.unsqueeze(-1)
+        
+        h = self.conv2(self.dropout(self.act2(self.norm2(h))))
+        
+        return h + self.residual_conv(x)
+
+class ConditionalUnet1D(nn.Module):
+    def __init__(self, state_dim=3, action_dim=4, base_dim=64):
+        super().__init__()
+        
+        # Dimensions
+        # Input to network will be: Noisy_State (3) + Condition_State (3) + Action (expanded to 4)
+        input_channels = state_dim * 2 + action_dim 
+        
+        self.time_dim = base_dim * 4
+        self.time_mlp = nn.Sequential(
+            SinusoidalPosEmb(base_dim),
+            nn.Linear(base_dim, self.time_dim),
+            nn.Mish(),
+            nn.Linear(self.time_dim, self.time_dim),
+        )
+
+        # Encoder
+        self.init_conv = nn.Conv1d(input_channels, base_dim, 3, padding=1)
+        self.down1 = ResidualBlock1D(base_dim, base_dim, self.time_dim)
+        self.down2 = ResidualBlock1D(base_dim, base_dim*2, self.time_dim)
+        
+        self.down_sample = nn.Conv1d(base_dim*2, base_dim*2, 3, stride=2, padding=1)
+        
+        # Bottleneck
+        self.mid1 = ResidualBlock1D(base_dim*2, base_dim*2, self.time_dim)
+        self.mid2 = ResidualBlock1D(base_dim*2, base_dim*2, self.time_dim)
+        
+        # Decoder
+        self.up_sample = nn.ConvTranspose1d(base_dim*2, base_dim*2, 4, stride=2, padding=1)
+        
+        self.up2 = ResidualBlock1D(base_dim*4, base_dim, self.time_dim) # *4 because of skip connection
+        self.up1 = ResidualBlock1D(base_dim*2, base_dim, self.time_dim)
+        
+        self.final_conv = nn.Conv1d(base_dim, state_dim, 1)
+
+    def forward(self, x, t, cond_state, cond_action):
+        """
+        x: Noisy state at time t (B, 3, L)
+        t: Time step indices (B,)
+        cond_state: Previous state S_t (B, 3, L)
+        cond_action: Action A_t (B, 4) - Needs expansion
+        """
+        B, _, L = x.shape
+        
+        # Time embedding
+        t = self.time_mlp(t)
+        
+        # Expand action to match sequence length: (B, 4) -> (B, 4, L)
+        cond_action = cond_action.unsqueeze(-1).expand(-1, -1, L)
+        
+        # Concatenate inputs: (Noisy S_t+1, S_t, A_t)
+        net_in = torch.cat([x, cond_state, cond_action], dim=1)
+        
+        # Downsample
+        x1 = self.init_conv(net_in)
+        x1 = self.down1(x1, t)
+        x2 = self.down2(x1, t)
+        
+        x_mid = self.down_sample(x2)
+        
+        # Bottleneck
+        x_mid = self.mid1(x_mid, t)
+        x_mid = self.mid2(x_mid, t)
+        
+        # Upsample
+        x_up = self.up_sample(x_mid)
+        # Handle potential shape mismatch due to odd lengths (padding)
+        if x_up.shape[2] != x2.shape[2]:
+             x_up = F.interpolate(x_up, size=x2.shape[2], mode='nearest')
+
+        x_up = torch.cat([x_up, x2], dim=1) # Skip
+        x_up = self.up2(x_up, t)
+        
+        x_up = torch.cat([x_up, x1], dim=1) # Skip
+        x_up = self.up1(x_up, t)
+        
+        return self.final_conv(x_up)
+
+class RopeDiffusion(BaseRopeModel):
+    def __init__(
+        self, 
+        seq_len=70, 
+        action_dim=4, 
+        n_steps=100, 
+        beta_start=1e-4, 
+        beta_end=0.02,
+        base_dim=64
+    ):
+        super().__init__()
+        self.seq_len = seq_len
+        self.action_dim = action_dim
+        self.n_steps = n_steps
+        
+        # Backbone Network
+        self.model = ConditionalUnet1D(state_dim=3, action_dim=action_dim, base_dim=base_dim)
+        
+        # Diffusion Constants (Linear Schedule)
+        self.register_buffer('betas', torch.linspace(beta_start, beta_end, n_steps))
+        self.register_buffer('alphas', 1. - self.betas)
+        self.register_buffer('alphas_cumprod', torch.cumprod(self.alphas, dim=0))
+        self.register_buffer('sqrt_alphas_cumprod', torch.sqrt(self.alphas_cumprod))
+        self.register_buffer('sqrt_one_minus_alphas_cumprod', torch.sqrt(1. - self.alphas_cumprod))
+
+    def forward(self, state, action, target_next_state=None, decoder_inputs=None):
+        """
+        Dual mode forward:
+        1. If target_next_state is provided -> Training Mode (Returns Loss)
+        2. If target_next_state is None -> Inference Mode (Returns Predicted Next State via Sampling)
+        """
+        # Permute for Conv1D: (B, L, C) -> (B, C, L)
+        state_p = state.transpose(1, 2)
+        
+        if target_next_state is not None:
+            # === TRAINING ===
+            target_p = target_next_state.transpose(1, 2)
+            
+            B = state.shape[0]
+            # 1. Sample random timesteps
+            t = torch.randint(0, self.n_steps, (B,), device=state.device).long()
+            
+            # 2. Sample noise
+            noise = torch.randn_like(target_p)
+            
+            # 3. Create noisy image at time t
+            # x_t = sqrt(alpha_bar) * x_0 + sqrt(1-alpha_bar) * epsilon
+            sqrt_alpha_t = self.sqrt_alphas_cumprod[t][:, None, None]
+            sqrt_one_minus_alpha_t = self.sqrt_one_minus_alphas_cumprod[t][:, None, None]
+            
+            x_noisy = sqrt_alpha_t * target_p + sqrt_one_minus_alpha_t * noise
+            
+            # 4. Predict noise
+            noise_pred = self.model(x_noisy, t, state_p, action)
+            
+            # 5. Return Noise Prediction (MSE) Loss
+            # We return loss directly so your generic loop works, 
+            # though it's cleaner to override train_model (see below).
+            return F.mse_loss(noise_pred, noise)
+            
+        else:
+            # === INFERENCE (Full Loop) ===
+            return self.sample(state, action)
+
+    @torch.no_grad()
+    def sample(self, state, action):
+        """
+        Iterative denoising from pure noise to predicted next state.
+        """
+        B = state.shape[0]
+        device = state.device
+        
+        # Start from pure noise
+        x = torch.randn(B, 3, self.seq_len, device=device)
+        
+        # Permute condition
+        state_p = state.transpose(1, 2)
+        
+        for i in reversed(range(self.n_steps)):
+            t = torch.full((B,), i, device=device, dtype=torch.long)
+            
+            # Predict noise
+            predicted_noise = self.model(x, t, state_p, action)
+            
+            # Diffusion params for this step
+            beta = self.betas[i]
+            alpha = self.alphas[i]
+            alpha_cumprod = self.alphas_cumprod[i]
+            alpha_cumprod_prev = self.alphas_cumprod[i-1] if i > 0 else torch.tensor(1.0).to(device)
+            
+            # Reconstruction Logic (DDPM)
+            # mean = 1/sqrt(alpha) * (x - (beta / sqrt(1-alpha_bar)) * noise_pred)
+            coeff1 = 1 / torch.sqrt(alpha)
+            coeff2 = beta / torch.sqrt(1 - alpha_cumprod)
+            
+            mean = coeff1 * (x - coeff2 * predicted_noise)
+            
+            if i > 0:
+                noise = torch.randn_like(x)
+                sigma = torch.sqrt(beta) # or use posterior variance
+                x = mean + sigma * noise
+            else:
+                x = mean
+                
+        # Permute back: (B, C, L) -> (B, L, C)
+        return x.transpose(1, 2)
+
+    def train_model(self, train_dataset, val_dataset, device, batch_size=256, epochs=10, lr=1e-3, checkpoint_path=None, **kwargs):
+        """
+        Overriding train_model because Diffusion training requires a custom loop 
+        (ignoring the external criterion).
+        """
+        from torch.utils.data import DataLoader
+        import torch.optim as optim
+        
+        self.to(device)
+        optimizer = optim.Adam(self.parameters(), lr=lr)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        
+        best_val_loss = float("inf")
+
+        print("Starting Diffusion Training...")
+
+        for epoch in range(epochs):
+            self.train()
+            train_loss_acc = 0.0
+            
+            for src, action_map, tgt in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}"):
+                src, action_map, tgt = src.to(device), action_map.to(device), tgt.to(device)
+                
+                optimizer.zero_grad()
+                
+                # Forward with target triggers calculation of Noise MSE internally
+                loss = self(src, action_map, target_next_state=tgt)
+                
+                loss.backward()
+                optimizer.step()
+                train_loss_acc += loss.item()
+            
+            avg_train_loss = train_loss_acc / len(train_loader)
+            
+            # Validation (Evaluating noise prediction loss, not reconstruction)
+            val_loss = self._evaluate_diffusion_loss(val_dataset, device, batch_size)
+            
+            print(f"Epoch {epoch+1}: Train Loss (Noise MSE)={avg_train_loss:.6f} | Val Loss={val_loss:.6f}")
+            
+            if checkpoint_path and val_loss < best_val_loss:
+                best_val_loss = val_loss
+                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+                torch.save(self.state_dict(), checkpoint_path)
+                print(f"✅ Saved diffusion checkpoint.")
+
+    def _evaluate_diffusion_loss(self, dataset, device, batch_size):
+        from torch.utils.data import DataLoader
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        self.eval()
+        total_loss = 0.0
+        with torch.no_grad():
+            for src, action_map, tgt in loader:
+                src, action_map, tgt = src.to(device), action_map.to(device), tgt.to(device)
+                loss = self(src, action_map, target_next_state=tgt)
+                total_loss += loss.item()
+        return total_loss / len(loader)

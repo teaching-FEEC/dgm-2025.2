@@ -1,285 +1,256 @@
 import torch
-import torch.nn as nn
+from torch import nn
 import numpy as np
 import sys
 import os
-from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
+import gc 
 
-# Pfade setup
-sys.path.append(os.path.abspath('src'))
-sys.path.append(os.path.abspath('src/models'))
+# --- 1. Path Setup ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, 'src'))
+sys.path.append(os.path.join(current_dir, 'src', 'models'))
 
-# Imports
-from models.rope_diffusion import RopeDiffusion
-from utils import (
-    set_seed, load_data_from_npz, normalize_data, center_data, 
-    plot_model_comparison, weighted_rope_loss
-)
+# --- 2. Imports ---
+try:
+    # Only importing the Diffusion model now
+    from src.models.rope_diffusion import RopeDiffusion
+    
+    # Keep standard utils and data loaders
+    from src.data.rope_dataset import RopeDataset 
+    from src.utils import (
+        set_seed, plot_model_comparison, load_and_split_data, cleanup_memory
+    )
+except ImportError as e:
+    print(f"Error: Could not import necessary modules.")
+    print(f"Import error: {e}")
+    sys.exit(1)
 
-# --- Config ---
+# --- 3. Constants ---
 SEED = 42
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Model Params 
-D_MODEL = 384
-NHEAD = 8
-NUM_LAYERS = 6
-DIM_FF = D_MODEL * 4
-# Diffusion Specific
-NUM_TIMESTEPS = 1000 
+# Training parameters
+BATCH_SIZE = 256    
+EPOCHS = 20         # Diffusion often needs more epochs, but starting with 20
+LR = 1e-4           # Lower learning rate is usually better for Diffusion
 
-# Training Params
-BATCH_SIZE = 32
-EPOCHS = 100 
-LR = 1e-4
-PATIENCE = 10 # Early Stopping
-
-class DiffusionWrapper(nn.Module):
-    """
-    Wrapper, damit plot_model_comparison 'model(src, action)' aufrufen kann,
-    aber intern die sample()-Methode nutzt.
-    """
-    def __init__(self, diffusion_model, device):
-        super().__init__()
-        self.model = diffusion_model
-        self.device = device
-    
-    def forward(self, src, action):
-        return self.model.sample(src, action, self.device)
-
-def train_epoch(model, loader, optimizer, device):
-    model.train()
-    total_loss = 0
-    
-    for src, action, tgt in tqdm(loader, desc="Training"):
-        src, action, tgt = src.to(device), action.to(device), tgt.to(device)
-        
-        # 1. Sample Noise
-        noise = torch.randn_like(tgt)
-        
-        # 2. Sample Random Timesteps
-        B = src.shape[0]
-        timesteps = torch.randint(
-            0, model.scheduler.config.num_train_timesteps, 
-            (B,), device=device
-        ).long()
-        
-        # 3. Add Noise (Forward Process)
-        noisy_tgt = model.scheduler.add_noise(tgt, noise, timesteps)
-        
-        # 4. Predict Noise
-        pred_noise = model(noisy_tgt, timesteps, src, action)
-        
-        # 5. Loss (MSE auf Noise) - Standard für Diffusion Training
-        loss = nn.functional.mse_loss(pred_noise, noise)
-        
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        
-        total_loss += loss.item()
-        
-    return total_loss / len(loader)
-
-def validate(model, loader, device):
-    model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for src, action, tgt in loader:
-            src, action, tgt = src.to(device), action.to(device), tgt.to(device)
-            
-            # Validation Loss is also Noise MSE (Sampling is too slow here)
-            noise = torch.randn_like(tgt)
-            timesteps = torch.randint(
-                0, model.scheduler.config.num_train_timesteps, 
-                (src.shape[0],), device=device
-            ).long()
-            noisy_tgt = model.scheduler.add_noise(tgt, noise, timesteps)
-            pred_noise = model(noisy_tgt, timesteps, src, action)
-            
-            loss = nn.functional.mse_loss(pred_noise, noise)
-            total_loss += loss.item()
-            
-    return total_loss / len(loader)
-
-def evaluate_rollout(model, test_src, test_act, test_tgt, device, steps, num_rollouts, denorm_stats=None):
-    """Autoregressive Rollout using Diffusion Sampling"""
-    print(f"Starting Diffusion Rollout ({steps} steps, {num_rollouts} samples)...")
-    model.eval()
-    total_loss = 0
-    
-    # Sequential indices
-    start_indices = range(min(num_rollouts, len(test_src) - steps))
-    
-    denorm = denorm_stats is not None
-    if denorm:
-        train_mean, train_std = denorm_stats
-        train_mean, train_std = train_mean.to(device), train_std.to(device)
-        eps = 1e-8
-
-    with torch.no_grad():
-        for i in tqdm(start_indices, desc="Rollout"):
-            step_losses = []
-            curr_state = test_src[i].unsqueeze(0).to(device)
-            
-            for k in range(steps):
-                curr_action = test_act[i+k].unsqueeze(0).to(device)
-                real_tgt = test_tgt[i+k].unsqueeze(0).to(device)
-                
-                # --- Sampling Step ---
-                pred_next = model.sample(curr_state, curr_action, device)
-                # ---------------------
-                
-                # Loss Calculation (Weighted MSE on State)
-                if denorm:
-                    pred_dn = pred_next * (train_std + eps) + train_mean
-                    tgt_dn = real_tgt * (train_std + eps) + train_mean
-                    src_dn = curr_state * (train_std + eps) + train_mean
-                    loss = weighted_rope_loss(pred_dn, tgt_dn, src_dn, curr_action)
-                else:
-                    # Use weighted loss even for normalized data comparison
-                    loss = weighted_rope_loss(pred_next, real_tgt, curr_state, curr_action)
-                
-                step_losses.append(loss.item())
-                curr_state = pred_next # Auto-regressive update
-            
-            total_loss += np.mean(step_losses)
-            
-    return total_loss / len(start_indices)
+# Diffusion specific parameters
+DIFFUSION_STEPS = 50  # Lower = Faster training/inference, Higher = Better quality (standard is 1000)
+BASE_DIM = 64         # Width of the U-Net
 
 def main():
     set_seed(SEED)
     print(f"Using device: {DEVICE}")
+
+    all_test_losses_normalized = {}
+    all_test_losses_denormalized = {}
+    all_test_losses_rollout = {} 
     
-    # 1. Load Data
+    # Data path
+    data_path = 'src/data/rope_state_action_next_state_mil.npz'
+    
+    # 1. Load Data (Raw)
     try:
         (
-            src_tr, act_tr, tgt_tr,
-            src_val, act_val, tgt_val,
-            src_test, act_test, tgt_test,
-            USE_DENSE, ACT_DIM, SEQ_LEN
-        ) = load_data_from_npz(seed=SEED)
+            src_train_raw_np, act_train_raw_np, tgt_train_raw_np,
+            src_val_raw_np,   act_val_raw_np,   tgt_val_raw_np,
+            src_test_raw_np,  act_test_raw_np,  tgt_test_raw_np,
+            USE_DENSE_ACTION, ACTION_DIM, SEQ_LEN
+        ) = load_and_split_data(data_path=data_path, seed=SEED)
+        
     except Exception as e:
-        print(f"Data load error: {e}"); sys.exit(1)
-
-    # Raw Tensors
-    src_tr, act_tr, tgt_tr = map(lambda x: torch.tensor(x, dtype=torch.float32), [src_tr, act_tr, tgt_tr])
-    src_val, act_val, tgt_val = map(lambda x: torch.tensor(x, dtype=torch.float32), [src_val, act_val, tgt_val])
-    src_test, act_test, tgt_test = map(lambda x: torch.tensor(x, dtype=torch.float32), [src_test, act_test, tgt_test])
-
-    # Experiments
-    experiment_types = ['standard', 'com_plus_standard']
+        print(f"\n---!! An error occurred while loading data: {e}")
+        raise
+        
+    # Convert all raw numpy arrays to raw PyTorch tensors
+    src_train_raw = torch.tensor(src_train_raw_np, dtype=torch.float32)
+    act_train_raw = torch.tensor(act_train_raw_np, dtype=torch.float32)
+    tgt_train_raw = torch.tensor(tgt_train_raw_np, dtype=torch.float32)
     
+    src_val_raw = torch.tensor(src_val_raw_np, dtype=torch.float32)
+    act_val_raw = torch.tensor(act_val_raw_np, dtype=torch.float32)
+    
+    src_test_raw = torch.tensor(src_test_raw_np, dtype=torch.float32)
+    act_test_raw = torch.tensor(act_test_raw_np, dtype=torch.float32)
+    tgt_test_raw = torch.tensor(tgt_test_raw_np, dtype=torch.float32)
+    
+    # --- Define Experiments ---
+    # We keep the normalization experiments to see if Center of Mass helps Diffusion
+    experiment_types = ['standard', 'com_plus_standard']
+
     for norm_type in experiment_types:
-        print(f"\n=== DIFFUSION EXPERIMENT: {norm_type.upper()} ===")
+        print(f"\n=======================================================")
+        print(f"  STARTING DIFFUSION EXPERIMENT: {norm_type.upper()}") 
+        print(f"=======================================================\n")
         
-        # Data Prep
-        denorm_stats = None
-        if norm_type == 'standard':
-            (src_tr_n, tgt_tr_n, src_val_n, tgt_val_n, src_test_n, tgt_test_n, mean, std) = normalize_data(
-                src_tr, tgt_tr, src_val, tgt_val, src_test, tgt_test
-            )
-            denorm_flag = True
-            denorm_stats = (mean, std)
-            
-        elif norm_type == 'com_plus_standard':
-            (src_tr_c, tgt_tr_c, src_val_c, tgt_val_c, src_test_c, tgt_test_c) = center_data(
-                src_tr, tgt_tr, src_val, tgt_val, src_test, tgt_test
-            )
-            (src_tr_n, tgt_tr_n, src_val_n, tgt_val_n, src_test_n, tgt_test_n, mean, std) = normalize_data(
-                src_tr_c, tgt_tr_c, src_val_c, tgt_val_c, src_test_c, tgt_test_c
-            )
-            denorm_flag = True
-            denorm_stats = (mean, std)
+        checkpoints_dir = os.path.join("checkpoints_diffusion", norm_type)
+        os.makedirs(checkpoints_dir, exist_ok=True)
 
-        # Datasets
-        train_ds = TensorDataset(src_tr_n, act_tr, tgt_tr_n)
-        val_ds = TensorDataset(src_val_n, act_val, tgt_val_n)
+        # === 1. Prepare Data ===
+        use_com = (norm_type == 'com_plus_standard')
         
-        train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
+        train_ds = RopeDataset(
+            rope_states=src_train_raw, actions=act_train_raw, 
+            normalize=True, center_of_mass=use_com, dense=USE_DENSE_ACTION
+        )
+        train_mean = train_ds.mean
+        train_std = train_ds.std
+        
+        val_ds = RopeDataset(
+            rope_states=src_val_raw, actions=act_val_raw, 
+            normalize=False, mean=train_mean, std=train_std,
+            center_of_mass=use_com, dense=USE_DENSE_ACTION
+        )
+        test_ds = RopeDataset(
+            rope_states=src_test_raw, actions=act_test_raw, 
+            normalize=False, mean=train_mean, std=train_std,
+            center_of_mass=use_com, dense=USE_DENSE_ACTION
+        )
 
-        # Model Setup
-        print("Instantiating RopeDiffusion...")
+        denorm_stats_for_rollout = (train_mean, train_std)
+
+        # Initialize result containers
+        norm_losses = {} 
+        denorm_losses = {} 
+        rollout_losses = {} 
+
+        # === 2. Diffusion Training ===
+        print(f"\n>>> Initializing RopeDiffusion...")
+        
         model = RopeDiffusion(
             seq_len=SEQ_LEN,
-            d_model=D_MODEL,
-            nhead=NHEAD,
-            num_layers=NUM_LAYERS,
-            dim_feedforward=DIM_FF,
-            action_dim=ACT_DIM,
-            num_train_timesteps=NUM_TIMESTEPS
+            action_dim=ACTION_DIM,
+            n_steps=DIFFUSION_STEPS,
+            base_dim=BASE_DIM
         ).to(DEVICE)
         
-        optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+        checkpoint_path = os.path.join(checkpoints_dir, "diffusion_best.pth")
         
-        # Paths
-        ckpt_dir = os.path.join("checkpoints_diffusion", norm_type)
-        os.makedirs(ckpt_dir, exist_ok=True)
-        ckpt_path = os.path.join(ckpt_dir, "diffusion_best.pth")
-        
-        # Training Loop
-        best_val_loss = float('inf')
-        no_improve = 0
-        
-        print("Starting Training...")
-        for epoch in range(EPOCHS):
-            train_loss = train_epoch(model, train_loader, optimizer, DEVICE)
-            val_loss = validate(model, val_loader, DEVICE)
-            
-            print(f"Epoch {epoch+1}: Train Loss (Noise MSE): {train_loss:.5f} | Val Loss: {val_loss:.5f}")
-            
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                torch.save(model.state_dict(), ckpt_path)
-                print(f"Saved best model to {ckpt_path}")
-                no_improve = 0
-            else:
-                no_improve += 1
-                
-            if no_improve >= PATIENCE:
-                print("Early stopping.")
-                break
-        
-        # Evaluation
-        print("Loading best model for evaluation...")
-        model.load_state_dict(torch.load(ckpt_path, map_location=DEVICE))
-        
-        # Run Rollout (Reduced samples because diffusion is slow)
-        # 1000 steps, 20 rollouts (instead of 100)
-        rollout_loss = evaluate_rollout(
-            model, src_test_n, act_test, tgt_test_n, DEVICE, 
-            steps=1000, num_rollouts=20, denorm_stats=denorm_stats
+        # Train (Using the custom loop inside RopeDiffusion)
+        model.train_model(
+            train_dataset=train_ds, 
+            val_dataset=val_ds, 
+            device=DEVICE,
+            batch_size=BATCH_SIZE, 
+            epochs=EPOCHS, 
+            lr=LR,
+            checkpoint_path=checkpoint_path
         )
-        print(f"Final Rollout Loss ({norm_type}): {rollout_loss:.6f}")
         
-        # Plotting
-        plots_dir = os.path.join("comparisons_diffusion", norm_type)
-        os.makedirs(plots_dir, exist_ok=True)
+        # Reload best model for Evaluation
+        print("Reloading best checkpoint for evaluation...")
+        model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
         
-        # Wrap model for the plotter
-        inference_model = DiffusionWrapper(model, DEVICE)
-        models_dict = {"Diffusion": inference_model}
+        # === 3. Evaluation ===
+        print(f"Evaluating Diffusion (This involves sampling and is slower than standard models)...")
         
-        # Simple test set for plotting (taking sequential samples)
-        # Just reuse the test tensors for plotting index access
-        plot_ds = TensorDataset(src_test_n, act_test, tgt_test_n)
+        # 1. Normalized Loss (Sampling vs Normalized GT)
+        # Note: We use a smaller batch size here because sampling requires creating 
+        # full-sized noise tensors which can eat VRAM.
+        n_loss = model.evaluate_model(
+            test_dataset=test_ds, device=DEVICE, batch_size=64,
+            criterion=nn.MSELoss()
+        )
+        norm_losses["Diffusion"] = n_loss
+        print(f"  -> Normalized Test Loss: {n_loss:.6f}")
         
-        print("Plotting samples...")
-        for i in range(5): # Plot first 5 samples of test set
-            save_file = os.path.join(plots_dir, f"diffusion_sample_{i}.png")
-            plot_model_comparison(
-                models_dict=models_dict,
-                dataset=plot_ds,
-                device=DEVICE,
-                index=i,
-                denormalize=denorm_flag,
-                train_mean=mean,
-                train_std=std,
-                save_path=save_file,
-                use_dense_action=USE_DENSE
-            )
+        # 2. Denormalized Loss (Sampling vs Real World Coords)
+        dn_loss = model.evaluate_model_denormalized(
+            test_dataset=test_ds, device=DEVICE,
+            train_mean=train_mean, train_std=train_std,
+            batch_size=64, criterion=nn.MSELoss() 
+        )
+        denorm_losses["Diffusion"] = dn_loss
+        print(f"  -> Denormalized Test Loss: {dn_loss:.6f}")
+        
+        # 3. Rollout
+        # WARNING: Rollout is Step * Diffusion_Steps. 
+        # e.g. 50 rollout steps * 50 diffusion steps = 2500 passes per sample.
+        # We reduce the steps and num_rollouts here for sanity.
+        print("Running Autoregressive Rollout...")
+        r_loss = model.evaluate_autoregressive_rollout(
+            test_src_tensor=src_test_raw, test_act_tensor=act_test_raw,
+            test_tgt_tensor=tgt_test_raw, device=DEVICE, 
+            steps=50,       # Reduced from 1000
+            num_rollouts=20, # Reduced from 100
+            criterion=nn.MSELoss(), denormalize_stats=denorm_stats_for_rollout
+        )
+        rollout_losses["Diffusion"] = r_loss
+        print(f"  -> Rollout Loss: {r_loss:.6f}")
+
+        # Store results
+        all_test_losses_normalized[norm_type] = norm_losses
+        all_test_losses_denormalized[norm_type] = denorm_losses
+        all_test_losses_rollout[norm_type] = rollout_losses
+        
+        # === 4. Plotting ===
+        if len(test_ds) > 0:
+            print(f"\n--- Plotting Diffusion Predictions ({norm_type}) ---")
+            plots_dir = os.path.join("comparisons_diffusion", norm_type)
+            os.makedirs(plots_dir, exist_ok=True)
+            
+            # Put model in dict for the plotter function
+            model.eval()
+            plotting_models = {"Diffusion": model}
+            
+            num_samples = min(5, len(test_ds))
+            indices = np.random.choice(len(test_ds), num_samples, replace=False)
+            
+            with torch.no_grad():
+                for i, idx in enumerate(indices, 1): 
+                    filename = f"diffusion_sample_{i}.png"
+                    plot_model_comparison(
+                        models_dict=plotting_models, 
+                        dataset=test_ds, 
+                        device=DEVICE, index=idx, denormalize=True,        
+                        train_mean=train_mean, train_std=train_std,      
+                        save_path=os.path.join(plots_dir, filename),
+                        use_dense_action=USE_DENSE_ACTION 
+                    )
+            
+            # Cleanup for next loop
+            del plotting_models
+
+        # Cleanup Memory
+        cleanup_memory(model)
+                
+    print("\n\nAll diffusion experiments finished.")
+    print_loss_table(all_test_losses_normalized, "Final Normalized Test Loss")
+    print_loss_table(all_test_losses_denormalized, "Final Denormalized Test Loss")
+    print_loss_table(all_test_losses_rollout, "Final Rollout Test Loss")
+
+def print_loss_table(all_test_losses, title):
+    print(f"\n\n=======================================================")
+    print(f"           {title}")
+    print(f"=======================================================")
+    
+    if not all_test_losses:
+        print("No test losses recorded.")
+        return
+
+    first_norm_type = list(all_test_losses.keys())[0]
+    model_names = list(all_test_losses[first_norm_type].keys())
+    
+    header = "| Normalization |"
+    separator = "|---|"
+    for name in model_names:
+        header += f" {name} Loss |"
+        separator += "---|"
+    print(header)
+    print(separator)
+    
+    for norm_type, model_losses in all_test_losses.items():
+        row = f"| {norm_type} |"
+        for name in model_names:
+            loss = model_losses.get(name)
+            if isinstance(loss, float):
+                row += f" {loss:.6f} |"
+            elif isinstance(loss, str): 
+                row += f" {loss} |"
+            else:
+                row += f" N/A |"
+        print(row)
 
 if __name__ == "__main__":
     main()

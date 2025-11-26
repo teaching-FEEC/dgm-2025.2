@@ -14,7 +14,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 ## Abstract
 
-This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **Transformer + BiLSTM**, and **VAE** were evaluated to predict the rope's future configuration. Initial results demonstrate the feasibility of learning, with **BiLSTM showing the lowest error**. The next phase will involve massive dataset expansion and the exploration of **Latent World Models**[1] to better quantify the uncertainty of action outcomes.
+This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of 1 million transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **BERT**, **Transformer**, **Diffusion-Models** and **Dreamer** were evaluated to predict the rope's future configuration. The best performance was shown by...
 
 ---
 
@@ -34,7 +34,8 @@ Develop a **dynamics model** capable of predicting the future state and **quanti
 
 The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow is roughly described in the following picture. 
 
-![image](workflow.png)
+NEED NEW PICTURE HERE 
+
 
 ### 3.2 Dataset Generation
 
@@ -46,7 +47,6 @@ To train and evaluate the proposed models, a synthetic dataset of **(state, acti
 - **State representation ($\mathbf{s}_{t}$):** The 3D coordinates $(\mathbf{x}, \mathbf{y}, \mathbf{z})$ of the rope’s 70 cylinders.  
 - **Action representation ($\mathbf{a}_{t}$):** A 3D force vector applied to a single cylinder at each step.  
 - **Next state ($\mathbf{s}_{t+1}$):** Rope configuration after the force is applied.  
-- **Data rate:** The current implementation generates approximately **7 datapoints/second** (~600,000 per day).
 
 ### 3.3 Modeling Approaches
 
@@ -58,31 +58,20 @@ Three model architectures were evaluated to learn the rope dynamics:
 - The **Bidirectional LSTM** captures both forward and backward dependencies between rope links, essential since each link’s motion depends on its neighbors on both sides.  
 - **Residual connections** were added to allow the model to predict position deltas, improving stability and convergence.
 
-#### (b) Transformer + BiLSTM Hybrid
+#### (b) BERT
 
-- Combines a **Transformer encoder-decoder** (Vaswani et al., 2017) [3] to model global dependencies between rope segments with a **BiLSTM** to capture local directional dynamics.  
+#### (c) Transformer
 
-#### (c) Variational Autoencoder (VAE)
+#### (d) Diffusion
 
-- **VAEs** were explored as a foundation for probabilistic world modeling.  
-- The encoder maps state-action pairs to a latent distribution, allowing the decoder to predict a **probabilistic next state**, aligning with the goal of capturing uncertainty in rope dynamics.
-
-### 3.4 Implementation and Tools
-
-| Component | Tool/Language | Version/Details |
-| :--- | :--- | :--- |
-| **Simulation** | MuJoCo | v3.1 |
-| **Programming Language** | Python | 3.10 |
-| **Deep Learning Framework** | PyTorch, Transformers | - |
-| **Data Processing** | NumPy, Pandas | - |
-| **Visualization** | Matplotlib | - |
+#### (e) Dreamer
 
 #### Training Setup
 
-- **3,000 samples** used in current phase  
-- Models trained for **100 epochs**  
+- **1.000.000 samples** used 
+- Models trained for **50 epochs**  
 - Checkpointing based on **validation loss (MSE)**  
-- Data **normalized** per coordinate (mean and std)
+- Data **normalized** using the individual center of mass (CoM) of datapoints
 
 ## 4. Evaluation Methodology
 
@@ -96,9 +85,10 @@ Model performance was evaluated using:
 
   where *N* is the number of rope links, $Y_i$ is the actual position of the rope link, and $\hat{Y}_i$ is the predicted position. A lower MSE indicates a better fit of the model to the data.
 
+- **MSE on Autoregression:** Quantifies how much the predicted values differ from the ground-truth over 1000 steps
+
 - **Qualitative Visualization:** Predicted and true rope shapes were visualized to assess spatial similarity and clustering tendencies.
 
-**Planned Extensions:** Future work will incorporate **Average Displacement Error (ADE)** and **Dice Coefficient** to better measure deformation overlap.
 
 ### 4.2 Assessment Criteria
 
@@ -106,7 +96,6 @@ The objectives are considered met when:
 
 1. The model accurately predicts next-state configurations (**low MSE/ADE**).  
 2. The model generalizes to unseen actions and configurations.  
-3. Probabilistic models (e.g., VAE) demonstrate the ability to represent **uncertainty** in outcomes.
 
 ## 5. Experiments, Results, and Discussion
 
@@ -123,14 +112,17 @@ Three model families were tested:
 
 ### 5.2 Results
 
-| Model | MSE |
+| Model | Params | MSE |
 |--------|-----|
-| BiLSTM (2 layers) | **1.04** |
-| Transformer + BiLSTM (1 encoder/decoder + 1 BiLSTM) | 1.06 |
-| VAE | 1.06 |
+| BiLSTM  | 4 |  3 |
+| Bert  | 4 |  3 |
+| Transformer  | 4 |  3 |
+| Diffusion  | 4 |  3 |
+| Dreamer  | 4 |  3 |
 
-Visual inspection of predicted centerlines revealed that all models could reproduce the general rope configuration but tended to produce slightly **clustered** predictions concentrated near the original region.  
-The **BiLSTM** achieved marginally lower error and visually smoother deformations, suggesting that local sequential dependencies dominate rope dynamics in this limited dataset.
+
+
+Visual inspection of predicted centerlines revealed that ...
 
 ### 5.3 Discussion of Results
 
