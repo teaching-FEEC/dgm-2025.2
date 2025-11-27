@@ -14,7 +14,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 ## Abstract
 
-This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **Transformer + BiLSTM**, and **VAE** were evaluated to predict the rope's future configuration. Initial results demonstrate the feasibility of learning, with **BiLSTM showing the lowest error**. The next phase will involve massive dataset expansion and the exploration of **Latent World Models**[1] to better quantify the uncertainty of action outcomes.
+This project aims to develop a **probabilistic dynamics model** for **Deformable Linear Objects (DLOs)**, which is fundamental for autonomous manipulation with risk awareness. We generated a synthetic dataset of 1 million transitions (**state, action, next state**) using the **MuJoCo** simulator. Architectures such as **BiLSTM**, **BERT**, **Transformer**, **Diffusion-Models** and **Dreamer** were evaluated to predict the rope's future configuration. The best performance was shown by the **Dreamer** model.
 
 ---
 
@@ -32,9 +32,9 @@ Develop a **dynamics model** capable of predicting the future state and **quanti
 
 ### 3.1 Overview
 
-The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow is roughly described in the following picture. 
+The project aims to develop a model capable of predicting the future state of a **Deformable Linear Object (DLO)** given its current configuration and an applied action. This predictive model serves as the foundation for future development of **risk-aware agents** for autonomous DLO manipulation. Our workflow for our most successful model, the **Dreamer**, is described in the following picture. Workflows for other models can be found in the attached presentation. 
 
-![image](workflow.png)
+![Dreamer-Architecture](dreamer.jpeg)
 
 ### 3.2 Dataset Generation
 
@@ -46,7 +46,6 @@ To train and evaluate the proposed models, a synthetic dataset of **(state, acti
 - **State representation ($\mathbf{s}_{t}$):** The 3D coordinates $(\mathbf{x}, \mathbf{y}, \mathbf{z})$ of the rope’s 70 cylinders.  
 - **Action representation ($\mathbf{a}_{t}$):** A 3D force vector applied to a single cylinder at each step.  
 - **Next state ($\mathbf{s}_{t+1}$):** Rope configuration after the force is applied.  
-- **Data rate:** The current implementation generates approximately **7 datapoints/second** (~600,000 per day).
 
 ### 3.3 Modeling Approaches
 
@@ -58,31 +57,53 @@ Three model architectures were evaluated to learn the rope dynamics:
 - The **Bidirectional LSTM** captures both forward and backward dependencies between rope links, essential since each link’s motion depends on its neighbors on both sides.  
 - **Residual connections** were added to allow the model to predict position deltas, improving stability and convergence.
 
-#### (b) Transformer + BiLSTM Hybrid
+#### (b) BERT
 
-- Combines a **Transformer encoder-decoder** (Vaswani et al., 2017) [3] to model global dependencies between rope segments with a **BiLSTM** to capture local directional dynamics.  
+ - The **Rope BERT** model uses a **Transformer Encoder-only** architecture, adapted from the original BERT (Bidirectional Encoder Representations from Transformers) design.
+ - It utilizes the **bidirectional** nature of the Transformer Encoder to process the rope's state sequence (the 70 link points) by allowing each point's prediction to be informed by all other points, regardless of their position (before or after) in the sequence
+ - It predicts the **position delta** (change in position) to derive the next state.
 
-#### (c) Variational Autoencoder (VAE)
+#### (c) Transformer
 
-- **VAEs** were explored as a foundation for probabilistic world modeling.  
-- The encoder maps state-action pairs to a latent distribution, allowing the decoder to predict a **probabilistic next state**, aligning with the goal of capturing uncertainty in rope dynamics.
+- This model, **Rope Transformer** , was primarily configured as a **Decoder-only** network for sequence-to-sequence prediction.
+- In this setup, the decoder takes the current rope state and action as input to autoregressively predict the next state configuration.
+- The structure allows for the optional inclusion of a BiLSTM layer after the decoder to further capture temporal dependencies before predicting the final state delta.
 
-### 3.4 Implementation and Tools
+#### (d) Diffusion
 
-| Component | Tool/Language | Version/Details |
-| :--- | :--- | :--- |
-| **Simulation** | MuJoCo | v3.1 |
-| **Programming Language** | Python | 3.10 |
-| **Deep Learning Framework** | PyTorch, Transformers | - |
-| **Data Processing** | NumPy, Pandas | - |
-| **Visualization** | Matplotlib | - |
+- The **Rope Diffusion** model utilizes a **Conditional 1D U-Net** architecture, specifically adapted to treat the rope's links as a spatial sequence.
+- It operates as a **Denoising Diffusion Probabilistic Model (DDPM)**. Instead of directly predicting the next state coordinates in a single forward pass, the model learns to iteratively reverse a diffusion process, starting from pure Gaussian noise and refining it step-by-step into the next state configuration.
+- The generation process is explicitly **conditioned** on the current rope state and the action vector via feature concatenation and time embeddings, ensuring the denoising trajectory is physically grounded.
+
+#### (e) Dreamer (World Model)
+
+The **Dreamer** model, a state-of-the-art **World Model** architecture, was employed to solve the supervised prediction problem. Instead of optimizing on the high-dimensional 3D coordinates, this approach learns the transition dynamics in a **compact, meaningful latent space**.
+
+This method is crucial because it allows the model to:
+1.  **Isolate Dynamics:** Focus on learning the intrinsic rope movement patterns (dynamics) rather than trivial spatial translations.
+2.  **Model Uncertainty:** Map the inherent stochasticity of DLO manipulation to a **probability distribution** over future states, directly satisfying the project's goal of quantifying risk.
+
+### 3.4 Dreamer World Model Architecture Details
+
+The Dreamer architecture is built around the **Recurrent State-Space Model (RSSM)**, which is designed to handle both deterministic motion and inherent stochasticity by splitting the internal state into two components:
+
+* **Deterministic Memory ($\mathbf{h}_{t}$ - LSTM Cell):** This component maintains the **long-term memory** of the trajectory, capturing sequential dependencies like velocity and momentum, which are vital for predicting motion over multiple time steps.
+* **Stochastic State ($\mathbf{z}_{t}$ - Normal Distribution):** This component explicitly models **prediction uncertainty**. During training, the model learns to match the predicted state (the **Prior**) with the observed state (the **Posterior**), forcing the network to generate valid probability distributions for the future DLO configuration.
+
+#### Physics-Informed Loss Function
+The model's ability to generate physically realistic predictions is enhanced by augmenting the reconstruction loss ($L_{recon}$) with terms that enforce physical realism:
+
+* **Kinematic Accuracy:** Matches both Position and Velocity.
+* **Material Constraints:** Penalizes Stretching and unnatural Bending (enforcing inextensibility and stiffness).
+* **Topological Consistency:** Includes terms to prevent Self-Intersection.
+* **KL Divergence:** A regularization term ensuring the predicted dynamics (Prior) do not diverge from the observed dynamics (Posterior).
 
 #### Training Setup
 
-- **3,000 samples** used in current phase  
-- Models trained for **100 epochs**  
+- **1.000.000 samples** used 
+- Models trained for **50 epochs**  
 - Checkpointing based on **validation loss (MSE)**  
-- Data **normalized** per coordinate (mean and std)
+- Data **normalized** using the individual center of mass (CoM) of datapoints
 
 ## 4. Evaluation Methodology
 
@@ -96,9 +117,10 @@ Model performance was evaluated using:
 
   where *N* is the number of rope links, $Y_i$ is the actual position of the rope link, and $\hat{Y}_i$ is the predicted position. A lower MSE indicates a better fit of the model to the data.
 
+- **MSE on Autoregression:** Quantifies how much the predicted values differ from the ground-truth over 1000 steps
+
 - **Qualitative Visualization:** Predicted and true rope shapes were visualized to assess spatial similarity and clustering tendencies.
 
-**Planned Extensions:** Future work will incorporate **Average Displacement Error (ADE)** and **Dice Coefficient** to better measure deformation overlap.
 
 ### 4.2 Assessment Criteria
 
@@ -106,59 +128,68 @@ The objectives are considered met when:
 
 1. The model accurately predicts next-state configurations (**low MSE/ADE**).  
 2. The model generalizes to unseen actions and configurations.  
-3. Probabilistic models (e.g., VAE) demonstrate the ability to represent **uncertainty** in outcomes.
 
 ## 5. Experiments, Results, and Discussion
 
 ### 5.1 Experimental Setup
 
-A dataset of approximately 3,000 samples was generated in **MuJoCo**, simulating a rope composed of 70 interconnected cylindrical segments with ball joints. Each sample consisted of a state $s_{t}$ (the 3D positions of all rope segments), an action $a_{t}$ (a force vector applied to a specific segment), and the resulting next state $s_{t+1}$.  
-The dataset was normalized and divided into training, validation, and test sets. All models were trained using the **Mean Squared Error (MSE)** loss.
+A dataset of approximately 1.000.000 samples was generated in **MuJoCo**, simulating a rope composed of 70 interconnected cylindrical segments with ball joints. Each sample consisted of a state $s_{t}$ (the 3D positions of all rope segments), an action $a_{t}$ (a force vector applied to a specific segment), and the resulting next state $s_{t+1}$.  
+The dataset was normalized using a Center-of-Mass approach and divided into training, validation, and test sets. All models were trained using the **Physics Informed Loss** (Source?) loss and evaluated using **Mean Squared Error** (MSE)
 
-Three model families were tested:
-
-- **BiLSTM** — captures bidirectional dependencies along the rope.  
-- **Transformer + BiLSTM** — combines global attention and local sequential modeling.  
-- **VAE** — tests a generative probabilistic baseline.
 
 ### 5.2 Results
 
-| Model | MSE |
-|--------|-----|
-| BiLSTM (2 layers) | **1.04** |
-| Transformer + BiLSTM (1 encoder/decoder + 1 BiLSTM) | 1.06 |
-| VAE | 1.06 |
+The tested model families and the corresponding results were the following: 
 
-Visual inspection of predicted centerlines revealed that all models could reproduce the general rope configuration but tended to produce slightly **clustered** predictions concentrated near the original region.  
-The **BiLSTM** achieved marginally lower error and visually smoother deformations, suggesting that local sequential dependencies dominate rope dynamics in this limited dataset.
+| Model | Params | MSE |
+|--------|-----|
+| BiLSTM  | 1.12M |  1.43 |
+| BERT  | 1.9M |  1.43 |
+| Transformer  | 407K |  1.45 |
+| Diffusion  | 700K |  1.69 |
+| Dreamer  | 11M |  1.16 |
+
+
+
+Visual inspection of predicted centerlines revealed that the BiLSTM, BERT and Transformer failed to predict the rope states accurately. Instead, these models produced rope states which were clustered near the rope positions. In contrast, Dreamer seemed to follow the general structure of the rope rather accurately.
 
 ### 5.3 Discussion of Results
 
-Although the differences between models are small, several tendencies emerged:
+#### Superiority of World Models
+The **Dreamer Rope Model** demonstrated a significant improvement, achieving an MSE of $\mathbf{1.16}$ and capturing rope dynamics with superior efficiency compared to baseline models (BiLSTM, BERT, Transformer). This success is attributed to its **World Model** approach, which:
+1.  **Considers Temporal Sequences:** Explicitly models long-term dependencies through the Recurrent State-Space Model (**RSSM**), crucial for predicting complex, multi-step manipulation outcomes.
+2.  **Utilizes a Compact Latent Space:** Learns transition dynamics in a **dense, meaningful latent space**, allowing for efficient feature representation.
+3.  **Models Uncertainty:** Manages the inherent stochasticity of DLO manipulation by mapping states to **probability distributions** (via the stochastic state $\mathbf{z}_{t}$).
 
-- **Dataset size is the primary limitation.** With only 3,000 samples, models quickly overfit, and larger, more diverse data are needed.  
-- **Clustering and low regional diversity.** All models produced predictions biased toward more clustered rope configurations.  
-- **BiLSTM achieved best results.** For small datasets, recurrent architectures outperform more modern alternatives.  
-- **Transformer and BiLSTM hybrids** capture deformations better but are prone to concentrated predictions.  
-- **VAE predictions** show higher variability, representing uncertainty but at reduced positional accuracy.
+#### Importance of Temporal Dynamics
+The clustering of MSE results for the BiLSTM, BERT, and Transformer models (all $\approx 1.43-1.45$) confirms that methods which fail to adequately capture temporal dynamics across multiple steps struggle to generalize. These models perform poorly in **long-horizon autoregressive scenarios** (simulating long rollouts), as errors compound quickly when relying solely on instantaneous predictions. The Dreamer model's architecture successfully mitigates this limitation by leveraging its recurrent memory ($\mathbf{h}_{t}$) and uncertainty modeling. **Incorporating temporal dynamics across multiple manipulation steps yields substantial improvements** in next-state predictions.
 
-The experiments highlight that **performance is currently constrained by data diversity**, not architectural sophistication. Future iterations will include over one million samples with varied physical parameters (friction, stiffness, action complexity, and bimanual manipulation).  
-Additionally, **latent world models (e.g., Dreamer [4])** will be explored to capture multimodal dynamics and uncertainty.
+#### Rollout Validation
+The ability of the Dreamer model to perform effective "rollouts" (simulating long-horizon behaviors without the MuJoCo engine) validates the World Model approach as a promising foundation for a **model-based reinforcement learning (MBRL)** agent focused on risk-aware DLO control.
+
 
 ## 6. Conclusion
 
-This partial submission presented the initial progress toward building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project addressed the challenges of representing and predicting rope dynamics under applied actions using data generated in **MuJoCo** simulations. A dataset of approximately 3,000 samples was created, encoding rope states as sequences of 3D coordinates and actions as localized forces.
+This final submission presents the progress towards building a **probabilistic model for the manipulation of Deformable Linear Objects (DLOs)**. The project successfully generated a robust dataset of **1 million transitions** using **MuJoCo** simulations to address the challenges of representing and predicting complex rope dynamics under applied actions.
 
-Three neural architectures — **BiLSTM**, **Transformer + BiLSTM**, and **VAE** — were tested to predict the next rope configuration. The **BiLSTM** achieved slightly better results, indicating that local sequential dependencies dominate at this stage. The small dataset size limited generalization capacity, reinforcing the need for larger and more varied data.
+Five neural architectures—**BiLSTM, BERT, Transformer, Diffusion Models, and Dreamer**—were evaluated. Our core findings confirm that:
 
-The experiments demonstrated the feasibility of learning rope dynamics from simulation but also exposed the limitations of simple deterministic models in capturing uncertainty. This motivates the next phase, which will focus on:
+1.  **Temporal Dynamics are Essential:** Models that incorporated temporal dynamics across multiple manipulation steps, most notably **Dreamer**, yielded **substantial improvements** in next-state predictions, particularly in **long-horizon autoregressive scenarios**.
+2.  **Capacity Constraints in Diffusion:** While **Diffusion Models** offer a theoretical advantage in generating sharp, non-blurry states by modeling the data distribution, the experimental **~700k parameter** model proved insufficient. The results indicate that diffusion architectures are highly sensitive to **model capacity**; to effectively capture the fine-grained physical constraints of the rope without underfitting, these models require significantly **larger networks** compared to the more efficient regression-based baselines.
+3.  **World Models are Promising:** The **Dreamer** model emerged as the most successful approach, validating **World Models** for physical dynamics. Its superiority stems from its ability to:
+    * Capture complex features within a **dense, meaningful latent space**.
+    * Explicitly **manage uncertainty** by mapping stochastic states to **probability distributions**, directly addressing the project's goal of quantifying action risk.
 
-- **Dataset Expansion:** generate over one million samples with varied physical parameters.  
-- **Action Complexity:** include multi-step and bimanual manipulations.  
-- **Model Enhancement:** explore **latent world models (e.g., Dreamer[4])** and **spatial transformers**.  
-- **Evaluation and Planning:** introduce probabilistic metrics such as **Average Displacement Error (ADE)** and **Dice Coefficient**.
+Ultimately, the goal of developing a dynamics model that accurately predicts rope dynamics and quantifies uncertainty has been demonstrably reached, with the Dreamer architecture serving as a strong foundation.
 
-Ultimately, the goal is to obtain a dynamics model that not only predicts the next state of the rope accurately but also **quantifies uncertainty**, enabling **risk-aware planning** for autonomous DLO manipulation tasks.
+### Future Work
+
+Future efforts will focus on three key areas to leverage these results:
+
+1.  **Risk-Aware Planning Agent:** Integrate the predictive Dreamer model into a **model-based reinforcement learning (MBRL) agent** to facilitate **risk-aware decision-making** for autonomous DLO manipulation.
+2.  **Physics-Informed Losses:** Conduct deeper exploration and refinement of **physics-informed losses**. This includes tuning or adding more sophisticated terms in the loss function to rigorously enforce **material constraints** (e.g., inextensibility and stiffness) and **topological consistency** (e.g., preventing self-collision) to ensure predicted states adhere to greater physical realism.
+3.  **Model Scaling and Optimization:** Repeat experiments using bigger and more optimized **Dreamer** models to further improve predictive accuracy and stability.
+
 
 ## 7. Bibliographic References
 
@@ -174,4 +205,34 @@ Ultimately, the goal is to obtain a dynamics model that not only predicts the ne
 
 # Presentation Link
 
-[Google Slides Presentation](https://docs.google.com/presentation/d/1fw3_m6minAr5l9Ks6CPWKIoQIB-UsBzjtunPPyIErtY/edit?usp=sharing)
+[Google Slides Presentation](https://docs.google.com/presentation/d/14xAsvx7EaFsWOUKr3ieodYBcjxsf4goc3SWKETlq8cc/edit?usp=sharing)
+
+
+
+## 4. Installation and Setup
+
+To replicate the project's environment and results, follow these steps. **Note: Python version 3.10 is required.**
+
+### 4.1 Clone Repository
+```bash
+git clone [https://github.com/missalt/dlo-modeling/](https://github.com/missalt/dlo-modeling/)
+cd dlo-modeling/projects/dlo-modelling
+```
+### 4.2 Configure Virtual Environment
+It is highly recommended to use a virtual environment to manage dependencies. Ensure you are using **Python 3.10**.
+
+```bash
+# Create a virtual environment using Python 3.10
+python3.10 -m venv venv 
+
+# Activate the virtual environment
+source venv/bin/activate
+```
+### 4.3 Install Dependencies
+Install all required packages using the provided `requirements.txt` file:
+
+```bash
+pip install -r requirements.txt
+```
+
+Colab with experiments can be found at: https://colab.research.google.com/drive/1xv7Lnysixhb6aEGS7ll2g7AECHEES3U9?usp=sharing
