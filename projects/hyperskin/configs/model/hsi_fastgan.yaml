@@ -7,10 +7,37 @@ model:
     ngf: 64
     nz: 256
     nlr: 0.0002
+    # use_barlow_twins: True
+    # barlow_twins_weight:  0.005
+    # barlow_twins_lambd: 0.0051
+    # barlow_twins_projector_dim: 2048
+    # freeze_d: 3  # Freeze first N layers of the discriminator. Set to 0 to not freeze any layer.
+    # nlr_G: 0.0002
+    # nlr_D: 0.0001
+    # hinge_loss_rand_weight: True
+    # noise_std_start:  0.5
+    # noise_std_end: 0.0
+    # noise_decay_steps: 10000
+    # use_topk: True
+    # topk_start: 0.3        # 30% easiest early on
+    # topk_end: 1.0          # all samples later
+    # topk_decay_steps: 8000 # gradually include all over 80k steps
     nbeta1: 0.5
     nbeta2: 0.999
     log_images_on_step_n: 200
     val_check_interval: 200
+    # use_adversarial_classifier: True
+    # classifier_config: 
+    #   model_name: densenet201
+    #   num_classes: 2
+    #   pretrained: true
+    #   features_only: false
+    #   in_chans: 16
+    #   scriptable: true
+    #   freeze_backbone: true
+
+    # classifier_weights_path: logs/hypersynth/8lla7vkt/checkpoints/epoch=63-val_spec@sens=0.3789.ckpt
+    # adversarial_loss_weight: 20
 seed_everything: 114514
 
 # ckpt_path: logs/hypersynth/3113cnnm/checkpoints/step=0-val_FID=99.1142.ckpt # dysplastic_nevi
@@ -52,7 +79,7 @@ trainer:
         save_top_k: 1
         mode: min
         auto_insert_metric_name: false
-        every_n_train_steps: 600
+        every_n_train_steps: 600 
     # # # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
     # - class_path: EarlyStopping
     #   init_args:
@@ -64,6 +91,6 @@ trainer:
     #     strict: true
     #     check_on_train_epoch_end: False
     # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
-    - class_path: LearningRateMonitor
-      init_args:
-        logging_interval: epoch
+    # - class_path: LearningRateMonitor
+    #   init_args:
+    #     logging_interval: epoch

@@ -19,7 +19,12 @@ Heavily commented for clarity.
 # ---------------------------
 # Typing helpers
 # ---------------------------
+from pdb import run
 from typing import Dict, List, Optional, Tuple
+import os
+from scipy.io import savemat
+from torchvision.utils import save_image
+from pytorch_lightning.utilities.exceptions import MisconfigurationException
 
 # ---------------------------
 # Third-party imports
@@ -43,7 +48,8 @@ from src.models.vae.vae_model import (              # your generic encoder/decod
     GenericEncoder,
     GenericDecoder,
 )
-from src.metrics.synthesis_metrics import SynthMetrics  # SSIM/PSNR/SAM bundle
+from src.metrics.synthesis_metrics import SynthMetrics
+from src.utils.tags_and_run_name import add_tags_and_run_name_to_logger  # SSIM/PSNR/SAM bundle
 
 
 class VAE(pl.LightningModule):
@@ -117,9 +123,18 @@ class VAE(pl.LightningModule):
             metrics=list(metrics),
             data_range=1.0
         )
-        self.val_best: Dict[str, MaxMetric] = {          # best-so-far trackers for each metric
-            name: MaxMetric() for name in self.val_metrics._order
+        _best_tracker_cls = {                              # dictionary from metric name → tracker class
+            "ssim": MaxMetric,                             # higher SSIM is better
+            "psnr": MaxMetric,                             # higher PSNR is better
+            "sam":  MinMetric,                             # lower SAM (angle) is better
+            "fid":  MinMetric,                             # lower FID (distance) is better
         }
+        
+        self.val_best = {                                  # per-metric best-so-far trackers
+            name: _best_tracker_cls.get(name)() # default to MaxMetric if ever unknown
+            for name in self.val_metrics._order            # respect the enabled + ordered list
+        }
+
 
         # ========= FIXED LATENTS (for optional epoch-end grid) =========
         self.register_buffer(
@@ -133,6 +148,27 @@ class VAE(pl.LightningModule):
         self.real_spectra: Optional[Dict[str, List[np.ndarray]]] = None
         self.fake_spectra: Optional[Dict[str, List[np.ndarray]]] = None
 
+    def _get_tags_and_run_name(self):
+        """Automatically derive tags and a run name from FastGANModule hyperparameters."""
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
+
+        tags = []
+        run_name = "VAE"
+        tags.append(hparams.model_type)
+
+        # latent dim
+        run_name += f"_lat{hparams.latent_dim}"
+
+        # kld weight, scientific notation for very small values
+        run_name += f"_kld{hparams.kld_weight:.0e}"
+
+        # block type
+        run_name += f"_{hparams.block}"
+        tags.append(hparams.block)
+
+        return tags, run_name
     # ---------------------------------------------------------------------
     # Core VAE utilities
     # ---------------------------------------------------------------------
@@ -157,8 +193,55 @@ class VAE(pl.LightningModule):
     # Shared step
     # ---------------------------------------------------------------------
     def _common_step(self, batch, batch_idx: int, split: str) -> Tensor:
-        """Compute loss and (if val) metrics; update running means and log per-step scalars."""
-        x, _ = batch
+        """Compute loss and (if val) metrics; handle multiple batch formats robustly.
+
+        Acceptable batch formats:
+         - (image, label)                  -> typical supervised tuple
+         - (image, mask, label)            -> 3-tuple used by HSI datamodules
+         - dict with keys like 'hsi'/'rgb' -> datamodule may return dicts of tuples
+         - plain image tensor
+        """
+
+        # Resolve image tensor from variety of batch shapes
+        x = None
+
+        # Case: dict batches (e.g. {'hsi': (img, mask, label), 'rgb': (...)})
+        if isinstance(batch, dict):
+            # prefer 'hsi' key, else pick first tensor-like entry
+            if "hsi" in batch:
+                candidate = batch["hsi"]
+            else:
+                # pick first value from dict
+                candidate = next(iter(batch.values()))
+
+            # candidate may itself be a tuple (img, mask, label) or a tensor
+            if isinstance(candidate, (list, tuple)):
+                x = candidate[0]
+            else:
+                x = candidate
+
+        # Case: sequence batches (tuple/list)
+        elif isinstance(batch, (list, tuple)):
+            if len(batch) == 2:
+                x, _ = batch
+            elif len(batch) == 3:
+                x, _, _ = batch
+            else:
+                # fallback: take first element
+                x = batch[0]
+
+        # Case: direct tensor
+        else:
+            x = batch
+
+        # Ensure we have a tensor
+        if not torch.is_tensor(x):
+            # try conversion if first element is a tuple-like
+            try:
+                x = torch.as_tensor(x)
+            except Exception:
+                raise ValueError(f"Cannot extract image tensor from batch of type {type(batch)}")
+
         x_hat, mu, log_var = self.forward(x)
 
         recon = F.l1_loss(x_hat, x)                                 # L1 recon loss
@@ -201,6 +284,43 @@ class VAE(pl.LightningModule):
             )
 
         return loss
+
+    def _unwrap_image_from_batch(self, batch):
+        """Return the image tensor from common batch formats without raising on extra fields.
+
+        Supported formats:
+         - tensor -> returned as-is
+         - (image, label) or (image, mask, label) -> image
+         - dict with values like ('hsi': (image, mask, label), 'rgb': (...)) -> prefer 'hsi' else first value
+        """
+        # direct tensor
+        if torch.is_tensor(batch):
+            return batch
+
+        # dict batch (e.g. Joint datamodule)
+        if isinstance(batch, dict):
+            # prefer 'hsi' key (most important), else take first value
+            candidate = batch.get("hsi", None)
+            if candidate is None:
+                # pick first value (could be tuple or tensor)
+                candidate = next(iter(batch.values()))
+            # candidate might be (img, mask, label) or a tensor
+            if isinstance(candidate, (tuple, list)):
+                return candidate[0]
+            return candidate
+
+        # tuple/list batch
+        if isinstance(batch, (tuple, list)):
+            if len(batch) == 0:
+                raise ValueError("Empty batch encountered")
+            first = batch[0]
+            # if first is itself a tuple (rare), unwrap one level
+            if isinstance(first, (tuple, list)) and len(first) > 0 and torch.is_tensor(first[0]):
+                return first[0]
+            return first
+
+        # fallback: cannot extract
+        raise ValueError(f"Cannot extract image tensor from batch of type {type(batch)}")
 
     # ---------------------------------------------------------------------
     # Training / Validation / Test steps
@@ -299,6 +419,8 @@ class VAE(pl.LightningModule):
         except Exception:
             pass  # dataset may not expose these attributes
 
+        add_tags_and_run_name_to_logger(self)
+
     # ---------------------------------------------------------------------
     # Validation epoch end: log val_loss (epoch), bests, optional grid, spectra plots
     # ---------------------------------------------------------------------
@@ -361,16 +483,41 @@ class VAE(pl.LightningModule):
                     self.fake_spectra = {"normal_skin": [], self.lesion_class_name: []}
 
                     with torch.no_grad():
-                        for i, (real_image, _) in enumerate(val_loader):
+                        for i, batch in enumerate(val_loader):
                             if i >= self.hparams.val_num_sample_batches:
                                 break
+                            # robustly extract image tensor from batch regardless of format
+                            try:
+                                real_image = self._unwrap_image_from_batch(batch)
+                            except Exception as e:
+                                # skip malformed/unknown batch formats
+                                self.print(f"[VAE] Skipping val batch for spectra (unrecognized format): {e}")
+                                continue
+
+                            # ensure tensor and move to device
+                            if not torch.is_tensor(real_image):
+                                try:
+                                    real_image = torch.as_tensor(real_image)
+                                except Exception:
+                                    self.print("[VAE] Skipping val batch: image not convertible to tensor")
+                                    continue
+
                             real_image = real_image.to(self.device, non_blocking=True)
-                            bsz = real_image.size(0)
+                            bsz = real_image.size(0) if real_image.ndim >= 4 else 1
                             z = torch.randn(bsz, self.hparams.latent_dim, device=self.device, dtype=torch.float32)
                             fake_image = self.decoder(z)                  # no clamp
                             self.compute_spectra_statistics(real_image, fake_image)
 
-                    self._plot_mean_spectra()                             # log figure to W&B
+                    # Only attempt plotting if we have collected any spectra
+                    try:
+                        if (self.real_spectra and any(self.real_spectra.values())) or (
+                            self.fake_spectra and any(self.fake_spectra.values())
+                        ):
+                            self._plot_mean_spectra()                             # log figure to W&B
+                        else:
+                            self.print("[VAE] No spectra collected this epoch; skipping mean spectra plot.")
+                    except Exception as e:
+                        self.print(f"[VAE] Plotting failed: {e}")
             except Exception as e:
                 self.print(f"[VAE] Spectra stats/plotting failed: {e}")
 
@@ -486,3 +633,215 @@ class VAE(pl.LightningModule):
             betas=tuple(self.hparams.betas),
             weight_decay=self.hparams.weight_decay
         )
+    #predict vae images 
+    def predict_dataloader(self):
+        """
+        Provide a predict dataloader hook so Trainer.predict() does not call the
+        LightningModule default (which raises). Prefer the datamodule.predict_dataloader
+        if available, otherwise fall back to test/val dataloaders as a best-effort.
+        """
+        dm = getattr(self, "trainer", None)
+        if dm is None:
+            raise MisconfigurationException("Trainer not attached yet; cannot build predict_dataloader")
+
+        dm = getattr(self.trainer, "datamodule", None)
+        if dm is None:
+            print(dm)
+            raise MisconfigurationException(
+                "No datamodule available. To use Trainer.predict() provide a DataModule or "
+                "implement VAE.predict_dataloader() to return a DataLoader."
+            )
+
+        # Prefer explicit predict_dataloader implemented on the datamodule
+        try:
+            if hasattr(dm, "test_dataloader"):
+                return dm.test_dataloader()
+            if hasattr(dm, "val_dataloader"):
+                return dm.val_dataloader()
+            if not hasattr(dm,"predict_dataloader"):
+                dm.predict_dataloader = lambda : dm.val_dataloader()
+                return dm.predict_dataloader()
+        except Exception as e:
+            # Avoid failing hard here; wrap into MisconfigurationException for clearer error message
+            raise MisconfigurationException(f"Failed to obtain dataloader from datamodule: {e}")
+
+        raise MisconfigurationException(
+            "Datamodule does not provide predict/test/val dataloaders. "
+            "Please implement predict_dataloader() in your DataModule or in this LightningModule."
+        )
+    def on_predict_start(self) -> None:
+        """Prepare output folder and counters for predict runs."""
+
+        self._pred_output_dir = getattr(self.hparams, "pred_output_dir", "generated_samples")
+        os.makedirs(self._pred_output_dir, exist_ok=True)
+        # total number of samples requested (0 or None -> generate per-batch without hard limit)
+        total = getattr(self.hparams, "pred_num_samples", None)
+        self._pred_total = int(total) if (total is not None and total != "") else 0
+        self._pred_count = 0
+
+        # optional global min/max for denormalization (for hyperspectral outputs)
+        self._pred_global_min = getattr(self.hparams, "pred_global_min", None)
+        self._pred_global_max = getattr(self.hparams, "pred_global_max", None)
+
+    def _denormalize_hsi(self, tensor: torch.Tensor) -> torch.Tensor:
+        """If pred_global_min/max provided and match channels, map [0,1]->[min,max]."""
+        if self._pred_global_min is None or self._pred_global_max is None:
+            return tensor
+        try:
+            gmin = torch.as_tensor(self._pred_global_min, device=tensor.device, dtype=tensor.dtype)
+            gmax = torch.as_tensor(self._pred_global_max, device=tensor.device, dtype=tensor.dtype)
+            # expect (C,) shapes
+            if gmin.ndim == 1 and gmin.numel() == tensor.size(1):
+                # tensor shape (N,C,H,W)
+                tensor = tensor * (gmax.view(1, -1, 1, 1) - gmin.view(1, -1, 1, 1)) + gmin.view(1, -1, 1, 1)
+        except Exception:
+            pass
+        return tensor
+
+    # ...existing code...
+    def _save_generated_batch(self, gen: torch.Tensor, pred=False) -> None:
+        """Save generated batch to disk and optionally log a visualization to W&B.
+        Ensures saved hyperspectral cubes have `target_bands` channels (default 16)
+        by downsampling/resampling/padding the decoder output so downstream
+        transforms (e.g. NormalizeByMinMax) expecting 16 channels do not fail.
+
+        Saved .mat/.npy now contain channel-last arrays with shape (H, W, C) and
+        spatial size forced to hparams.img_size (default 256) when possible.
+        """
+        from skimage.transform import resize as sk_resize
+
+        n, C, H, W = gen.size()
+        target_bands = int(getattr(self.hparams, "pred_save_bands", 16))
+        target_size = int(getattr(self.hparams, "img_size", 256))
+
+        for i in range(n):
+            global_idx = self._pred_count + i
+            base = os.path.join(self._pred_output_dir, f"sample_{global_idx:06d}")
+
+            # detach + numpy conversion -> (C, H, W)
+            arr = gen[i].detach().cpu().numpy()
+
+            # --- ensure target number of bands (C -> target_bands) ---
+            if arr.shape[0] == target_bands:
+                out_arr_c_h_w = arr
+            elif arr.shape[0] > target_bands:
+                # Prefer simple averaging if divisible, otherwise sample evenly
+                if arr.shape[0] % target_bands == 0:
+                    factor = arr.shape[0] // target_bands
+                    out_arr_c_h_w = arr.reshape(target_bands, factor, H, W).mean(axis=1)
+                else:
+                    idxs = np.linspace(0, arr.shape[0] - 1, target_bands).astype(int)
+                    out_arr_c_h_w = arr[idxs]
+            else:
+                # arr has fewer bands than required -> pad with zeros
+                pad = np.zeros((target_bands - arr.shape[0], H, W), dtype=arr.dtype)
+                out_arr_c_h_w = np.concatenate([arr, pad], axis=0)
+
+            # Convert to channel-last (H, W, C) and float32
+            out_arr_h_w_c = out_arr_c_h_w.transpose(1, 2, 0).astype(np.float32)
+
+            # Resize spatially to (target_size, target_size) if needed
+            if (out_arr_h_w_c.shape[0] != target_size) or (out_arr_h_w_c.shape[1] != target_size):
+                try:
+                    out_arr_h_w_c = sk_resize(
+                        out_arr_h_w_c,
+                        (target_size, target_size, out_arr_h_w_c.shape[2]),
+                        preserve_range=True,
+                        anti_aliasing=True,
+                        order=1,
+                    ).astype(np.float32)
+                except Exception:
+                    # fallback: center-crop or pad to target_size
+                    h, w, c = out_arr_h_w_c.shape
+                    tgt = target_size
+                    if h > tgt or w > tgt:
+                        # center crop
+                        start_h = max(0, (h - tgt) // 2)
+                        start_w = max(0, (w - tgt) // 2)
+                        out_arr_h_w_c = out_arr_h_w_c[start_h : start_h + tgt, start_w : start_w + tgt, :]
+                    else:
+                        # pad with zeros
+                        pad_h = max(0, tgt - h)
+                        pad_w = max(0, tgt - w)
+                        pad_top = pad_h // 2
+                        pad_left = pad_w // 2
+                        out = np.zeros((tgt, tgt, c), dtype=out_arr_h_w_c.dtype)
+                        out[pad_top : pad_top + h, pad_left : pad_left + w, :] = out_arr_h_w_c
+                        out_arr_h_w_c = out
+
+            # save hyperspectral/full tensor (.mat/.npy) only when pred=True
+            if pred:
+                try:
+                    savemat(base + ".mat", {"data": out_arr_h_w_c})
+                except Exception:
+                    np.save(base + ".npy", out_arr_h_w_c)
+
+            # --- build visualization tensor for PNG/W&B (convert back to CHW) ---
+            vis_chw = out_arr_h_w_c.transpose(2, 0, 1)  # (C, H, W)
+            vis_tensor = torch.from_numpy(vis_chw).unsqueeze(0)  # (1, C, H, W)
+
+            if vis_tensor.size(1) > 3:
+                vis_img = vis_tensor.mean(dim=1, keepdim=True).repeat(1, 3, 1, 1)
+            else:
+                vis_img = vis_tensor
+            '''
+            # Optionally save small preview PNG
+            try:
+                save_image(vis_img.clamp(0, 1), base + ".png", normalize=False)
+            except Exception:
+                pass
+            '''
+
+            # Optionally log the image to wandb
+            if hasattr(self.logger, "experiment") and self.logger.experiment is not None:
+                try:
+                    img = make_grid(vis_img, nrow=1, normalize=False).cpu()
+                    self.logger.experiment.log({f"pred/sample_{global_idx:06d}": wandb.Image(img)})
+                except Exception:
+                    pass
+# ...existing code...
+
+    def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
+        """Generate and save samples during a predict run.
+
+        Behavior:
+          - Respects model.hparams.pred_num_samples as a global cap (if set).
+          - Generates min(batch_size, remaining) samples per incoming batch.
+          - Saves full hyperspectral cubes (.mat/.npy) when pred_hyperspectral=True.
+          - Always saves a PNG visualization (HSI -> mean->RGB if channels>3).
+        """
+        # If user requested a limited total and we've finished, skip
+        if getattr(self, "_pred_total", 0) and getattr(self, "_pred_count", 0) >= self._pred_total:
+            return None
+
+        # Attempt to extract an image tensor from the incoming batch to get batch size.
+        try:
+            img = self._unwrap_image_from_batch(batch)
+            if torch.is_tensor(img):
+                batch_size = int(img.size(0))
+            else:
+                batch_size = 1
+        except Exception:
+            # fallback: assume batch of size 1
+            batch_size = 1
+
+        remaining = max(0, self._pred_total - self._pred_count) if self._pred_total else batch_size
+        n = min(batch_size, remaining) if self._pred_total else batch_size
+        if n <= 0:
+            return None
+
+        z = torch.randn(n, self.hparams.latent_dim, device=self.device, dtype=torch.float32)
+        with torch.no_grad():
+            gen = self.decoder(z).detach()  # (n, C, H, W)
+
+            # If global min/max provided, denormalize (VAE decoder outputs ~[0,1])
+            gen = self._denormalize_hsi(gen)
+
+        # Save and log
+        self._save_generated_batch(gen,pred=True)
+
+        # update counters
+        self._pred_count = getattr(self, "_pred_count", 0) + n
+
+        # return generated for potential programmatic consumption
+        return gen

@@ -1,0 +1,80 @@
+model:
+  class_path: modules.CycleGANModule
+  init_args:
+    rgb_channels: 3
+    hsi_channels: 16
+    lambda_perceptual: 0.5
+    lambda_cycle: 10.0
+    lr: 0.0002
+    label_smoothing: 0.2
+    noise_decay_steps: 12000
+    # noise_std: 0.0
+    noise_std_start: 0.5
+    noise_std_end: 0
+    num_val_batches: 8
+    log_images_on_step_n: 100
+    val_check_interval: 100
+    # aux_num_classes: 2
+    model_opt:
+      netG: "unet_256"
+      netD: "basic"
+      ngf: 64
+      ndf: 64
+      norm: "instance"
+      init_type: "normal"
+      init_gain: 0.02
+      n_layers_D: 3
+      no_dropout: false
+seed_everything: 114514
+
+trainer:
+  # precision: 16-mixed
+  max_epochs: -1
+  log_every_n_steps: 100
+  max_steps: 100_000
+  check_val_every_n_epoch:
+
+  logger:
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.loggers.wandb.html#module-lightning.pytorch.loggers.wandb
+    class_path: WandbLogger
+    init_args:
+      save_dir: logs
+      entity: k298976-unicamp
+      project: hypersynth
+      # adding the run name manually will override the automatic naming
+      # name: densenet201_hsi_classifier
+      log_model: false
+      notes: "Write something interesting about this experiment here."
+      
+  # Callbacks https://lightning.ai/docs/pytorch/latest/extensions/callbacks.html
+  callbacks:
+    # - class_path: callbacks.ImageSavingCallback
+    #   init_args:
+    #     fixed_noise_shape: [8, 256]
+    #     saved_image_folder: logs/images
+    #     nc: 16
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.ModelCheckpoint.html#lightning.pytorch.callbacks.ModelCheckpoint
+    - class_path: callbacks.FixedModelCheckpoint
+      init_args:
+        filename: step={global_step}-val_FID={val/FID:.4f}
+        monitor: val/FID
+        verbose: true
+        save_last: true
+        save_top_k: 1
+        mode: min
+        auto_insert_metric_name: false
+        every_n_train_steps: 800
+    # # # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.EarlyStopping.html#lightning.pytorch.callbacks.EarlyStopping
+    # - class_path: EarlyStopping
+    #   init_args:
+    #     monitor: val/SAM
+    #     min_delta: 0.01
+    #     patience: 200
+    #     verbose: true
+    #     mode: min
+    #     strict: true
+    #     check_on_train_epoch_end: False
+    # https://lightning.ai/docs/pytorch/latest/api/lightning.pytorch.callbacks.LearningRateMonitor.html#lightning.pytorch.callbacks.LearningRateMonitor
+    # - class_path: LearningRateMonitor
+    #   init_args:
+    #     logging_interval: epoch

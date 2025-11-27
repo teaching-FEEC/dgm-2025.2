@@ -1,396 +1,637 @@
-import os
+from enum import Enum
 from pathlib import Path
-
-from git import Optional
+from typing import Optional
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
 import torch
-from torchvision.transforms import transforms as T
-from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
-import albumentations as A
-from sklearn.model_selection import train_test_split
-from tqdm import tqdm
-from scipy.io import savemat
+from torch.utils.data import DataLoader
+from collections import Counter
 
-import gdown
-import zipfile
-from PIL import Image
 
 if __name__ == "__main__":
     import pyrootutils
 
     pyrootutils.setup_root(
-        Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
-    )
+        Path(__file__).parent.parent.parent,
+        project_root_env_var=True,
+        dotenv=True,
+        pythonpath=True,
+        cwd=False,
+    ) #mudar o caminho raiz do projeto
 
-from src.samplers.infinite import InfiniteSamplerWrapper
-from src.utils.transform import smallest_maxsize_and_centercrop
+from src.data_modules.datasets.task_config import TaskConfig
+from src.samplers.finite import FiniteSampler
+from src.data_modules.base import BaseDataModule
+from src.samplers.infinite import (
+    InfiniteBalancedBatchSampler,
+    InfiniteSamplerWrapper,
+)
 from src.samplers.balanced_batch_sampler import BalancedBatchSampler
-from src.data_modules.datasets.hsi_dermoscopy_dataset import HSIDermoscopyDataset, HSIDermoscopyTask
+from src.data_modules.datasets.hsi_dermoscopy_dataset import (
+    HSI_TASK_CONFIGS,
+    HSIDermoscopyDataset,
+)
+import pytorch_lightning as pl
 
-class HSIDermoscopyDataModule(pl.LightningDataModule):
+
+class HSIDermoscopyDataModule(BaseDataModule, pl.LightningDataModule):
     def __init__(
         self,
-        task: str | HSIDermoscopyTask,
+        task: str | TaskConfig,
         train_val_test_split: tuple[int, int, int] | tuple[float, float, float],
         batch_size: int,
         num_workers: int = 8,
         pin_memory: bool = False,
         data_dir: str = "data/hsi_dermoscopy",
-        image_size: int = 224,
         transforms: Optional[dict] = None,
-        allowed_labels: Optional[list[int | str]] = None,
         google_drive_id: Optional[str] = None,
+        allowed_labels: Optional[list[int | str]] = None,
+        image_size: int = 224,
+        global_max: Optional[float | list[float]] = None,
+        global_min: Optional[float | list[float]] = None,
         balanced_sampling: bool = False,
-        synthetic_data_dir: Optional[str] = None,
-        global_max: float | list[float] = None,
-        global_min: float | list[float] = None,
         infinite_train: bool = False,
-        sample_size: Optional[int] = None,
-        range_mode: Optional[str] = "0_1",
-
+        synthetic_data_dir: Optional[str] = None,
+        range_mode: str = "-1_1",
+        normalize_mask_tanh: bool = False,
+        pred_num_samples: Optional[int] = None,
+        undersample_strategy: Optional[str] = None,
+        oversample_strategy: Optional[str] = None,
+        sampling_random_state: int = 42,
+        synth_mode: Optional[str] ='mixed_train', #full_train, full_val, mixed_train, None
+        synth_ratio: float = 1.0,  # only used if synth_mode is mixed_train
+        **kwargs,
     ):
-        super().__init__()
-        self.save_hyperparameters()
-
-        if isinstance(task, str):
-            self.hparams.task = HSIDermoscopyTask[task]
-        print(self.hparams)
-
-        self.transforms_train = None
-        self.transforms_test = None
-        self.transforms_val = None
-
-        if transforms is not None:
-            if "train" in transforms:
-                self.transforms_train = A.Compose(self.get_transforms(transforms, "train"))
-            if "val" in transforms:
-                self.transforms_val = A.Compose(self.get_transforms(transforms, "val"))
-            if "test" in transforms:
-                self.transforms_test = A.Compose(self.get_transforms(transforms, "test"))
-
-        if range_mode in self.hparams:
-            self.range_mode = range_mode
-        elif self.hparams.task != HSIDermoscopyTask.GENERATION:
-            self.range_mode = range_mode
-        else: 
-            self.range_mode = '0_1'
-
-        # if global_max and global_min are provided, add NormalizeByMinMax to transforms
-        from src.transforms import NormalizeByMinMax
-
-        if global_max is not None and global_min is not None:
-            if isinstance(global_max, list) and isinstance(global_min, list):
-                transform = NormalizeByMinMax(
-                    mins=global_min,
-                    maxs=global_max,
-                    range_mode=self.range_mode,
-                    clip=True,
-                )
-            elif isinstance(global_max, (int, float)) and isinstance(global_min, (int, float)):
-                transform = NormalizeByMinMax(
-                    mins=[global_min] * 16,
-                    maxs=[global_max] * 16,
-                    range_mode = self.range_mode,
-                    clip=True,
-                )
-            else:
-                raise ValueError("global_max and global_min must be both lists or both scalars")
-            if self.transforms_train is not None:
-                self.transforms_train.transforms.append(transform)
-            else:
-                self.transforms_train = A.Compose([transform])
-            if self.transforms_val is not None:
-                self.transforms_val.transforms.append(transform)
-            else:
-                self.transforms_val = A.Compose([transform])
-            if self.transforms_test is not None:
-                self.transforms_test.transforms.append(transform)
-            else:
-                self.transforms_test = A.Compose([transform])
-
-        self.data_train: Dataset = None
-        self.data_val: Dataset = None
-        self.data_test: Dataset = None
-
-        self.train_indices: np.ndarray = None
-        self.val_indices: np.ndarray = None
-        self.test_indices: np.ndarray = None
-
-        self.global_max = global_max
-
-        self.global_min = global_min
-
-    def get_transforms(self, transforms: dict, stage: str) -> list[A.BasicTransform]:
-        transforms_list = []
-        for transform in transforms[stage]:
-            class_name = transform["class_path"]
-            init_args = transform.get("init_args", {})
-            if hasattr(A, class_name):
-                transform_cls = getattr(A, class_name)
-                transforms_list.append(transform_cls(**init_args))
-            else:
-                raise ValueError(f"Albumentations has no transform named {class_name}")
-        return transforms_list
-
-    def prepare_data(self):
-        if not os.path.exists(self.hparams.data_dir) or not os.listdir(self.hparams.data_dir):
-            # check if a .zip file with the data_dir name exists in the parent directory
-            downloaded = False
-            filename = f"{Path(self.hparams.data_dir).name}.zip"
-            if not os.path.exists(filename):
-                print(f"Downloading HSI Dermoscopy dataset to {self.hparams.data_dir}...")
-
-                if self.hparams.google_drive_id is None or self.hparams.google_drive_id == "":
-                    raise ValueError("google_drive_id must be provided to download the dataset.")
-
-                filename = gdown.download(id=self.hparams.google_drive_id, quiet=False)
-                downloaded = True
-            else:
-                print(f"Found existing zip file {filename}, skipping download.")
-
-            os.makedirs(os.path.dirname(self.hparams.data_dir), exist_ok=True)
-
-            with zipfile.ZipFile(filename, "r") as zip_ref:
-                zip_ref.extractall(Path(self.hparams.data_dir).parent)
-                if downloaded:
-                    os.remove(filename)
-
-        self.setup_splits()
-
-    # Add helper method to filter and remap labels
-    def _filter_and_remap_indices(self, dataset_indices, dataset_labels, allowed_labels):
-        if allowed_labels is not None:
-            # Normalize allowed_labels into integer form
-            if isinstance(allowed_labels[0], str):
-                # Map strings to dataset integers
-                string_to_int = {
-                    name: idx
-                    for name, idx in HSIDermoscopyDataset(
-                        task=self.hparams.task, data_dir=self.hparams.data_dir
-                    ).labels_map.items()
-                }
-                allowed_labels = [string_to_int[label] for label in allowed_labels]
-
-            mask = np.isin(dataset_labels, allowed_labels)
-            filtered_indices = dataset_indices[mask]
-            filtered_labels = dataset_labels[mask]
-
-            if len(filtered_indices) == 0:
-                raise ValueError(f"No samples found for allowed_labels={allowed_labels}")
-
-            # Remap labels to contiguous [0..N-1]
-            allowed_labels_sorted = sorted(allowed_labels)
-            remap_dict = {old: new for new, old in enumerate(allowed_labels_sorted)}
-
-            filtered_labels = np.array([remap_dict[label] for label in filtered_labels])
-            return filtered_indices, filtered_labels
-        return dataset_indices, dataset_labels
-
-    def setup_splits(self):
-        seed = 42
-        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
-
-        indices = np.arange(len(full_dataset))
-        labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
-
-        # Apply filtering
-        # First filter by allowed labels
-        indices, labels = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
-
-        # Remove labels that have less than 3 samples since they can't be stratified
-        unique_labels, label_counts = np.unique(labels, return_counts=True)
-        valid_labels = unique_labels[label_counts >= 3]
-
-        if len(valid_labels) < len(unique_labels):
-            mask = np.isin(labels, valid_labels)
-            indices = indices[mask]
-            labels = labels[mask]
-
-            # Remap labels to be contiguous again
-            label_map = {old: new for new, old in enumerate(sorted(valid_labels))}
-            labels = np.array([label_map[label] for label in labels])
-            print(f"Warning: Filtered out labels with less than 3 samples. Remaining labels: {valid_labels.tolist()}")
-
-        # Integer-based splits
-        if all(isinstance(x, int) for x in self.hparams.train_val_test_split):
-            train_size, val_size, test_size = self.hparams.train_val_test_split
-            if train_size + val_size + test_size != len(full_dataset):
-                raise ValueError(
-                    "When using absolute numbers for train/val/test split, the sum must equal the dataset length."
-                )
-
-            train_idx, temp_idx, train_y, temp_y = train_test_split(
-                indices,
-                labels,
-                train_size=train_size,
-                random_state=seed,
-                stratify=labels,
-            )
-
-            val_idx, test_idx, _, _ = train_test_split(
-                temp_idx,
-                temp_y,
-                train_size=val_size,
-                random_state=seed,
-                stratify=temp_y,
-            )
-
-        # Ratio-based splits
-        elif (
-            all(isinstance(x, float) for x in self.hparams.train_val_test_split)
-            and abs(sum(self.hparams.train_val_test_split) - 1.0) < 1e-6
-        ):
-            train_ratio, val_ratio, test_ratio = self.hparams.train_val_test_split
-
-            train_idx, temp_idx, train_y, temp_y = train_test_split(
-                indices,
-                labels,
-                train_size=train_ratio,
-                random_state=seed,
-                stratify=labels,
-            )
-
-            val_size = val_ratio / (val_ratio + test_ratio)
-            val_idx, test_idx, _, _ = train_test_split(
-                temp_idx,
-                temp_y,
-                train_size=val_size,
-                random_state=seed,
-                stratify=temp_y,
-            )
-        else:
-            raise ValueError("train_val_test_split must be either all integers or floats summing to 1.")
-
-        self.train_indices, self.val_indices, self.test_indices = (
-            train_idx,
-            val_idx,
-            test_idx,
+        """
+        Args:
+            undersample_strategy: Strategy for undersampling. Options:
+                - "random": Random undersampling to match minority class
+                - "majority": Undersample only majority class
+                - None: No undersampling
+            oversample_strategy: Strategy for oversampling. Options:
+                - "random": Random oversampling to match majority class
+                - "minority": Oversample only minority class
+                - None: No oversampling
+            sampling_random_state: Random seed for sampling operations
+        """
+        #iniciando a BaseDataModule e o LightningDataModule
+        super().__init__(
+            train_val_test_split=train_val_test_split,
+            data_dir=data_dir,
+            allowed_labels=allowed_labels,
+            google_drive_id=google_drive_id,
+            transforms=transforms,
+            image_size=image_size,
+            global_max=global_max,
+            global_min=global_min,
+            range_mode=range_mode,
+            normalize_mask_tanh=normalize_mask_tanh,
         )
 
-    def save_splits_to_disk(self, split_dir: Path):
-        """Saves the generated splits to a specified directory."""
-        if self.train_indices is None or self.val_indices is None or self.test_indices is None:
-            raise RuntimeError("Splits have not been generated. Call setup_splits() first.")
+        # Normalize dict -> TaskConfig
+        if isinstance(task, dict):
+            task = TaskConfig(**task)
 
-        os.makedirs(split_dir, exist_ok=True)
-        np.savetxt(split_dir / "train.txt", self.train_indices, fmt="%d")
-        np.savetxt(split_dir / "val.txt", self.val_indices, fmt="%d")
-        np.savetxt(split_dir / "test.txt", self.test_indices, fmt="%d")
-        print(f"Saved data splits to {split_dir}")
+        if isinstance(task, str):
+            task = task.lower()
+            if task not in HSI_TASK_CONFIGS:
+                raise ValueError(
+                    f"Unknown task: {task}. "
+                    f"Available: {list(HSI_TASK_CONFIGS.keys())}"
+                )
+            self.task_config = HSI_TASK_CONFIGS[task]
+        elif isinstance(task, TaskConfig):
+            self.task_config = task
+        else:
+            raise TypeError("task must be a str, dict, or TaskConfig")
+
+        self.save_hyperparameters(
+            {
+                "task": task,
+                "batch_size": batch_size,
+                "num_workers": num_workers,
+                "pin_memory": pin_memory,
+                "balanced_sampling": balanced_sampling,
+                "infinite_train": infinite_train,
+                "synthetic_data_dir": synthetic_data_dir,
+                "pred_num_samples": pred_num_samples,
+                "data_dir": data_dir,
+                "allowed_labels": allowed_labels,
+                "undersample_strategy": undersample_strategy,
+                "oversample_strategy": oversample_strategy,
+                "sampling_random_state": sampling_random_state,
+                "synth_mode": synth_mode,
+                "synth_ratio": synth_ratio,
+            }
+        )
+
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
+
+        self.data_train = None
+        self.data_val = None
+        self.data_test = None
+
+
+    def get_dataset_indices_and_labels(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        full_dataset = HSIDermoscopyDataset(
+            task=self.hparams.task, data_dir=self.hparams.data_dir
+        )
+        indices = np.arange(len(full_dataset))
+        labels = (
+            full_dataset.labels_df["label"]
+            .map(full_dataset.labels_map)
+            .to_numpy()
+        )
+        return indices, labels
+
+    def get_labels_map(self) -> dict[str, int]:
+        full_dataset = HSIDermoscopyDataset(
+            task=self.hparams.task, data_dir=self.hparams.data_dir
+        )
+        return full_dataset.labels_map
+
+    def _get_labels_from_dataset(
+        self, dataset: torch.utils.data.Dataset
+    ) -> np.ndarray:
+        """Extract labels from dataset (handles Subset and ConcatDataset)."""
+        if isinstance(dataset, torch.utils.data.ConcatDataset):
+            labels = []
+            for ds in dataset.datasets:
+                labels.extend(self._get_labels_from_dataset(ds))
+            return np.array(labels)
+        elif isinstance(dataset, torch.utils.data.Subset):
+            base_labels = self._get_labels_from_dataset(dataset.dataset)
+            return base_labels[dataset.indices]
+        else:
+            return dataset.labels
+
+    def _get_is_synthetic_from_dataset(
+        self, dataset: torch.utils.data.Dataset
+    ) -> np.ndarray:
+        """Extract synthetic flags from dataset (handles Subset and ConcatDataset)."""
+        if isinstance(dataset, torch.utils.data.ConcatDataset):
+            flags = []
+            for ds in dataset.datasets:
+                flags.extend(self._get_is_synthetic_from_dataset(ds))
+            return np.array(flags)
+        elif isinstance(dataset, torch.utils.data.Subset):
+            base_flags = self._get_is_synthetic_from_dataset(dataset.dataset)
+            return base_flags[dataset.indices]
+        else:
+            # Base dataset - check if it's synthetic
+            is_synthetic = getattr(dataset, 'is_synthetic', False)
+            return np.full(len(dataset), is_synthetic, dtype=bool)
+
+    def _apply_sampling(
+        self, dataset: torch.utils.data.Dataset, split_name: str = "train"
+    ) -> torch.utils.data.Dataset:
+        """
+        Apply undersampling and/or oversampling to the dataset.
+
+        Args:
+            dataset: Input dataset (can be Subset or ConcatDataset)
+            split_name: Name of the split for logging
+
+        Returns:
+            New dataset with sampling applied
+        """
+        if (
+            self.hparams.undersample_strategy is None
+            and self.hparams.oversample_strategy is None
+        ):
+            return dataset
+
+        # Extract labels
+        labels = self._get_labels_from_dataset(dataset)
+        indices = np.arange(len(labels))
+
+        # Count classes
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        label_counts = dict(zip(unique_labels, counts))
+
+        print(f"\n[{split_name}] Before sampling: {len(labels)} samples")
+        for label, count in label_counts.items():
+            print(f"  Class {label}: {count} samples")
+
+        # Apply undersampling
+        if self.hparams.undersample_strategy:
+            indices, labels = self._undersample(
+                indices, labels, self.hparams.undersample_strategy
+            )
+
+        # Apply oversampling
+        if self.hparams.oversample_strategy:
+            indices, labels = self._oversample(
+                indices, labels, self.hparams.oversample_strategy
+            )
+
+        # Count after sampling
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        label_counts = dict(zip(unique_labels, counts))
+
+        print(f"[{split_name}] After sampling: {len(labels)} samples")
+        for label, count in label_counts.items():
+            print(f"  Class {label}: {count} samples")
+
+        # Create new subset with sampled indices
+        # Create a Subset of the existing dataset
+        return torch.utils.data.Subset(dataset, indices.tolist())
+
+    def _undersample(
+        self, indices: np.ndarray, labels: np.ndarray, strategy: str
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Apply undersampling strategy."""
+        np.random.seed(self.hparams.sampling_random_state)
+
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        min_count = counts.min()
+
+        if strategy == "random":
+            # Undersample all classes to match minority
+            new_indices = []
+            for label in unique_labels:
+                label_mask = labels == label
+                label_indices = indices[label_mask]
+                sampled = np.random.choice(
+                    label_indices, size=min_count, replace=False
+                )
+                new_indices.extend(sampled)
+
+            new_indices = np.array(new_indices)
+            new_labels = labels[new_indices]
+            return new_indices, new_labels
+
+        elif strategy == "majority":
+            # Undersample only majority class(es)
+            max_count = counts.max()
+            if max_count == min_count:
+                return indices, labels
+
+            new_indices = []
+            for label in unique_labels:
+                label_mask = labels == label
+                label_indices = indices[label_mask]
+                label_count = len(label_indices)
+
+                if label_count > min_count:
+                    # Undersample this class
+                    sampled = np.random.choice(
+                        label_indices, size=min_count, replace=False
+                    )
+                    new_indices.extend(sampled)
+                else:
+                    new_indices.extend(label_indices)
+
+            new_indices = np.array(new_indices)
+            new_labels = labels[new_indices]
+            return new_indices, new_labels
+
+        else:
+            raise ValueError(
+                f"Unknown undersample_strategy: {strategy}. "
+                f"Use 'random' or 'majority'"
+            )
+
+    def _oversample(
+        self, indices: np.ndarray, labels: np.ndarray, strategy: str
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Apply oversampling strategy."""
+        np.random.seed(self.hparams.sampling_random_state)
+
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        max_count = counts.max()
+
+        if strategy == "random":
+            # Oversample all classes to match majority
+            new_indices = []
+            for label in unique_labels:
+                label_mask = labels == label
+                label_indices = indices[label_mask]
+                label_count = len(label_indices)
+
+                if label_count < max_count:
+                    # Oversample this class
+                    n_to_add = max_count - label_count
+                    sampled = np.random.choice(
+                        label_indices, size=n_to_add, replace=True
+                    )
+                    new_indices.extend(label_indices)
+                    new_indices.extend(sampled)
+                else:
+                    new_indices.extend(label_indices)
+
+            new_indices = np.array(new_indices)
+            new_labels = labels[new_indices]
+            return new_indices, new_labels
+
+        elif strategy == "minority":
+            # Oversample only minority class(es)
+            min_count = counts.min()
+            if min_count == max_count:
+                return indices, labels
+
+            new_indices = []
+            for label in unique_labels:
+                label_mask = labels == label
+                label_indices = indices[label_mask]
+                label_count = len(label_indices)
+
+                if label_count < max_count:
+                    # Oversample this class
+                    n_to_add = max_count - label_count
+                    sampled = np.random.choice(
+                        label_indices, size=n_to_add, replace=True
+                    )
+                    new_indices.extend(label_indices)
+                    new_indices.extend(sampled)
+                else:
+                    new_indices.extend(label_indices)
+
+            new_indices = np.array(new_indices)
+            new_labels = labels[new_indices]
+            return new_indices, new_labels
+
+        else:
+            raise ValueError(
+                f"Unknown oversample_strategy: {strategy}. "
+                f"Use 'random' or 'minority'"
+            )
+
+    def _create_concat_subset(
+        self,
+        concat_dataset: torch.utils.data.ConcatDataset,
+        indices: np.ndarray,
+    ) -> torch.utils.data.Subset:
+        """Create subset from ConcatDataset using global indices."""
+        return torch.utils.data.Subset(concat_dataset, indices)
+    
+ 
+    def stratify_synthetic_data(self, synthetic_dataset) -> np.ndarray:
+        """
+        Return a numpy array of indices selecting a stratified subset of the
+        provided synthetic_dataset according to self.hparams.synth_ratio.
+        Behavior:
+         - If synth_ratio >= 1.0 -> return all indices
+         - Otherwise pick approximately synth_ratio fraction from each class
+           (per-class floor allocation + distribute remainder by fractional parts).
+         - Sampling is done without replacement and is reproducible using
+           self.hparams.sampling_random_state.
+        """
+        # Defensive checks
+        ratio = getattr(self.hparams, "synth_ratio", 1.0)
+        rnd_state = int(getattr(self.hparams, "sampling_random_state", 42) or 42)
+        total = len(synthetic_dataset)
+
+        if ratio >= 1.0:
+            return np.arange(total, dtype=int)
+
+        # obtain numeric labels for all synthetic samples
+        labels_all = (
+            synthetic_dataset.labels_df["label"]
+            .map(synthetic_dataset.labels_map)
+            .to_numpy()
+        )
+
+        # reproducible RNG
+        rng = np.random.RandomState(rnd_state)
+
+        target_total = int(np.floor(total * ratio))
+        # ensure at least 1 if ratio>0 and dataset non-empty
+        target_total = max(1, target_total)
+
+        unique, counts = np.unique(labels_all, return_counts=True)
+
+        # raw per-class expected values (float)
+        raw = counts * ratio
+        # floor allocation
+        per_class = np.floor(raw).astype(int)
+
+        # ensure classes that exist get at least one if ratio yields zero but ratio>0
+        per_class = np.where((counts > 0) & (per_class == 0), 1, per_class)
+
+        # adjust to match target_total using fractional parts
+        current = per_class.sum()
+        if current < target_total:
+            frac = raw - np.floor(raw)
+            order = np.argsort(-frac)  # descending fractional parts
+            for idx in order:
+                if current >= target_total:
+                    break
+                # don't exceed available samples in that class
+                if per_class[idx] < counts[idx]:
+                    per_class[idx] += 1
+                    current += 1
+        elif current > target_total:
+            frac = raw - np.floor(raw)
+            order = np.argsort(frac)  # smallest fractional parts first
+            for idx in order:
+                if current <= target_total:
+                    break
+                if per_class[idx] > 0:
+                    per_class[idx] -= 1
+                    current -= 1
+
+        # sample per-class indices without replacement
+        synthetic_indices_list = []
+        for lab, num in zip(unique, per_class):
+            if num <= 0:
+                continue
+            label_mask = np.where(labels_all == lab)[0]
+            if num >= len(label_mask):
+                chosen = label_mask.tolist()
+            else:
+                chosen = rng.choice(label_mask, size=int(num), replace=False).tolist()
+            synthetic_indices_list.extend(chosen)
+
+        if len(synthetic_indices_list) == 0:
+            return np.array([], dtype=int)
+
+        synthetic_indices = np.array(synthetic_indices_list, dtype=int)
+        # shuffle the final selection a bit for mixing
+        rng.shuffle(synthetic_indices)
+        return synthetic_indices
+
 
     def setup(self, stage: str = None):
-        if self.train_indices is None or self.val_indices is None or self.test_indices is None:
-            split_dir = Path(self.hparams.data_dir).parent / "splits"
-            if (
-                (split_dir / "train.txt").exists()
-                and (split_dir / "val.txt").exists()
-                and (split_dir / "test.txt").exists()
-            ):
-                self.train_indices = np.loadtxt(split_dir / "train.txt", dtype=int)
-                self.val_indices = np.loadtxt(split_dir / "val.txt", dtype=int)
-                self.test_indices = np.loadtxt(split_dir / "test.txt", dtype=int)
-            else:
-                # last resort, regenerate
-                self.setup_splits()
-
-        # Use the indices from setup_splits to create the splits
-        if stage in ["fit", "validate"] or stage is None and (self.data_train is None or self.data_val is None):
+        if stage in ["fit", "validate"] or stage is None and (
+            self.data_train is None or self.data_val is None
+        ):
             self.data_train = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_train,
             )
-            self.data_train = torch.utils.data.Subset(self.data_train, self.train_indices)
-
-            # Add synthetic data to training set if provided
-            if self.hparams.synthetic_data_dir is not None:
-                synthetic_dataset = HSIDermoscopyDataset(
-                    task=self.hparams.task,
-                    data_dir=self.hparams.synthetic_data_dir,
-                    transform=self.transforms_train,
-                )
-
-                # Use all samples from synthetic dataset
-                synthetic_indices = np.arange(len(synthetic_dataset))
-
-                # Apply label filtering if specified
-                if self.hparams.allowed_labels is not None:
-                    synthetic_labels = synthetic_dataset.labels_df["label"].map(synthetic_dataset.labels_map).to_numpy()
-                    synthetic_indices, _ = self._filter_and_remap_indices(
-                        synthetic_indices, synthetic_labels, self.hparams.allowed_labels
-                    )
-
-                synthetic_subset = torch.utils.data.Subset(synthetic_dataset, synthetic_indices)
-
-                # Concatenate real and synthetic training data
-                self.data_train = torch.utils.data.ConcatDataset([self.data_train, synthetic_subset])
-
-                print(f"Added {len(synthetic_subset)} synthetic samples to training set")
+            self.data_train = torch.utils.data.Subset( #aqui acontece a subdivisão dos dados só de treino
+                self.data_train, self.train_indices
+            )
 
             self.data_val = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_val,
             )
-            self.data_val = torch.utils.data.Subset(self.data_val, self.val_indices)
+            self.data_val = torch.utils.data.Subset(
+                self.data_val, self.val_indices
+            )
 
-        # Assign test dataset
-        if stage in ["test", "predict"] or stage is None and self.data_test is None:
+            # Add synthetic data to training set if provided
+            if self.hparams.synthetic_data_dir is not None:
+                synthetic_dataset = HSIDermoscopyDataset( #dataset sintético inteiro
+                    task=self.hparams.task,
+                    data_dir=self.hparams.synthetic_data_dir,
+                    transform=self.transforms_train,
+                    is_synthetic=True,
+                )
+
+                # quantos dados sintéticos vamos usar NÃO COLOCAR 0
+                synthetic_indices = self.stratify_synthetic_data(synthetic_dataset)
+                #indices_ratio = int(len(synthetic_dataset)*self.hparams.synth_ratio)
+                #synthetic_indices = np.arange(indices_ratio)
+
+                if self.hparams.allowed_labels is not None:
+                    synthetic_labels = (
+                        synthetic_dataset.labels_df["label"]
+                        .map(synthetic_dataset.labels_map)
+                        .to_numpy()
+                    )
+                    synthetic_indices, _ = self._filter_and_remap_indices( #filtra apenas as labels que queremos usar
+                        synthetic_indices,
+                        synthetic_labels,
+                        self.hparams.allowed_labels,
+                    )
+
+                synthetic_subset = torch.utils.data.Subset(
+                    synthetic_dataset, synthetic_indices
+                )
+                if self.hparams.synth_mode == 'full_train':  #usa só sintético no treino
+                    self.data_train = synthetic_subset
+                elif self.hparams.synth_mode == 'full_val': #usa só sintético na validação
+                    self.data_val = synthetic_subset
+                elif self.hparams.synth_mode == 'mixed_train':  #usa uma mistura de real e sintético no treino
+                    self.data_train = torch.utils.data.ConcatDataset(
+                        [self.data_train, synthetic_subset]
+                    )
+
+                print(
+                    f"Added {len(synthetic_subset)} synthetic samples "
+                    f"to training set"
+                )
+
+            # Apply sampling after synthetic data is added
+            self.data_train = self._apply_sampling(
+                self.data_train, split_name="train"
+            )
+
+        if stage in ["test", "predict"] or stage is None and (
+            self.data_test is None
+        ):
             self.data_test = HSIDermoscopyDataset(
                 task=self.hparams.task,
                 data_dir=self.hparams.data_dir,
                 transform=self.transforms_test,
             )
-            self.data_test = torch.utils.data.Subset(self.data_test, self.test_indices)
+            self.data_test = torch.utils.data.Subset(
+                self.data_test, self.test_indices
+            )
+
+        # Print split statistics
+        self._print_split_statistics()
+
+    def _print_split_statistics(self):
+        """Print label distribution table for each split, including synthetic vs real breakdown."""
+        print("\n" + "=" * 80)
+        print("DATASET SPLIT STATISTICS")
+        print("=" * 80)
+
+        # Get label map for display
+        labels_map = self.get_labels_map()
+        inv_labels_map = {v: k for k, v in labels_map.items()}
+
+        splits_info = []
+        if self.data_train is not None:
+            splits_info.append(("Train", self.data_train))
+        if self.data_val is not None:
+            splits_info.append(("Val", self.data_val))
+        if self.data_test is not None:
+            splits_info.append(("Test", self.data_test))
+
+        for split_name, dataset in splits_info:
+            labels = self._get_labels_from_dataset(dataset)
+            is_synthetic = self._get_is_synthetic_from_dataset(dataset)
+            unique_labels, counts = np.unique(labels, return_counts=True)
+
+            print(f"\n{split_name} Split:")
+            print(
+                f"{'Class':<30} {'Count':<10} {'Real':<10} {'Synth':<10} "
+                f"{'Percentage':<10}"
+            )
+            print("-" * 80)
+
+            total = len(labels)
+            n_real = (~is_synthetic).sum()
+            n_synthetic = is_synthetic.sum()
+
+            for label, count in zip(unique_labels, counts):
+                class_name = inv_labels_map.get(label, f"Unknown({label})")
+                label_mask = labels == label
+                real_count = (~is_synthetic & label_mask).sum()
+                synth_count = (is_synthetic & label_mask).sum()
+                percentage = (count / total) * 100
+                print(
+                    f"{class_name:<30} {count:<10} {real_count:<10} "
+                    f"{synth_count:<10} {percentage:>6.2f}%"
+                )
+
+            print(
+                f"{'Total':<30} {total:<10} {n_real:<10} {n_synthetic:<10} "
+                f"{100.0:>6.2f}%"
+            )
+
+        print("=" * 80 + "\n")
 
     def train_dataloader(self):
         sampler = None
+        labels = None
+        if self.hparams.balanced_sampling:
+            labels = self._get_labels_from_dataset(self.data_train)
 
-        if (
-            self.hparams.task
-            in [
-                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_OTHERS,
-                HSIDermoscopyTask.CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI,
-            ]
-            and self.hparams.balanced_sampling
+        if self.hparams.infinite_train:
+            sampler = InfiniteSamplerWrapper(self.data_train)
+        elif (
+            self.hparams.balanced_sampling
+            and self.hparams.infinite_train
         ):
-            # Handle both Subset and ConcatDataset
-            if isinstance(self.data_train, torch.utils.data.ConcatDataset):
-                # Extract labels from concatenated datasets
-                labels = []
-                for dataset in self.data_train.datasets:
-                    if isinstance(dataset, torch.utils.data.Subset):
-                        labels.extend([dataset.dataset.labels[i] for i in dataset.indices])
-                    else:
-                        labels.extend(dataset.labels)
-                labels = np.array(labels)
-            else:
-                # Original Subset case
-                labels = np.array([self.data_train.dataset.labels[i] for i in self.data_train.indices])
-
-            sampler = BalancedBatchSampler(labels, batch_size=self.hparams.batch_size)
+            sampler = InfiniteBalancedBatchSampler(
+                labels, batch_size=self.hparams.batch_size
+            )
             return DataLoader(
                 self.data_train,
                 batch_sampler=sampler,
                 num_workers=self.hparams.num_workers,
                 pin_memory=self.hparams.pin_memory,
             )
+        elif self.hparams.balanced_sampling and not self.hparams.infinite_train:
+            sampler = BalancedBatchSampler(
+                labels, batch_size=self.hparams.batch_size
+            )
 
-        if self.hparams.infinite_train:
-            if self.hparams.sample_size and self.hparams.sample_size > 0 and \
-                self.hparams.sample_size < len(self.data_train):
-                sampler = InfiniteSamplerWrapper(SubsetRandomSampler(torch.arange(self.hparams.sample_size)))
-            else:
-                sampler = InfiniteSamplerWrapper(self.data_train)
+            return DataLoader(
+                self.data_train,
+                batch_sampler=sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+            )
         return DataLoader(
             self.data_train,
             batch_size=self.hparams.batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=True if sampler is None else False,
             sampler=sampler,
+            shuffle=(sampler is None),
         )
 
     def val_dataloader(self):
@@ -412,27 +653,37 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         )
 
     def predict_dataloader(self):
-        if self.hparams.task == HSIDermoscopyTask.GENERATION:
-            dummy_dataset = torch.utils.data.TensorDataset(torch.zeros(1, 1))
+        if not self.hparams.pred_num_samples:
+            return self.all_dataloader()
+        else:
+            dataloader = self.all_dataloader()
+            sampler = FiniteSampler(
+                dataloader.dataset, self.hparams.pred_num_samples
+            )
             return DataLoader(
-                dummy_dataset,
-                batch_size=1,
+                dataloader.dataset,
+                batch_size=self.hparams.batch_size,
                 num_workers=self.hparams.num_workers,
                 pin_memory=self.hparams.pin_memory,
-                shuffle=False,
+                sampler=sampler,
             )
-        else:
-            return self.test_dataloader()
 
     def all_dataloader(self):
         full_dataset = HSIDermoscopyDataset(
-            task=self.hparams.task, data_dir=self.hparams.data_dir, transform=self.transforms_test
+            task=self.hparams.task,
+            data_dir=self.hparams.data_dir,
+            transform=self.transforms_test,
         )
 
-        # use _filter_and_remap_indices to filter the full dataset
         indices = np.arange(len(full_dataset))
-        labels = full_dataset.labels_df["label"].map(full_dataset.labels_map).to_numpy()
-        indices, _ = self._filter_and_remap_indices(indices, labels, self.hparams.allowed_labels)
+        labels = (
+            full_dataset.labels_df["label"]
+            .map(full_dataset.labels_map)
+            .to_numpy()
+        )
+        indices, _ = self._filter_and_remap_indices(
+            indices, labels, self.hparams.allowed_labels
+        )
         filtered_dataset = torch.utils.data.Subset(full_dataset, indices)
 
         return DataLoader(
@@ -444,429 +695,104 @@ class HSIDermoscopyDataModule(pl.LightningDataModule):
         )
 
     def teardown(self, stage=None):
-        # Called on every process after trainer is done
         pass
 
-    def global_normalization(self, cube: np.ndarray, clip_interval: tuple[int, int] = (0, 1)) -> np.ndarray:
-        if self.global_max is None or self.global_min is None:
-            raise ValueError("Global max and min values must be set for global normalization.")
+    def export_dataset(self, output_dir: str, **kwargs):
+        """Export dataset using the HSI exporter."""
+        from src.utils.dataset_exporter import HSIDatasetExporter
 
-        if isinstance(self.global_min, int) and isinstance(self.global_max, int):
-            # single value provided, use for all bands
-            cube = (cube - self.global_min) / (self.global_max - self.global_min)
-            if clip_interval == (-1, 1):
-                cube = cube * 2 - 1
-        elif isinstance(self.global_min, list) and isinstance(self.global_max, list):
-            if len(self.global_min) != cube.shape[2] or len(self.global_max) != cube.shape[2]:
-                raise ValueError("Length of global_min and global_max lists must match number of bands in cube")
-            # per-band normalization
-            for b in range(cube.shape[2]):
-                cube[:, :, b] = (cube[:, :, b] - self.global_min[b]) / (self.global_max[b] - self.global_min[b])
-                if clip_interval == (-1, 1):
-                    cube[:, :, b] = cube[:, :, b] * 2 - 1
-        cube = np.clip(cube, clip_interval[0], clip_interval[1])
-        cube = cube.astype("float32")
-        return cube
-
-    def _export_single_crop(
-        self,
-        cube: np.ndarray,
-        mask: np.ndarray,
-        output_root: Path,
-        structure: str,
-        split_name: str,
-        label_name: str,
-        counter: dict,
-        extension: str,
-        mode: str,
-        bands: Optional[list[int]],
-        bbox_scale: float,
-        image_size: Optional[int],
-        global_normalization: bool,
-        original_path: str,  # Added parameter
-        crop_idx: int,  # Added parameter
-    ) -> tuple[Optional[Path], Optional[Path]]:
-        """Export a single cropped image based on one mask."""
-        # Convert to export mode
-        if mode == "rgb":
-            rgb_data = self._convert_to_rgb(cube, bands)
-        else:  # hyper
-            rgb_data = cube if bands is None else cube[:, :, bands]
-
-        # Crop
-        cropped_data = self._crop_with_bbox(rgb_data, mask, bbox_scale)
-        if cropped_data is None:
-            return None, None
-
-        counter["count"] += 1
-
-        # Determine output paths
-        img_path, mask_path = self._get_export_paths(
-            output_root,
-            structure,
-            split_name,
-            label_name,
-            counter["count"],
-            counter,
-            extension,
-            original_path=original_path,  # Pass original path
-            crop_idx=crop_idx,  # Pass crop index
+        exporter = HSIDatasetExporter(
+            self,
+            output_dir,
+            global_min=self.global_min,
+            global_max=self.global_max,
         )
+        exporter.export(**kwargs)
 
-        if image_size is not None:
-            cropped_data = smallest_maxsize_and_centercrop(cropped_data, image_size)
+    def _get_tags_and_run_name(self):
+        """Attach automatic tags and run name inferred from hparams."""
 
-        # Save image
-        if mode == "rgb":
-            cropped_data = cropped_data.astype("uint8")
-            Image.fromarray(cropped_data).save(img_path)
-        else:
-            if global_normalization:
-                cropped_data = self.global_normalization(cropped_data, clip_interval=(-1, 1))
-            savemat(img_path, {"cube": cropped_data})
+        hparams = getattr(self, "hparams", None)
+        if hparams is None:
+            return
 
-        return img_path, mask_path
+        tags = ["hsi_dermoscopy"]
+        run_name = "hsi_"
 
-    def export_dataset(
-        self,
-        output_dir: str,
-        splits: Optional[list[str]] = None,
-        mode: str = "rgb",
-        extension: Optional[str] = None,
-        bands: Optional[list[int]] = None,
-        crop_with_mask: bool = False,
-        bbox_scale: float = 1.5,
-        structure: str = "original",
-        allowed_labels: Optional[list[int | str]] = None,
-        image_size: Optional[int] = None,
-        global_normalization: bool = False,
-    ) -> None:
-        """
-        Export dataset with flexible options.
+        if hasattr(hparams, "data_dir") and "crop" in (
+            hparams.data_dir.lower()
+        ):
+            tags.append("cropped")
+            run_name += "crop_"
 
-        Args:
-            output_dir: Root directory for exported files
-            splits: List of splits to export (["train", "val", "test"]).
-                    If None, exports all splits.
-            mode: "rgb" or "hyper" for export format
-            extension: Custom file extension (default: .png for rgb, .mat for hyper)
-            bands: Band indices to export/use for RGB
-            crop_with_mask: Whether to crop images using mask bounding boxes
-            bbox_scale: Scale factor for bounding box (default 1.5 = 50% padding)
-            structure: Directory structure
-            allowed_labels: List of labels to export (can be int or str)
-            image_size: If specified, resize images to this size
-            global_normalization: If True, use global min-max normalization for both RGB and hyperspectral data
-        """
-        from scipy.io import loadmat, savemat
+        if getattr(hparams, "balanced_sampling", False):
+            tags.append("balanced_sampling")
 
-        if splits is None:
-            splits = ["train", "val", "test"]
+        if getattr(hparams, "infinite_train", False):
+            tags.append("infinite_train")
 
-        # Ensure setup has been called
-        if self.train_indices is None:
-            self.setup_splits()
+        if hasattr(hparams, "allowed_labels") and hparams.allowed_labels:
+            labels = hparams.allowed_labels
+            labels_map = self.get_labels_map()
+            inv_labels_map = {v: k for k, v in labels_map.items()}
+            labels = [
+                inv_labels_map[label] if isinstance(label, int) else label
+                for label in labels
+            ]
+            for label in labels:
+                tags.append(label.lower())
 
-        output_root = Path(output_dir)
-        output_root.mkdir(parents=True, exist_ok=True)
+        if getattr(hparams, "synthetic_data_dir", None):
+            run_name += "synth_"
+            tags.append("synthetic_data")
 
-        # Determine file extension
-        if extension is None:
-            extension = ".png" if mode == "rgb" else ".mat"
-        elif not extension.startswith("."):
-            extension = f".{extension}"
+            if getattr(hparams, "synth_mode", None):
+                run_name += hparams.synth_mode + "_"
+                tags.append(hparams.synth_mode)
 
-        # Get full dataset
-        full_dataset = HSIDermoscopyDataset(task=self.hparams.task, data_dir=self.hparams.data_dir)
+            if getattr(hparams, "synth_ratio", None):
+                if hparams.synth_ratio != 1.0:
+                    run_name += "r" + str(hparams.synth_ratio) + "_"
+                    tags.append(hparams.synth_mode)
 
-        # Convert allowed_labels to set of integers
-        allowed_label_ints = None
-        if allowed_labels is not None:
-            allowed_label_ints = set()
-            for label in allowed_labels:
-                if isinstance(label, str):
-                    if label in full_dataset.labels_map:
-                        allowed_label_ints.add(full_dataset.labels_map[label])
-                    else:
-                        raise ValueError(
-                            f"Label '{label}' not found in dataset. Available: {list(full_dataset.labels_map.keys())}"
-                        )
-                else:
-                    allowed_label_ints.add(label)
+        if "train" in self.transforms_cfg:
+            transforms = self.transforms_cfg["train"]
+            not_augs = [
+                "ToTensorV2",
+                "Normalize",
+                "PadIfNeeded",
+                "CenterCrop",
+                "Resize",
+                "Equalize",
+                "SmallestMaxSize",
+                "LongestMaxSize",
+            ]
+            has_augmentation = any(
+                transform.get("class_path") not in not_augs
+                for transform in transforms
+            )
+            if has_augmentation:
+                run_name += "aug_"
+                tags.append("augmented")
 
-        def get_label_name(idx: int) -> str:
-            label_int = full_dataset.labels[idx]
-            for name, val in full_dataset.labels_map.items():
-                if val == label_int:
-                    return name
-            return "unknown"
+        if self.hparams.undersample_strategy == "random":
+            run_name += "randunder_"
+            tags.append("random_undersampling")
+        elif self.hparams.undersample_strategy == "majority":
+            run_name += "majunder_"
+            tags.append("majority_undersampling")
 
-        def should_export(idx: int) -> bool:
-            if allowed_label_ints is None:
-                return True
-            return full_dataset.labels[idx] in allowed_label_ints
+        if self.hparams.oversample_strategy == "random":
+            run_name += "randover_"
+            tags.append("random_oversampling")
+        elif self.hparams.oversample_strategy == "minority":
+            run_name += "minover_"
+            tags.append("minority_oversampling")
 
-        # Export each split
-        path_mapping = {}
-        split_indices_map = {
-            "train": self.train_indices,
-            "val": self.val_indices,
-            "test": self.test_indices,
-        }
-
-        total_exported = 0
-        for split_name in splits:
-            if split_name not in split_indices_map:
-                print(f"Warning: Unknown split '{split_name}', skipping")
-                continue
-
-            indices = split_indices_map[split_name]
-            counter = {"count": 0}
-
-            # Filter indices by allowed labels
-            if allowed_label_ints is not None:
-                filtered_indices = [idx for idx in indices if should_export(idx)]
-                if len(filtered_indices) == 0:
-                    print(f"Warning: No samples in '{split_name}' match allowed_labels={allowed_labels}")
-                    continue
-            else:
-                filtered_indices = indices
-
-            for idx in tqdm(
-                filtered_indices,
-                desc=f"Exporting {split_name} split ({mode} mode)",
-            ):
-                if not should_export(idx):
-                    continue
-
-                row = full_dataset.labels_df.iloc[idx]
-                label_name = get_label_name(idx)
-
-                # Load hyperspectral cube
-                cube = loadmat(row["file_path"]).popitem()[-1].astype("float32")
-
-                # Get masks for this image
-                mask_paths = full_dataset.get_masks_list(idx)
-
-                if crop_with_mask and mask_paths:
-                    # Export one cropped image per mask
-                    for mask_idx, mask_path in enumerate(mask_paths):
-                        mask = np.array(Image.open(mask_path).convert("L"))
-
-                        img_path, _ = self._export_single_crop(
-                            cube,
-                            mask,
-                            output_root,
-                            structure,
-                            split_name,
-                            label_name,
-                            counter,
-                            extension,
-                            mode,
-                            bands,
-                            bbox_scale,
-                            image_size,
-                            global_normalization,
-                            original_path=str(row["file_path"]),  # Pass original path
-                            crop_idx=mask_idx,  # Pass crop index
-                        )
-
-                        if img_path:
-                            path_mapping[str(img_path)] = str(row["file_path"])
-                            total_exported += 1
-                else:
-                    # Export without cropping (original behavior)
-                    counter["count"] += 1
-
-                    # Convert to export mode
-                    if mode == "rgb":
-                        rgb_data = self._convert_to_rgb(cube, bands)
-                    else:
-                        rgb_data = cube if bands is None else cube[:, :, bands]
-
-                    if image_size is not None:
-                        rgb_data = smallest_maxsize_and_centercrop(rgb_data, image_size)
-
-                    # Determine output paths
-                    img_path, mask_path = self._get_export_paths(
-                        output_root,
-                        structure,
-                        split_name,
-                        label_name,
-                        idx,
-                        counter,
-                        extension,
-                        original_path=str(row["file_path"]),  # Pass original path
-                        crop_idx=None,  # No crop index for non-cropped
-                    )
-
-                    # Save image
-                    if mode == "rgb":
-                        Image.fromarray(rgb_data).save(img_path)
-                    else:
-                        if global_normalization:
-                            rgb_data = self.global_normalization(rgb_data, clip_interval=(-1, 1))
-                        savemat(img_path, {"cube": rgb_data})
-
-                    path_mapping[str(img_path)] = str(row["file_path"])
-
-                    # Save mask if applicable
-                    if structure not in ["images_only"] and mask_paths and mask_path is not None:
-                        # For non-cropped export, combine all masks
-                        masks = [np.array(Image.open(mp).convert("L")) for mp in mask_paths]
-                        combined_mask = masks[0].copy()
-                        for mask in masks[1:]:
-                            combined_mask = np.maximum(combined_mask, mask)
-
-                        Image.fromarray(combined_mask).save(mask_path)
-                        path_mapping[str(mask_path)] = ";".join(mask_paths)
-
-                    total_exported += 1
-
-        # Save path mapping
-        mapping_file = output_root / "path_mapping.csv"
-        pd.DataFrame.from_dict(path_mapping, orient="index", columns=["original_path"]).to_csv(mapping_file)
-
-        print(f"\nExported {total_exported} samples to {output_root}")
-        print(f"Structure: {structure}, Mode: {mode}, Cropped: {crop_with_mask}")
-        if allowed_labels:
-            print(f"Filtered to labels: {allowed_labels}")
-        print(f"Saved path mapping to {mapping_file}")
-
-    def _convert_to_rgb(self, cube: np.ndarray, bands: Optional[list[int]]) -> np.ndarray:
-        """Convert hyperspectral cube to RGB image."""
-        if bands is None:
-            # No bands specified: mean across all bands
-            band_data = np.mean(cube, axis=2, keepdims=True)
-            rgb = np.repeat(band_data, 3, axis=2)
-        elif len(bands) == 1:
-            # Single band: replicate on 3 channels
-            band_data = cube[:, :, bands[0:1]]
-            rgb = np.repeat(band_data, 3, axis=2)
-        elif len(bands) == 3:
-            # Three bands: use for RGB
-            rgb = cube[:, :, bands]
-        else:
-            # More than 3: take mean and replicate
-            band_data = np.mean(cube[:, :, bands], axis=2, keepdims=True)
-            rgb = np.repeat(band_data, 3, axis=2)
-
-        # Normalize to 0-255 using global min-max normalization
-        rgb = self.global_normalization(rgb, clip_interval=(0, 1))
-        rgb = (rgb * 255).astype("uint8")
-        return rgb
-
-    def _crop_with_bbox(self, img: np.ndarray, mask: np.ndarray, bbox_scale: float) -> Optional[np.ndarray]:
-        """Crop image using mask bounding box with scaling."""
-        ys, xs = np.where(mask > 0)
-        if len(ys) == 0 or len(xs) == 0:
-            return None
-
-        h, w = img.shape[:2]
-        y_min, y_max = ys.min(), ys.max()
-        x_min, x_max = xs.min(), xs.max()
-
-        bbox_h = y_max - y_min + 1
-        bbox_w = x_max - x_min + 1
-        cy = (y_min + y_max) / 2
-        cx = (x_min + x_max) / 2
-
-        new_h = bbox_h * bbox_scale
-        new_w = bbox_w * bbox_scale
-
-        y_min = max(0, int(round(cy - new_h / 2)))
-        y_max = min(h - 1, int(round(cy + new_h / 2)))
-        x_min = max(0, int(round(cx - new_w / 2)))
-        x_max = min(w - 1, int(round(cx + new_w / 2)))
-
-        return img[y_min : y_max + 1, x_min : x_max + 1]
-
-    def _get_export_paths(
-        self,
-        output_root: Path,
-        structure: str,
-        split_name: str,
-        label_name: str,
-        idx: int,
-        counter: dict,
-        extension: str,
-        original_path: Optional[str] = None,  # Added parameter
-        crop_idx: Optional[int] = None,  # Added parameter
-    ) -> tuple[Path, Optional[Path]]:
-        """Determine output paths based on directory structure."""
-
-        if structure == "original":
-            if original_path is None:
-                raise ValueError("original_path must be provided for structure='original'")
-
-            # Get the relative path from the data directory
-            original_path_obj = Path(original_path)
-            data_dir = Path(self.hparams.data_dir)
-
-            try:
-                # Get relative path from data_dir
-                rel_path = original_path_obj.relative_to(data_dir)
-            except ValueError:
-                # Fallback: preserve at least the last few directory levels
-                rel_path = Path(*original_path_obj.parts[-3:])
-
-            # Create filename
-            base_name = rel_path.stem
-            if crop_idx is not None:
-                filename = f"{base_name}_crop{crop_idx:02d}{extension}"
-            else:
-                filename = f"{base_name}{extension}"
-
-            # Preserve directory structure
-            img_path = output_root / rel_path.parent / filename
-            img_path.parent.mkdir(parents=True, exist_ok=True)
-            mask_path = img_path.parent / filename.replace(extension, "_mask.png")
-
-        elif structure == "imagenet":
-            # ImageNet structure: split/class/images
-            counter["count"] += 1
-            filename = f"{label_name}_{counter['count']:05d}{extension}"
-            img_path = output_root / split_name / label_name / filename
-            img_path.parent.mkdir(parents=True, exist_ok=True)
-            mask_path = img_path.parent / filename.replace(extension, "_mask.png")
-
-        elif structure == "flat":
-            # Flat with label in filename
-            counter["count"] += 1
-            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
-            img_path = output_root / filename
-            mask_path = output_root / filename.replace(extension, "_mask.png")
-
-        elif structure == "flat_with_masks":
-            # Separate images/ and masks/ directories
-            images_dir = output_root / "images"
-            masks_dir = output_root / "masks"
-            images_dir.mkdir(exist_ok=True)
-            masks_dir.mkdir(exist_ok=True)
-            counter["count"] += 1
-            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
-            img_path = images_dir / filename
-            mask_path = masks_dir / filename.replace(extension, "_mask.png")
-
-        elif structure == "images_only":
-            # Only images, no subdirectories
-            counter["count"] += 1
-            filename = f"{split_name}_{label_name}_{counter['count']:05d}{extension}"
-            img_path = output_root / filename
-            mask_path = None
-
-        else:
-            raise ValueError(f"Unknown structure: {structure}")
-
-        return img_path, mask_path
+        return tags, run_name.rstrip("_")
 
 
 if __name__ == "__main__":
-    import pyrootutils
-
-    pyrootutils.setup_root(
-        Path(__file__).parent.parent.parent, project_root_env_var=True, dotenv=True, pythonpath=True, cwd=False
-    )
 
     # Example usage
     image_size = 256
@@ -874,6 +800,12 @@ if __name__ == "__main__":
         task="CLASSIFICATION_MELANOMA_VS_DYSPLASTIC_NEVI",
         train_val_test_split=(0.7, 0.15, 0.15),
         batch_size=8,
+        global_max=[0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
+                  0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
+                  1.4947973, 1.4737314, 1.6318618, 1.7226081],
+        global_min=[0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
+                  0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
+                  0.01310135, 0.01476806, 0.01932094, 0.02020744],
         data_dir="data/hsi_dermoscopy",
         image_size=image_size,
         transforms={
@@ -895,30 +827,25 @@ if __name__ == "__main__":
                 {"class_path": "ToTensorV2", "init_args": {}},
             ],
         },
-        google_drive_id="1557yQpqO3baKVSqstuKLjr31NuC2eqcO",
+        google_drive_id="1BQWqSq5Q0xfu381VNwyVU8XlXaIy9ds9",
         # synthetic_data_dir="data/hsi_dermoscopy_cropped_synth",
     )
     data_module.prepare_data()
     data_module.setup()
 
-    print(f"Train samples: {len(data_module.data_train)}")
-    print(f"Val samples: {len(data_module.data_val)}")
-    print(f"Test samples: {len(data_module.data_test)}")
-
-    # train_dataloader = data_module.train_dataloader()
-    # train_dataset = train_dataloader.dataset
-
-    # plot_dataset_mosaic(train_dataset, m=0, n=50, save_path="melanoma_train_mosaic.png", nrow=10)
-
     # Export dataset example
     data_module.export_dataset(
-        output_dir="export/hsi_dermoscopy_croppedv2_256",
-        # splits=["train", "val", "test"],
+        output_dir="export/hsi_dermoscopy_croppedv2_256_with_masks_val_test",
+        splits=[
+            # "train",
+            "val",
+            "test"
+        ],
         crop_with_mask=True,
         bbox_scale=2,
-        structure="original",
-        mode="hyper",
+        structure="imagenet",
         image_size=image_size,
-        # allowed_labels=["melanoma"],
+        # allowed_labels=["melanoma", "dysplastic_nevi"],
         global_normalization=False,
+        export_cropped_masks=False,
     )

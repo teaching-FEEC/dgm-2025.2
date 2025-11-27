@@ -9,15 +9,32 @@ seq = nn.Sequential
 
 
 def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        try:
-            m.weight.data.normal_(0.0, 0.02)
-        except Exception:
-            pass
-    elif classname.find("BatchNorm") != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+    # Handle common Conv layers (with or without spectral norm)
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        if hasattr(m, 'weight') and m.weight is not None:
+            nn.init.normal_(m.weight.data, 0.0, 0.02)
+        if hasattr(m, 'bias') and m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.0)
+
+    # Handle BatchNorm layers
+    elif isinstance(m, nn.BatchNorm2d):
+        if hasattr(m, 'weight') and m.weight is not None:
+            nn.init.normal_(m.weight.data, 1.0, 0.02)
+        if hasattr(m, 'bias') and m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.0)
+
+    # InstanceNorm (used by SPADE)
+    elif isinstance(m, nn.InstanceNorm2d):
+        if hasattr(m, 'weight') and m.weight is not None:
+            nn.init.normal_(m.weight.data, 1.0, 0.02)
+        if hasattr(m, 'bias') and m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.0)
+
+    # Handle Linear layers (just in case any are used in SE blocks or decoders)
+    elif isinstance(m, nn.Linear):
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+        if hasattr(m, 'bias') and m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.0)
 
 
 def conv2d(*args, **kwargs):

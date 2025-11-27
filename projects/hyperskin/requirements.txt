@@ -1,6 +1,7 @@
 # --------- python --------- #
 numpy
 matplotlib
+seaborn
 pandas
 scipy
 ipykernel
@@ -30,6 +31,7 @@ pyrootutils
 python-dotenv
 debugpy
 umap-learn
+tabulate
 
 # --------- data --------- #
 albumentationsx
@@ -45,3 +47,4 @@ opencv-python
 # interface
 gradio
 lpips
+torchinfo

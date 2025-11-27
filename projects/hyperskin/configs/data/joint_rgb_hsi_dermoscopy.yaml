@@ -1,0 +1,144 @@
+data:
+  class_path: data_modules.JointRGBHSIDataModule
+  init_args:
+    rgb_dataset: milk10k
+    # rgb_dataset: isic2019
+    hsi_config:
+      task: 
+        return_image: True
+        return_mask: False
+        return_label: True
+        binary_classification: True
+        label_mapping:
+          melanoma: 0
+          dysplastic_nevi: 1
+        filter_classes: [
+          "melanoma", 
+          "dysplastic_nevi"
+          ]
+
+      train_val_test_split: [0.7, 0.15, 0.15]
+      image_size: 256
+      batch_size: 8
+      num_workers: 8
+      pin_memory: True
+      data_dir: data/hsi_dermoscopy_croppedv2_256_with_masks
+      google_drive_id: 1PNk7Eyv7YfKGCabyC2OkIO7blZcmYJqw
+      balanced_sampling: False
+      global_max: [0.6203158, 0.6172642, 0.46794897, 0.4325111, 0.4996644, 0.61997396,
+                    0.7382196, 0.86097705, 0.88304037, 0.9397393, 1.1892519, 1.5035477,
+                    1.4947973, 1.4737314, 1.6318618, 1.7226081]
+      global_min: [0.00028473, 0.0043945, 0.00149752, 0.00167517, 0.00190101, 0.0028114,
+                    0.00394378, 0.00488099, 0.00257091, 0.00215704, 0.00797662, 0.01205248,
+                    0.01310135, 0.01476806, 0.01932094, 0.02020744]
+      range_mode: '-1_1'
+      infinite_train: True
+      normalize_mask_tanh: True
+      allowed_labels: [
+        "melanoma", 
+        # "dysplastic_nevi"
+      ]
+
+      transforms:
+        train:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "ToTensorV2"
+            init_args: {}
+        val:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "ToTensorV2"
+            init_args: {}
+        test:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "ToTensorV2"
+            init_args: {}
+    rgb_config:
+      task: 
+        return_image: True
+        return_mask: False
+        return_label: True
+        binary_classification: True
+        label_type: binary
+      train_val_test_split: [1, 0, 0]
+      image_size: ${data.init_args.hsi_config.image_size}
+      batch_size: 8
+      num_workers: 8
+      pin_memory: True
+      # data_dir: data/isic2019_cropped_256
+      data_dir: data/milk10k_melanoma_nevus_cropped_256
+      allowed_labels: [
+        "melanoma", 
+        # "melanocytic_nevus"
+      ]
+      # global_max: [255, 255, 255]
+      # global_min: [0, 0, 0]
+      # range_mode: '-1_1'
+      infinite_train: True
+
+      # google_drive_id: 1iqMOD_U0FsOKh7mkGKildVG6jxYdeDsP # isic2019_cropped_256
+      google_drive_id: 1SQbJ9lG-lG-MlunXfNeA86I6PJYzmf2L # milk10k_melanoma_nevus_cropped_256
+
+      transforms:
+        train:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
+          - class_path: "ToTensorV2"
+            init_args: {}
+        val:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
+          - class_path: "ToTensorV2"
+            init_args: {}
+        test:
+          - class_path: "SmallestMaxSize"
+            init_args:
+              max_size: ${data.init_args.hsi_config.image_size}
+          - class_path: "CenterCrop"
+            init_args:
+              height: ${data.init_args.hsi_config.image_size}
+              width: ${data.init_args.hsi_config.image_size}
+          - class_path: "Normalize"
+            init_args:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+              max_pixel_value: 255
+          - class_path: "ToTensorV2"
+            init_args: {}

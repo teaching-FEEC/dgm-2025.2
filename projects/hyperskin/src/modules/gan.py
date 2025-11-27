@@ -3,6 +3,7 @@ import torch
 import torchvision
 from zmq import has
 
+from src.metrics.synthesis_metrics import SynthMetrics
 from src.models.gan.discriminator import Discriminator
 from src.models.gan.generator import Generator
 import torch.nn.functional as F
@@ -11,7 +12,7 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 from torchmetrics.image import PeakSignalNoiseRatio
 from torchmetrics.image import SpectralAngleMapper
 from torchmetrics import MaxMetric
-from metrics.synthesis_metrics import SynthMetrics, _NoOpMetric
+
 
 
 class GANModule(LightningModule):

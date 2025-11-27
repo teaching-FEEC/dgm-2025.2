@@ -21,10 +21,7 @@ DEFAULT_GLOBAL_MIN = np.array([
 
 
 def normalize_image(image: np.ndarray, global_min, global_max):
-    """
-    Normalize each channel using global min and max.
-    Clamps the values between 0 and 1.
-    """
+    """Normalize each channel using global min and max, clamping values to [0, 1]."""
     norm = (image - global_min) / (global_max - global_min)
     norm = np.clip(norm, 0.0, 1.0)
     return norm
@@ -33,26 +30,38 @@ def normalize_image(image: np.ndarray, global_min, global_max):
 def hyperspectral_to_rgb(hsi: np.ndarray):
     """
     Convert a hyperspectral (256,256,16) cube to an RGB image
+    by averaging all channels.
     """
-    # get mean of channels and repeat to make 3 channels
     rgb = np.mean(hsi, axis=2)
-    rgb = np.stack([rgb, rgb, rgb], axis=2)  # shape
+    rgb = np.stack([rgb, rgb, rgb], axis=2)
     return rgb
 
 
+def find_mat_files(root_dir):
+    """Recursively find all .mat files under the given directory."""
+    mat_files = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        for f in filenames:
+            if f.endswith(".mat"):
+                mat_files.append(os.path.join(dirpath, f))
+    return mat_files
+
+
 def main(input_dir, output_path, n=50, global_min=None, global_max=None):
-    if global_min is None:
-        global_min = DEFAULT_GLOBAL_MIN
-    if global_max is None:
-        global_max = DEFAULT_GLOBAL_MAX
+    global_min = global_min or DEFAULT_GLOBAL_MIN
+    global_max = global_max or DEFAULT_GLOBAL_MAX
 
-    files = [f for f in os.listdir(input_dir) if f.endswith(".mat")]
+    # Recursively gather .mat files
+    files = find_mat_files(input_dir)
+    if not files:
+        print(f"❌ No .mat files found in {input_dir}.")
+        return
+
     files = files[:n]
-
     images = []
 
-    for fname in files:
-        path = os.path.join(input_dir, fname)
+    for path in files:
+        fname = os.path.basename(path)
         mat = loadmat(path)
 
         # Try to find proper key automatically
@@ -61,7 +70,7 @@ def main(input_dir, output_path, n=50, global_min=None, global_max=None):
             print(f"⚠️ Skipping {fname}, no valid data key found.")
             continue
 
-        img = mat[key]  # shape (256,256,16)
+        img = mat[key]
         if img.ndim != 3 or img.shape[-1] != 16:
             print(f"⚠️ Skipping {fname}, invalid shape {img.shape}.")
             continue
@@ -69,7 +78,6 @@ def main(input_dir, output_path, n=50, global_min=None, global_max=None):
         norm_img = normalize_image(img, global_min, global_max)
         rgb_img = hyperspectral_to_rgb(norm_img)
 
-        # Convert to torch tensor (C,H,W)
         tensor_img = torch.tensor(rgb_img.transpose(2, 0, 1), dtype=torch.float32)
         images.append(tensor_img)
 
@@ -83,8 +91,10 @@ def main(input_dir, output_path, n=50, global_min=None, global_max=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Normalize and visualize hyperspectral images")
-    parser.add_argument("input_dir", type=str, help="Directory with .mat files")
+    parser = argparse.ArgumentParser(
+        description="Normalize and visualize hyperspectral images (recursive search)"
+    )
+    parser.add_argument("input_dir", type=str, help="Directory with .mat files (searched recursively)")
     parser.add_argument("--output_path", type=str, default="hsi_grid.png", help="Output PNG path")
     parser.add_argument("--n", type=int, default=50, help="Number of images to include in grid")
     args = parser.parse_args()
