@@ -1,373 +1,345 @@
-# Super Resolution Validation Framework
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A comprehensive validation framework for super resolution models using **PSNR**, **LPIPS**, and **SSIM** metrics. This package provides tools for model evaluation, training data generation, and performance analysis with beautiful visualizations.
 
-## Features
+# Image Super-Resolution with Generative Models  
+  
 
-### **Comprehensive Metrics**
-- **PSNR** (Peak Signal-to-Noise Ratio) - Pixel-level reconstruction accuracy
-- **LPIPS** (Learned Perceptual Image Patch Similarity) - Perceptual quality assessment
-- **SSIM** (Structural Similarity Index Measure) - Structural information preservation
+## Presentation  
 
-### **Validation Tools**
-- **Multi-metric validation** with statistical analysis
-- **Batch processing** for entire image directories
-- **Quality categorization** (Excellent/Good/Fair/Poor)
-- **Performance ranking** and comparison
-- **Correlation analysis** between metrics
+This project originated in the context of the graduate course *IA376N - Generative AI: from models to multimodal applications*, offered in the second semester of 2025, at Unicamp, under the supervision of Prof. Dr. Paula Dornhofer Paro Costa, from the Department of Computer and Automation Engineering (DCA) of the School of Electrical and Computer Engineering (FEEC).  
 
-### **Data Generation**
-- **Image downsampling** for training data creation
-- **Quality degradation** simulation (blur, noise, compression)
-- **Multiple downsampling methods** (bicubic, bilinear, lanczos, etc.)
-- **Parallel processing** for efficiency
+### Deliverables
+- The presentation for the E1 delivery can be found here [Presentation Image Super-Resolution with Generative Models](https://docs.google.com/presentation/d/1LrxHj0p9UAfdooWXWIvNTW1KwR4ejZvf/edit?slide=id.p1#slide=id.p1)
+- The presentation for the E2 delivery can be found here [Presentation E2 Google Slides](https://docs.google.com/presentation/d/1zLd4ip43czBegF7HHgJYoS5qRbJ5Y2kQ/edit?slide=id.p1)
+- The presentation for the E3 delivery can be found here [Presentation E3 Google Slides](https://docs.google.com/presentation/d/1Fs8ZEbfoHMGtiiKB4u0T6H9FeGYvkwkk/edit?slide=id.p1#slide=id.p1)
 
-### **Analysis & Visualization**
-- **Interactive analysis** with Jupyter notebooks
-- **Multiple visualization types** (distributions, correlations, dashboards)
-- **Performance insights** and recommendations
-- **Export capabilities** (CSV, JSON, plots)
+|Name  | RA | Specialization|
+|--|--|--|
+| Brendon Erick Euzébio Rus Peres  | 256130  | Computing Engineering |
+| Miguel Angelo Romanichen Suchodolak  | 178808  | Computing Engineering |
+| Núbia Sidene Almeida das Virgens  | 299001  | Computing Engineering |  
 
-## Installation
+## Project Summary Description  
 
-### Using pip (Recommended)
+The project addresses the problem of **image super-resolution**, a fundamental task in computer vision that aims to reconstruct high-quality images from their low-resolution counterparts. This problem has strong practical relevance in areas such as:
+- **Low-budget devices**: Get one poor picture and enhance it
+- **Medical Imaging**: Enhancing diagnostic image quality
+- **Satellite Analysis**: Improving remote sensing data
+- **Image Restoration**: Recovering historical or degraded photographs
+- **Personal Use**: Upscaling cherished memories and favorite images 
+
+The main objective of the project is to design, adapt and evaluate a **generative model** that improves the resolution and perceptual quality of input images. The model will receive as input a low-resolution image and will output a high-resolution reconstruction with enhanced details and sharper definition, in general its goals can be set by:
+
+- Improving resolution and perceptual quality of input images
+- Preserving fine details and texture information
+- Generating visually convincing high-resolution reconstructions
+- Outperforming traditional interpolation methods, like bicubic
+
+As inspiration, this project will draw on the methodology and architecture proposed in the repository [InvSR: Invertible Super-Resolution](https://github.com/zsyOAOA/InvSR).  
+
+## Proposed Methodology  
+
+For this first stage, the proposed methodology is as follows:  
+
+### **Datasets**:
+
+| Dataset | Type | Description | Usage | LINK |
+|---------|------|-------------|-------|-------|
+| **DIV2K** | Training/Validation | 2K resolution diverse images | Primary training data | Not yet here
+| **Flickr2K** | Training | High-quality photos from Flickr | Additional training data | [Flickr2K](https://www.kaggle.com/datasets/daehoyang/flickr2k?resource=download)
+| **Set5/Set14** | Evaluation | Standard benchmark sets | Performance evaluation | Not yet here
+
+  - The project intends to use standard super-resolution datasets such as **DIV2K**, **Flickr2K**, and possibly **Set5/Set14** for evaluation.  
+  - These datasets were chosen because they are widely adopted benchmarks in super-resolution tasks, providing a reliable basis for comparison with the literature.  
+
+### **Generative Modeling Approaches**:
+  #### Primary Approach: Invertible Neural Networks
+  - **InvSR Architecture**: Exploring invertible transformations for bidirectional mapping
+  - **Coupling Layers**: Implementing affine coupling for information preservation
+  - **Multi-scale Processing**: Handling different resolution scales efficiently
+
+  #### Alternative Approaches
+  - **GAN-based Models**: ESRGAN for enhanced perceptual quality
+  - **Diffusion Models**: Iterative refinement for high-quality generation
+  - **Hybrid Architectures**: Combining multiple generative paradigms
+
+  - Exploration of **invertible neural networks** as proposed in *InvSR*.  
+  - Consideration of **GAN-based models** (e.g., ESRGAN) for perceptual quality improvement.  
+  - Study of diffusion-based approaches for possible integration or comparison.  
+
+### **Tools**:  
+  - **PyTorch** for model development and training.  
+  - **Weights & Biases** or TensorBoard for experiment tracking.  
+  - Google Colab or local GPU cluster for computational resources.
+  - **Custom Validation Framework** for comprehensive model evaluation (PSNR, LPIPS, SSIM).  
+
+### **Expected Results**:  
+  - **Quantitative Improvements**: Significant gains over bicubic interpolation baselines
+  - **Visual Quality**: Perceptually convincing high-resolution reconstructions
+  - **Detail Preservation**: Enhanced texture and fine-structure recovery
+  - **Computational Efficiency**: Balanced trade-off between quality and inference speed
+
+### **Evaluation**:  
+  #### Quantitative Metrics
+  - **PSNR** (Peak Signal-to-Noise Ratio): Pixel-level reconstruction accuracy
+  - **SSIM** (Structural Similarity Index): Structural information preservation
+  - **LPIPS** (Learned Perceptual Image Patch Similarity): Perceptual similarity assessment
+
+  #### Qualitative Assessment
+  - **Visual Inspection**: Side-by-side comparison with ground truth
+  - **User Studies**: Perceptual quality evaluation
+  - **Ablation Studies**: Component-wise contribution analysis
+
+#### Workflow
+![WhatsApp Image 2025-11-24 at 16 56 15_3ab7d84d](https://github.com/user-attachments/assets/283f969e-bbb1-45f4-ad3f-b25f7a2171cf)
+
+## Installation and Setup
+
+This section provides step-by-step instructions to install dependencies and run the Gradio interface (`app.py`) for image super-resolution.
+
+### Prerequisites
+
+- **Python 3.8+** (Python 3.10 or 3.11 recommended)
+- **CUDA-capable GPU** (recommended for faster inference, but CPU is also supported)
+- **Git** (for cloning the repository)
+
+### Step 1: Clone the Repository
 
 ```bash
-# Install from PyPI (when published)
-pip install super-resolution-validation
-
-# Or install from source
-pip install git+https://github.com/superres-team/super-resolution-validation.git
+git clone <repository-url>
+cd projects/super_resolution
 ```
 
-### Development Installation
+### Step 2: Create a Virtual Environment
+
+It's recommended to use a virtual environment to avoid conflicts with other Python packages:
+
+**On Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**On Linux/Mac:**
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+### Step 3: Install Dependencies
+
+Navigate to the `src` directory and install the required packages:
 
 ```bash
-# Clone the repository
-git clone https://github.com/superres-team/super-resolution-validation.git
-cd super-resolution-validation
-
-# Install in development mode
-pip install -e .
-
-# Or with all optional dependencies
-pip install -e ".[all]"
+cd src
+pip install -r requirements.txt
 ```
 
-### Optional Dependencies
+**Note:** The installation may take several minutes as it includes PyTorch, diffusers, and other deep learning libraries. If you have CUDA installed, PyTorch will automatically use GPU acceleration.
+
+### Step 4: Download Model Weights
+
+The model weights will be automatically downloaded on first run. However, you can also download them manually:
+
+- **Noise Predictor**: `noise_predictor_sd_turbo_v5.pth` (automatically downloaded from HuggingFace)
+- **Stable Diffusion Turbo**: The base model will be downloaded automatically when first used
+
+The weights will be saved in the `src/weights/` directory.
+
+### Step 5: Run the Application
+
+From the `src` directory, run:
 
 ```bash
-# GPU acceleration (CUDA)
-pip install "super-resolution-validation[gpu]"
-
-# Jupyter notebook support
-pip install "super-resolution-validation[notebook]"
-
-# Development tools
-pip install "super-resolution-validation[dev]"
-
-# Everything
-pip install "super-resolution-validation[all]"
+python app.py
 ```
 
-## Quick Start
+The Gradio interface will start and display a local URL (typically `http://127.0.0.1:7860`). Open this URL in your web browser to access the interface.
 
-### Basic Validation
+### Using the Interface
 
-```python
-from validation import SuperResolutionValidator
+The application provides two main tabs:
 
-# Initialize validator
-validator = SuperResolutionValidator(model_name="MyModel")
+1. **Single Image**: Process a single low-resolution image
+   - Upload an image
+   - Configure parameters (number of steps, chopping size, color fixing method, etc.)
+   - Click "Process" to generate the super-resolved image
 
-# Run comprehensive validation
-results = validator.validate_model(
-    original_images_dir="./original_images",
-    predicted_images_dir="./predicted_images",
-    output_dir="./validation_results"
-)
+2. **Batch Processing**: Process multiple images from a directory
+   - Enter the path to a directory containing images
+   - Configure parameters
+   - Click "Process Folder" to process all images
 
-# Print summary
-print(f"Mean PSNR: {results['metrics']['psnr']['mean_psnr']:.2f} dB")
-print(f"Mean LPIPS: {results['metrics']['lpips']['mean_lpips']:.4f}")
-print(f"Mean SSIM: {results['metrics']['ssim']['mean_ssim']:.4f}")
-```
+### Configuration Options
 
-### Individual Metrics
+- **Number of steps**: Controls the number of denoising steps (1-5 recommended for speed vs quality trade-off)
+- **Chopping size**: Patch size for processing large images (128 or 256)
+- **Color Fixing Method**: Choose between None, YCbCr, Wavelet, Histogram, or Hybrid
+- **Adaptive Scheduler**: Automatically adjusts timesteps based on image complexity
+- **Smart Chopping**: Adaptive overlap based on local complexity (faster + better quality)
+- **Edge-Preserving Enhancement**: Enhances edges while preserving smooth regions
+- **Adaptive Guidance Scale**: Adjusts guidance scale based on image complexity
 
-```python
-from validation import PSNRValidator, LPIPSValidator, SSIMValidator
+### Troubleshooting
 
-# PSNR validation
-psnr_validator = PSNRValidator()
-psnr_stats = psnr_validator.validate_directory("./original", "./predicted")
-print(f"Mean PSNR: {psnr_stats['mean_psnr']:.2f} dB")
+**Issue: CUDA out of memory**
+- Reduce the `chopping_size` (e.g., from 256 to 128)
+- Process smaller images or use CPU mode
 
-# LPIPS validation
-lpips_validator = LPIPSValidator(net='alex')
-lpips_stats = lpips_validator.validate_directory("./original", "./predicted")
-print(f"Mean LPIPS: {lpips_stats['mean_lpips']:.4f}")
+**Issue: Module not found errors**
+- Ensure you're in the `src` directory when running `app.py`
+- Verify all dependencies are installed: `pip install -r requirements.txt`
 
-# SSIM validation
-ssim_validator = SSIMValidator()
-ssim_stats = ssim_validator.validate_directory("./original", "./predicted")
-print(f"Mean SSIM: {ssim_stats['mean_ssim']:.4f}")
-```
+**Issue: Model download fails**
+- Check your internet connection
+- The models are downloaded from HuggingFace - ensure you have access
 
-### Data Generation
+**Issue: Gradio interface doesn't open**
+- Check if the port 7860 is already in use
+- The interface will show the URL in the terminal output
 
-```python
-from validation import ImageDownsampler
+### System Requirements
 
-# Create low-resolution training data
-downsampler = ImageDownsampler(scale_factor=4, quality_reduction=True)
+- **Minimum RAM**: 8GB (16GB recommended)
+- **GPU Memory**: 4GB VRAM minimum (8GB+ recommended for best performance)
+- **Disk Space**: ~10GB for models and dependencies
 
-# Process entire directory
-stats = downsampler.process_directory(
-    input_dir="./high_res_images",
-    output_dir="./low_res_images",
-    downsample_method='bicubic',
-    blur_kernel=3,
-    noise_level=0.5,
-    jpeg_quality=75
-)
+### Additional Notes
 
-print(f"Processed {stats['successful']} images successfully")
-```
+- The first run may take longer as models are downloaded
+- Processing time depends on image size, number of steps, and hardware
+- Results are saved in the `invsr_output/` directory (for single images) or in a subdirectory of the input folder (for batch processing)
 
-## Command Line Interface
 
-The package provides convenient command-line tools:
 
-### Model Validation
-```bash
-# Run comprehensive validation
-sr-validate --original ./original --predicted ./predicted --model-name MyModel
+## InvSR vs Our Model
+<img width="742" height="706" alt="architecture" src="https://github.com/user-attachments/assets/19a24cf6-33b6-4c03-b383-8b6689b45f1e" />
 
-# With custom settings
-sr-validate --original ./original --predicted ./predicted --model-name MyModel --no-gpu --lpips-net vgg
-```
 
-### Data Generation
-```bash
-# Create low-resolution training data
-sr-downsample --input ./high_res --output ./low_res --scale 4 --method bicubic
 
-# With quality degradation
-sr-downsample --input ./2k_images --output ./512px_images --blur 3 --noise 0.5 --jpeg-quality 75
-```
+## Key features implemented on the model
 
-### Analysis
-```bash
-# Analyze validation results
-sr-analyze --results ./validation_results
-```
+### 1. Adaptive Scheduler
+- Automatically adjusts timesteps based on image complexity
+- Location: `utils/util_adaptive.py`
+- Usage: Enable "Adaptive Scheduler" checkbox in app.py
 
-## Example Output
+### 2. Attention-Guided Fusion
+- Combines multiple results using attention maps
+- Methods: 'weighted' (smooth) or 'max' (aggressive)
+- Location: `utils/util_adaptive.py`
+- Usage: Enable "Attention-Guided Fusion" checkbox
 
-### Validation Summary
-```
-VALIDATION SUMMARY
-==================================================
+### 3. Smart Chopping
+- Adaptive overlap based on local complexity
+- Overlap range: 25-75% (configurable)
+- Location: `utils/util_smart_chopping.py`
+- Usage: Enable "Smart Chopping" checkbox
 
-PSNR (Peak Signal-to-Noise Ratio):
-   Mean:   28.45 dB
-   Std:    2.34 dB
-   Min:    24.12 dB
-   Max:    35.67 dB
-   Median: 28.23 dB
-   Images: 100
+### 4. Hybrid Color Fixing
+- Combines YCbCr, Wavelet, and Histogram Matching
+- Modes: 'adaptive' (weighted) or 'best' (selection)
+- Location: `utils/util_color_fix.py`
+- Default: 'hybrid' method
 
-LPIPS (Learned Perceptual Image Patch Similarity):
-   Mean:   0.1234
-   Std:    0.0456
-   Min:    0.0678
-   Max:    0.2345
-   Median: 0.1198
-   Images: 100
+### 5. Edge-Preserving Enhancement
+- Enhances edges while preserving smooth regions
+- Uses Sobel operators for edge detection
+- Location: `utils/util_enhancement.py`
+- Usage: Enable "Edge-Preserving Enhancement" checkbox
 
-SSIM (Structural Similarity Index Measure):
-   Mean:   0.8567
-   Std:    0.0234
-   Min:    0.7890
-   Max:    0.9123
-   Median: 0.8598
-   Images: 100
+### 6. Adaptive Guidance Scale
+- Adjusts cfg_scale based on image complexity
+- Location: `utils/util_enhancement.py`
+- Usage: Enable "Adaptive Guidance Scale" checkbox
 
-Overall Assessment:
-   PSNR: Good (25-30 dB)
-   LPIPS: Good (0.1-0.2)
-   SSIM: Good (0.8-0.9)
-```
-
-### Performance Insights
-```
-PERFORMANCE INSIGHTS & RECOMMENDATIONS
-============================================================
-PSNR: Good performance (Mean: 28.45 dB, Std: 2.34)
-LPIPS: Good perceptual quality (Mean: 0.1234, Std: 0.0456)
-SSIM: Good structural similarity (Mean: 0.8567, Std: 0.0234)
-
-Recommendations:
-   - Model shows consistent performance across all metrics
-   - Consider perceptual loss functions to improve LPIPS scores
-   - Strong correlation between PSNR and SSIM indicates good structural preservation
-```
-
-## Visualizations
-
-The framework generates comprehensive visualizations:
-
-1. **Metric Distributions** - Histograms and box plots
-2. **Correlation Analysis** - Heatmaps and scatter plots  
-3. **Performance Ranking** - Best/worst image comparisons
-4. **Quality Dashboard** - Pie charts and trend analysis
-5. **Statistical Summaries** - Detailed metric tables
-
-## Quality Thresholds
-
-### PSNR (Higher is Better)
-- **Excellent**: ≥30 dB
-- **Good**: 25-30 dB
-- **Fair**: 20-25 dB
-- **Poor**: <20 dB
-
-### LPIPS (Lower is Better)
-- **Excellent**: ≤0.1
-- **Good**: 0.1-0.2
-- **Fair**: 0.2-0.3
-- **Poor**: >0.3
-
-### SSIM (Higher is Better)
-- **Excellent**: ≥0.9
-- **Good**: 0.8-0.9
-- **Fair**: 0.7-0.8
-- **Poor**: <0.7
-
-## Project Structure
+## File Structure
 
 ```
-super-resolution-validation/
-├── validation/                 # Main package
-│   ├── __init__.py            # Package initialization
-│   ├── main_validation.py     # Main validation orchestrator
-│   ├── psnr_validator.py      # PSNR metric implementation
-│   ├── lpips_validator.py     # LPIPS metric implementation
-│   ├── ssim_validator.py      # SSIM metric implementation
-│   ├── image_downsampler.py   # Data generation tools
-│   └── notebooks/             # Analysis notebooks
-├── tests/                     # Test suite
-├── docs/                      # Documentation
-├── examples/                  # Usage examples
-├── pyproject.toml            # Modern Python packaging
-├── setup.py                  # Backward compatibility
-├── README.md                 # This file
-└── LICENSE                   # MIT license
+src/
+├── app.py                    # Gradio interface
+├── sampler_invsr.py          # Main sampler
+├── utils/                    # Utility modules
+│   ├── util_adaptive.py      # Adaptive scheduler & attention fusion
+│   ├── util_color_fix.py     # Color fixing methods
+│   ├── util_enhancement.py   # Edge enhancement & adaptive guidance
+│   ├── util_smart_chopping.py # Smart chopping
+│   └── ...
+├── basicsr/                  # BasicSR library
+├── datapipe/                 # Dataset utilities
+├── src/diffusers/            # Modified diffusers library
+├── configs/                  # Configuration files
+│   └── sample-sd-turbo.yaml  # Main config
+└── weights/                  # Model weights
+    ├── noise_predictor_sd_turbo_v5.pth
+    ├── vgg16_sdturbo_lpips.pth
+    └── models--stabilityai--sd-turbo/
 ```
 
-## Configuration
+## Results by Our Model
+The results can be verified both by input images and the quantitative metrics used for model evaluation.
 
-### Environment Variables
-```bash
-# GPU settings
-export CUDA_VISIBLE_DEVICES=0
-export SR_USE_GPU=true
+### Outputted results by our model
+Two examples of input images and their respective outputs can be observed below. It is noted that in the first image, the aliasing (or 'jagged edges') present on the stairs was reduced.
+<br>
+<img width="499" height="331" alt="sample1" src="https://github.com/user-attachments/assets/7faa3285-c23d-4259-a11c-b1c19d0bb212" />
+<br>
+<br>
+<img width="504" height="202" alt="sample2" src="https://github.com/user-attachments/assets/51351252-cfda-49c3-81dd-6c28cdf28452" />
 
-# Default paths
-export SR_DATA_DIR=./data
-export SR_RESULTS_DIR=./results
-```
+### Evaluation Metrics
+The quantitative results obtained were made by comparing the two models, ours with the invSR. Three metrics were used: PSNR, LPIPS, and SSIM. The analysis is divided between scatter plots, which compare individual performance per image, and box plots, which summarize the statistical distribution of the metrics.
 
-### Configuration Files
-```python
-# Custom configuration
-config = {
-    'psnr': {'max_pixel_value': 255.0},
-    'lpips': {'net': 'alex', 'use_gpu': True},
-    'ssim': {'win_size': 11, 'multichannel': True},
-    'output': {'save_plots': True, 'plot_format': 'png'}
-}
+<img width="2196" height="2753" alt="metrics" src="https://github.com/user-attachments/assets/c5d1b903-8511-4dd1-ac8d-59a28f053540" />
 
-validator = SuperResolutionValidator(model_name="MyModel", config=config)
-```
+In the scatter plots, the dashed red line represents equal performance between the models. For PSNR and SSIM (where higher is better), it is observed that most points are above the line of equality, indicating that, for the majority of images, our model outperformed the baseline model, resulting in better signal fidelity and greater structural similarity. For LPIPS (where lower is better), a large portion of the images shows equal or lower values in our model, which is a positive indicator of better perceptual quality.
 
-## Testing
+The box plots, in turn, confirm the trend observed in the scatter plots. The distribution boxes (Interquartile Range - IQR) of our model (our_invar) for PSNR and SSIM are visibly above the baseline model's boxes. This demonstrates that our model consistently achieved better average scores (medians) and distributions for these quality metrics. For LPIPS, our model's box is slightly below the baseline model's box, reinforcing the result of lower perceptual distance (better performance) on average.
 
-```bash
-# Run all tests
-pytest
+### Important Notes
 
-# Run with coverage
-pytest --cov=validation --cov-report=html
+#### Differences Between Methods
 
-# Run specific test categories
-pytest tests/test_validators.py
-pytest tests/test_downsampler.py
-```
+**Hybrid Color Fixing vs Attention-Guided Fusion:**
+- **Hybrid Color Fixing**: Global color correction (fixed weights or best method selection)
+- **Attention-Guided Fusion**: Local pixel-level fusion based on attention maps (adaptive per region)
 
-## Contributing
+**When to Use:**
+- Hybrid Color Fixing: During color fixing step (replaces single method)
+- Attention Fusion: After color fixing (combines multiple results)
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+#### Pipeline Order
 
-### Development Setup
-```bash
-# Clone and setup development environment
-git clone https://github.com/superres-team/super-resolution-validation.git
-cd super-resolution-validation
-pip install -e ".[dev]"
+1. Image preprocessing
+2. Adaptive scheduler (if enabled) - adjusts timesteps
+3. Denoising loop
+4. Color fixing (YCbCr/Wavelet/Histogram/Hybrid)
+5. Attention-guided fusion (if enabled)
+6. Edge-preserving enhancement (if enabled)
+7. Output
 
-# Install pre-commit hooks
-pre-commit install
 
-# Run code formatting
-black validation/
-isort validation/
 
-# Run type checking
-mypy validation/
-```
 
-## Documentation
 
-- **API Documentation**: https://super-resolution-validation.readthedocs.io
-- **Examples**: [examples/](examples/)
-- **Notebooks**: [validation/notebooks/](validation/notebooks/)
-- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
-## Issues & Support
+## Schedule  
 
-- **Bug Reports**: [GitHub Issues](https://github.com/superres-team/super-resolution-validation/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/superres-team/super-resolution-validation/discussions)
-- **Questions**: [Stack Overflow](https://stackoverflow.com/questions/tagged/super-resolution-validation)
+| Week | Activity |  
+|------|----------|  
+| 1–2  | Literature review, dataset preparation, and baseline setup (bicubic, ESRGAN). |  
+| 3–4  | Initial implementation of the InvSR model. |  
+| 5–6  | Model training and hyperparameter tuning. |  
+| 7    | Intermediate evaluation and analysis of quantitative/qualitative results. |  
+| 8    | Refinements (integration of additional techniques, e.g., perceptual loss). |  
+| 9    | Final experiments, result consolidation, and comparison with benchmarks. |  
+| 10   | Report writing and final presentation preparation. |  
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- **LPIPS**: [Learned Perceptual Image Patch Similarity](https://github.com/richzhang/PerceptualSimilarity)
-- **PyTorch**: Deep learning framework
-- **scikit-image**: Image processing library
-- **OpenCV**: Computer vision library
-
-## Citation
-
-If you use this framework in your research, please cite:
-
-```bibtex
-@software{super_resolution_validation,
-  title={Super Resolution Validation Framework},
-  author={Super Resolution Team},
-  year={2025},
-  url={https://github.com/superres-team/super-resolution-validation}
-}
-```
-
----
-
-**Made with care for the computer vision community**
+## Bibliographic References  
+- **Bjorn, M., et al.** - *"A Lightweight Image Super-Resolution Transformer Trained on Low-Resolution Images Only"* ([arXiv 2025](https://arxiv.org/))
+- **Miao, Y., et al.** - *"A general survey on medical image super-resolution via deep learning"* ([ScienceDirect 2025](https://www.sciencedirect.com/))
+- **Chen, Z., et al.** - *"NTIRE2025 Challenge on Image Super-Resolution (×4): Methods and Results"* ([arXiv 2025](https://arxiv.org/))
+- **Wang, W., et al.** - *"A lightweight large receptive field network LrfSR for image super resolution"* ([Nature 2025](https://www.nature.com/))
+- **Guo, Z., et al.** - *"Invertible Image Rescaling"* ([NeurIPS 2022](https://proceedings.neurips.cc/))
+- **Wang, X., et al.** - *"ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks"* ([ECCV 2018](https://arxiv.org/))
+- **Saharia, C., et al.** - *"Image Super-Resolution via Iterative Refinement"* ([IEEE TPAMI 2022](https://ieeexplore.ieee.org/))
