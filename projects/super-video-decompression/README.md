@@ -18,6 +18,7 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 
 [Link to slideshow E1](https://docs.google.com/presentation/d/1TISrxtNkQHBbZlzTeAIGRFAGPHKGeUeE0Cg3LDZzKp4/edit?usp=sharing)
 
+[Link to slideshow E3](https://docs.google.com/presentation/d/13Rs1SDoIieN8FHTwGY6wnUlrqUesZaO1Pzztp2CVSJk/edit?usp=sharing)
 
 ## Project Summary Description
 Today, nearly 80% of global internet bandwidth is consumed by video streaming. Of this total, around 90% of the content is delivered in 1080p resolution or lower, through platforms such as Twitch.tv, YouTube, Netflix, Disney+, and Hulu. To make large-scale distribution feasible, most videos are compressed using lossy algorithms like H.264/AVC. While this approach is effective in reducing file size, it inevitably leads to lower image and audio quality, with no straightforward way to fully reverse the process and recover the original material.
@@ -139,7 +140,7 @@ Our training started from pretrained models for Super Resolution, that were trai
 |Dataset | Web Address | Descriptive Summary|
 |----- | ----- | -----|
 |Blender Foundation Open Movies Compression Decompression | https://huggingface.co/datasets/Fransferdy/blender_foundation_open_movies_compression_decompression | Contains 10 animations videos, 78 minutes, some 3d some 2d|
-|DF2K | https://huggingface.co/datasets/Fransferdy/blender_foundation_open_movies_compression_decompression | Contains 3.5k High Definition Photographs, used by the Pretrain Models|
+|DF2K | https://www.kaggle.com/datasets/anvu1204/df2kdata | Contains 3.5k High Definition Photographs, used by the Pretrain Models|
 
 
 
@@ -177,6 +178,24 @@ The player implements a filter which can apply to current image frames ONNX runt
 To use our models, download and unzip a release of the mpv player, copy our models from /models/onnx to the player's folder /animejanai/onnx, then open /mpvnet.exe and press CTRL+E to configure model chains, our models will appear in the list of available models.
 Create a chain, with a rule to accept video from 0 to 1080p, from 0 to 30 fps and add 3 of our models for 4X, and two for 2X, the first model must always be the 1X model.
 
+## Benchmarks
+
+We achieved Real Time performance with all of our models combinations, up to 1440p outputs, this was the worst machine we could test on:
+
+![RTX 2060 Benchmark](docs/Metrics/RTX2060Benchmark.png)
+
+For more Benchmarks, with an RTX 3080 in a poor CPU notebook, with an RTX 3090 / i9 11, with an RTX 4060, check our benchmark tables: 
+
+[Benchmarks 2X](docs/Benchmarks/SVDBenchmark-All2XCombinations.csv)
+
+[Benchmarks 4X](docs/Benchmarks/SVDBenchmark-All4XCombinations.csv)
+
+### Regarding FP32 vs FP16 in Inference
+
+
+The CPU cost of converting the current frame image into FP 16 floats outweights the GPU speed improvement that FP16 gives, so we came to the conclusion that on average, it is better to use FP32 for this task.
+
+[Benchmark FP32 vs FP16](docs/Benchmarks/SVDBenchmark-FP32VSFP16.csv)
 
 ## Perceptual Results Samples
 
