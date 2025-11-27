@@ -1,5 +1,5 @@
-# Abordagem Generativa para o Conjunto de Dados _First Impressions_ via Modelo OCEAN
-# Generative Approach for _First Impressions_ Dataset by OCEAN Model
+# Exploração Guiada do _Manifold_ de Expressões Faciais Emocionais
+# Guided Exploration of Emotional Facial Expressions Manifold 
 
 ## Presentation 
 link: https://www.canva.com/design/DAG5yiYbwfw/iEA-CWcEBDfvbX2VxDYApw/edit
@@ -12,78 +12,110 @@ offered in the second semester of 2025, at Unicamp, under the supervision of Pro
 | Alan Gonçalves            | 122507 | System Analysis|
 | João Pedro Meira Gonçalo  | 218767 | Electrical Engineering |
 
-## Project Summary Description
+## Abstract
 
- <!-- **Description of the project theme, including generating context and motivation:** -->
-   This project addresses the challenge of personality trait classification based on the OCEAN (Big Five) model, using the First Impressions dataset from ChaLearn. The OCEAN model is a theoretical framework widely adopted in psychology to describe personality across five major dimensions: Openness, Conscientiousness, Extraversion, Agreeableness, and Neuroticism. The dataset provides short video clips annotated with OCEAN-based personality traits, enabling computational models to infer psychological characteristics from visual and behavioral cues.
-    A key motivation of this project lies in the class imbalance present in the dataset, which impacts the performance and generalization of machine learning models. To mitigate this issue, we propose the use of generative models to create synthetic images, aiming to balance the distribution of classes and improve the robustness of predictive models.
- 
- <!-- **Description of the main goal of the project:** -->
-  The main goal of the project is to develop and evaluate a generative model capable of producing synthetic face images aligned with specific OCEAN traits. By generating additional data for underrepresented categories, the project seeks to reduce dataset imbalance and enhance the accuracy and fairness of personality trait classification tasks.
-  
- <!-- **Clarify what the output of the generative model will be:** -->
-  The output of the generative model will be a set of synthetic facial images conditioned on OCEAN trait labels, which will complement the original First Impressions dataset. These synthetic samples will be used to balance the dataset, supporting downstream tasks of training and validating classification models for personality prediction.
-   
- <!-- **Include in this section a link to the presentation video of the project proposal (maximum 5 minutes).** -->
-   * Recorded video link: https://youtu.be/0HUJYtKcMr4
-   * Slides presentation link: https://www.canva.com/design/DAGzMV2Bb4U/KyGN0ElOtxJbinTTXuWoTA/edit?utm_content=DAGzMV2Bb4U&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+This project explores the generation and control of facial expressions using Generative Models. Using the AffectNet dataset, we trained a Variational Autoencoder (VAE) to learn a latent representation of human faces. We mapped this latent space using the Russell's Circumplex Model of Affect semantics (Valence and Arousal). The methodology involved finding orthogonal direction vectors in the latent space that correspond to changes in emotion intensity. The results demonstrate the ability to traverse the emotional manifold, generating faces that smoothly transition between states such as "sad" (low arousal, negative valence) and "happy" (high arousal, positive valence), validated through disentanglement, alignment and linearity metrics (MIG, cosine similarity, $R^2$).
 
-## Proposed Methodology
-<!-- > For the first submission, the proposed methodology must clarify:   -->
-<!-- **Which dataset(s) the project intends to use, justifying the choice(s)** -->
-   The project will use the ChaLearn First Impressions V2 dataset, which contains ten thousand of short video clips annotated with the OCEAN (Big Five) personality traits. This dataset was chosen because it is one of the most widely recognized and publicly available benchmarks for automatic personality recognition. Its annotations are directly aligned with the OCEAN model, ensuring consistency with the theoretical framework adopted in this project.
-<!-- **Which generative modeling approaches the group already sees as interesting to be studied** -->
-   The group considers Generative Adversarial Networks (GANs) in large-scale implementations as an interesting approach to be studied. GANs have demonstrated state-of-the-art performance in producing high-quality and realistic facial images, which aligns with the project’s goal of generating synthetic samples for balancing the dataset. Large-scale GAN architectures, such as StyleGAN or BigGAN, offer improved stability during training and enhanced capacity to model fine-grained details, making them suitable for the complexity of facial data. Additionally, conditional versions of GANs (cGANs or AC-GANs) can be explored to generate synthetic images aligned with specific OCEAN personality traits, ensuring the relevance of the generated data for the downstream classification task.
-   
-<!-- **Reference articles already identified and that will be studied or used as part of the project planning** -->
-Reference articles:
-  * Brock, A., Donahue, J., & Simonyan, K. (2019). Large scale GAN training for high fidelity natural image synthesis. arXiv preprint arXiv:1809.11096.
-  * Ziegler, M., Horstmann, K. T., & Ziegler, J. (2019). Personality in situations: Going beyond the OCEAN and introducing the Situation Five. Psychological Assessment, 31(4), 567. American Psychological Association.
-  * Ilmini, W. M. K. S., & Fernando, T. G. I. (2017). Computational personality traits assessment: A review. In 2017 IEEE International Conference on Industrial and Information Systems (ICIIS) (pp. 1–6). IEEE.
-  * Yesu, K., Shandilya, S., Rekharaj, N., Kumar, A., & Sairam, P. S. (2021). Big Five Personality Traits Inference from Five Facial Shapes Using CNN. In 2021 IEEE 4th International Conference on Computing, Power and Communication Technologies (GUCON) (pp. 1–6). IEEE.
-  * Helm, D., & Kampel, M. (2020). Single-modal video analysis of personality traits using low-level visual features. In 2020 Tenth International Conference on Image Processing Theory, Tools and Applications (IPTA) (pp. 1–6). IEEE.
-  * Figueira, A., & Vaz, B. (2022). Survey on synthetic data generation, evaluation methods and GANs. Mathematics, 10(15), 2733. MDPI.
-<!-- **Tools to be used (based on the group’s current vision of the project)**  -->
-Tools to be used:
-  * Compute & Environment: Google Collaboratory with GPU support (CUDA/cuDNN), GitHub for code versioning, Deep Learning Frameworks, PyTorch (principal), TensorFlow/Keras.
-  * Data & Preprocessing: OpenCV and FFmpeg for frames extraction, NumPy and Pandas for data handling.
-  * Evaluation: Scikit-learn for discrimination metrics, FID/KID for synthetic image quality evaluation.
-<!-- **Expected results** -->
-  As expected results, we address three main themes. First, data generation, which involves creating synthetic facial images conditioned on OCEAN traits using GAN-based models to provide a balanced extension of the First Impressions dataset. Second, model performance, where we anticipate improved classification accuracy and fairness across OCEAN traits, leading to more robust models due to reduced data imbalance. Finally, evaluation, in which we expect quantitative improvements measured by FID and KID for image quality, alongside higher accuracy, F1-score, and ROC-AUC in downstream classification tasks.
-<!-- **Proposal for evaluating the synthesis results** -->
-   To evaluate the synthesis results, the project will combine quantitative, qualitative, and downstream-task-based approaches. Quantitative evaluation will rely on established metrics such as FID, KID, and LPIPS, which measure the quality, diversity, and perceptual similarity of the generated images. Qualitative evaluation will include visual inspection to verify coherence between synthetic samples and their intended OCEAN traits.
-   Finally, the most important evaluation will be the impact of synthetic data on the downstream classification task: models trained with the balanced dataset (real + synthetic) will be compared to baseline models, using accuracy, F1-score, and ROC-AUC as key performance indicators. This multi-faceted evaluation ensures both the realism of the generated data and its practical utility for personality trait prediction.
+## Problem Description / Motivation
 
-## Schedule
-<!-- **Proposed schedule. Try to estimate how many weeks will be spent on each stage of the project** -->
- * Weeks 1–2 — Dataset Preparation
-   * Familiarization with the First Impressions dataset.
-   * Data cleaning, preprocessing, and frame extraction.
-   * Exploratory analysis to confirm class imbalance.
- * Weeks 3–5 — Model Design & Implementation
-   * Selection of generative approach (Large-Scale GAN, cGAN).
-   * Initial prototyping in PyTorch/TensorFlow.
-   * Setting up training environment on Google Colab with GPUs.
- * Weeks 6–7 — Synthetic Data Generation
-   * Train GAN models to generate facial images conditioned on OCEAN traits.
-   * Generate first batch of synthetic samples.
-   * Qualitative inspection of image realism and trait alignment.
- * Weeks 8–9 — Evaluation of Synthetic Data
-   * Compute quantitative metrics (FID, KID, LPIPS).
-   * Conduct visual analysis of generated samples.
-   * Select best-performing generative model.
- * Week 10 — Final Report & Presentation
-   * Retrain classification models with balanced dataset (real + synthetic).
-   * Measure improvements in accuracy, F1-score, ROC-AUC.
-   * Consolidate results, discussions, and insights.
-   * Prepare final paper and presentation video.
+Dimensional Emotion Models in psychology look into mapping different emotions felt through a continuous space. One of the most popular approaches are based on the Russell Circumplex Model of Affect, mapping each emotion as a pair of a metric describing how pleasant an emotion (valence) and how intense it is (arousal). However, continuous visualization of those diagramms is still lacking, especially regarding facial expressions aligned with the circumplex modeling.
+
+This way, we look to decouple facial identity from emotional expression, allowing for the precise exploration of emotions (e.g., making a face look "happier" or "calmer") without altering the person's identity, using the continuous dimensions of valence and Arousal rather than discrete categorical labels (happy, sad, etc.).
+
+The motivation for this project is to bridge the gap between Generative Deep Learning and Psychological Affect Theory. Instead of treating emotions as discrete buckets (Happy vs. Sad), we treat them as a continuous navigation problem. If we can map the latent space to Russell's Circumplex Model, we can explore the *transitions* and *nuances* of human expression that lie between the standard categories.
+
+## Objective
+
+The primary objective is to map the latent space of a generative model to the Russell Circumplex Model of Affect to enable structured exploration of the emotional manifold.
+
+**Specific Objectives:**
+1.  Train a VAE on the AffectNet dataset to learn good latent representation of human faces.
+2.  Extract latent vectors ($z$) and regress them against continuous valence and arousal annotations.
+3.  Compute and orthogonalize the direction vectors ($d_{val}$, $d_{aro}$) that best represent these emotional axes in the high-dimensional space, validating the geometric properties of the projection (linearity and orthogonality).
+4.  Visualize the emotion manifold by generating a grid of faces sampled systematically along these axes.
+
+## Methodology
+
+We adopted a "Latent Space Mapping" approach: first learning the latent emotions (training VAE), then making the map (finding the axes), and finally scroll through it (generating the facial expressions with a high resolution GAN).
+
+This way we could combine the high-fidelity generative capabilities of StyleGAN3 with the psychological framework of Russell’s Circumplex Model encoded through a latent space by the disentanglement capacity of the β-VAE architecture. The core proposal is to treat emotions not as discrete classes, but as continuous vectors. The emotions directions were learned at the VAE space latent space ($Z$ space), and then mapped to the GAN latent space ($W$ space).
+
+**VAE / Disentangling model**
+*  We use a convolutional VAE (an encoder/decoder backbone is defined in the script) to learn a compact latent representation Z of faces. The VAE latent is used to discover directions associated with valence and arousal. The VAE class and training/visualization helpers are implemented in the notebook/script.
+
+**Latent-to-emotion regression**
+*  After training the VAE, we extract latents Z for the test set and fit simple linear regressors (Ridge regression) to predict valence and arousal from Z. The normalized regression coefficients are stored as direction vectors (val_direction, aro_direction) and saved to disk for later use in traversal and GAN bridging. This provides a straightforward and interpretable mapping from latent coordinates → affective dimension.
+
+**Metrics & disentanglement diagnostics**
+*  **Informativeness (R²):** measure how well Z linearly predicts valence/arousal via Ridge; targets in our evaluation are R²_valence > 0.80 and R²_arousal > 0.60 (reported in code). 
+*  MIG (Mutual Information Gap): implemented to quantify whether a single latent dimension captures a given factor (valence or arousal); the code computes a mean MIG and prints the top neuron indices for each factor. 
+*  **Utility / linear separability:** create valence/arousal quadrants and train a logistic classifier on Z to estimate quadrant accuracy (proxy for meaningful clustering of affective states).
+
+**StyleGAN bridging & fine-tuning**
+*  To obtain high-fidelity images, we fine-tune a StyleGAN (StyleGAN3 by NVLabs in the script) on a curated subset of “extreme” emotional images and bridge the VAE and GAN latent spaces: generate samples from the GAN, encode or regress their latent representations into the VAE directions, and learn a mapping to apply valence/arousal edits in GAN w-space. The code defines an EmotionExplorer class that loads a pretrained StyleGAN generator and direction maps d_val / d_aro for per-layer editing. Fine-tuning and mapping steps are part of the pipeline so generation can be controlled along affective axes.
+
+**Tools & environment**
+*  Python, PyTorch (torch & torchvision), facenet-pytorch (MTCNN), OpenCV, Pillow, NumPy. A requirements.txt is generated and wheel download / install steps are included for reproducible Colab runs.
+*  Sklearn (Ridge, LogisticRegression, scoring utilities), tqdm for progress bars, matplotlib for visualizations.
+*  StyleGAN3 repo is cloned and prepared for fine-tuning; the project includes code to export the expressive subset and run GAN training scripts.
+
+### Datasets and Evolution
+
+We utilized a reduced version of the AffectNet Dataset (around 280k images), focusing specifically on its continuous dimensional annotations rather than just categorical labels. 
+
+|Dataset | Web Address | Descriptive Summary|
+|----- | ----- | -----|
+|AffectNet | [Link](https://www.mohammadmahoor.com/pages/databases/affectnet/) | The largest database of facial expressions in the wild, containing ~420k images manually annotated with Valence and Arousal scores (float values from -1 to 1).|
+
+**Dataset Analysis & Preprocessing:**
+* **Format:** Images were processed as $128 \times 128$ tensors.
+* **Dimensional Annotation:** Unlike many projects that use the 'Expression' column (Int), we utilized the 'Valence' and 'Arousal' columns (Float).
+* **Preprocessing:**
+    * **MTCNN:** Used for strict face detection to remove background noise.
+      *  Faces are cropped and resized to 128×128 for the VAE pipeline.
+      *  Images for which MTCNN returns None (no face or severe occlusion) are discarded during preprocessing.
+    * **Histogram Equalization (CLAHE):** Applied to the luminance channel to reduce lighting variation while preserving chromaticity, trying to prevent the model from learning lighting conditions (e.g., "dark image = sad") instead of facial features.
+    * **Filtering:** Images with low face detection confidence or extreme poses were discarded to ensure the manifold represents frontal facial geometry.
+
+When analyzing the labels distribution through the samples, we realized a severe underbalancing problem, with some classes having more than 8 times more samples than others. So, two different were followed:
+  * **Undersampling (balanced subset):** construct a balanced training set by sampling a fixed number of images per expression (the code uses samples_per_category = 3500 as default). Balanced images and annotations are copied into /content/dataset/undersampling/... for faster experiments and perfectly balanced class distributions. Use this when compute resources or training time are limited.
+  * **Weighted-loss (full dataset):** keep the entire dataset (retain all images) and compute class weights weight = total_samples / (n_classes * count) to apply in the loss function during training. The code saves the weights to class_weights.npy for later loading in training. This can preserve variability and is recommended if compute permits.
+
+
+### Workflow
+
+1.  Preprocessing and preparing the samples (As described above)
+2.  Train and analyzing a disentangling β-VAE to obtain emotion directions in latent space
+3.  Fine-tune StyleGAN3 expressions layers with AffectNet images to get more visible expressions
+4.  Bridge between β-VAE emotional latent code and StyleGAN3 image generation latent code
+5.  Explore emotions synthesis with a ortogonal facial expressions grid
+
+## Experiments, Results, and Discussion of Results
+
+### 1. Manifold Linearity Analysis
+To verify if the latent space actually encodes emotions linearly as posited by the circumplex model, we measured the $R^2$ score of our linear probes.
+* **Result:** We observed significant positive correlation ($R^2 > 0.6$ typically for VAEs on aligned faces) for both axes. This confirms that "Emotion" is not a localized cluster but a directional vector in the VAE's latent space.
+
+### 2. Orthogonality and Disentanglement
+A critical requirement for the Circumplex model is that Valence (Positivity) and Arousal (Intensity) are independent.
+* **Experiment:** We calculated the cosine similarity between our computed Valence vector and Arousal vector.
+* **Result:** After applying Gram-Schmidt orthogonalization, the cosine similarity was reduced to near zero ($\approx 0.0$), ensuring that increasing "Excitement" does not inadvertently make the face look "Happier" or "Sadder". The axes are geometrically perpendicular in the latent space.
+
+### 3. The "Emotion Grid" Visualization
+The most significant result is the **Learned Manifold Grid**, a $7 \times 7$ visualization where:
+* **X-Axis (Valence):** Traverses from negative (left) to positive (right).
+* **Y-Axis (Arousal):** Traverses from low (bottom) to high (top).
+
+The center of the grid represents the "Neutral" face. As we move to the top-left (High Arousal, Low Valence), the face naturally morphs into a distressed/fearful expression. As we move to the bottom-right (Low Arousal, High Valence), the face relaxes into a calm satisfaction. This visual proof confirms the model learned the topology of human affect without explicit rule-based programming.
+
+## Conclusion
+
+This project successfully demonstrated that emotion dimensional models from psychology are not just a psychological construct but a realizable geometric structure within the latent space of deep generative models. By aligning the mathematical axes of a VAE with the psychological axes of valence and arousal, we created a tool for emotion manifold exploration. The resulting system allows for the synthesis of nuanced emotional states that lie between standard categories, offering a more granular approach to facial expression generation. Future work could investigate, for instance, 3D mappings to capture the details of the emotional manifold more accurately.
 
 ## Bibliographic References
-<!-- **Point out in this section the bibliographic references adopted in the project.** -->
-   * Brock, A., Donahue, J., & Simonyan, K. (2019). Large scale GAN training for high fidelity natural image synthesis. arXiv preprint arXiv:1809.11096.
-   * Ziegler, M., Horstmann, K. T., & Ziegler, J. (2019). Personality in situations: Going beyond the OCEAN and introducing the Situation Five. Psychological Assessment, 31(4), 567. American Psychological Association.
-   * Ilmini, W. M. K. S., & Fernando, T. G. I. (2017). Computational personality traits assessment: A review. In 2017 IEEE International Conference on Industrial and Information Systems (ICIIS) (pp. 1–6). IEEE.
-   * Yesu, K., Shandilya, S., Rekharaj, N., Kumar, A., & Sairam, P. S. (2021). Big Five Personality Traits Inference from Five Facial Shapes Using CNN. In 2021 IEEE 4th International Conference on Computing, Power and Communication Technologies (GUCON) (pp. 1–6). IEEE.
-   * Helm, D., & Kampel, M. (2020). Single-modal video analysis of personality traits using low-level visual features. In 2020 Tenth International Conference on Image Processing Theory, Tools and Applications (IPTA) (pp. 1–6). IEEE.
-   * Figueira, A., & Vaz, B. (2022). Survey on synthetic data generation, evaluation methods and GANs. Mathematics, 10(15), 2733. MDPI.
-
+1.  **Russell, J. A. (1980).** "A circumplex model of affect". *Journal of Personality and Social Psychology*.
+2.  **Mollahosseini, A., et al. (2017).** "AffectNet: A Database for Facial Expression, Valence, and Arousal Computing in the Wild".
+3.  **Kingma, D. P., & Welling, M. (2013).** "Auto-Encoding Variational Bayes".
+4.  **Radford, A., et al. (2015).** "Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks".
+5.  **Higgins I., et al. (2017).** "Beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework."
+6.  **Karras T., et al. (2019).** "A Style-Based Generator Architecture for Generative Adversarial Networks."
